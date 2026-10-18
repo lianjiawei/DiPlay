@@ -510,6 +510,7 @@ class AndroidMediaSink(
     private val audioOffListener: (Boolean) -> Unit = { off ->
         audioOffMuted = off
         audioRenderers.values.forEach { it.setAudioOffMuted(off) }
+        runCatching { onAudioDiagnostic("Audio: audio-off muted=$off source=${CarAudioOff.muteSource}") }
     }
 
     /**
@@ -521,6 +522,7 @@ class AndroidMediaSink(
 
     /** The media-key session may own Android's current focus request for this same sink. */
     fun onMediaAudioFocusChanged(change: Int) {
+        if (change == AudioManager.AUDIOFOCUS_GAIN) CarAudioOff.refreshSystemMute()
         audioFocusCoordinator.onExternalFocusChange(change)
     }
 
@@ -567,9 +569,8 @@ class AndroidMediaSink(
         appContext?.let(CarAudioOff::attach)
         // Attaching can discover that the car is already muted, which the listener below must not
         // have to replay for this sink.
-        audioOffMuted = CarAudioOff.muted
-        audioRenderers.values.forEach { it.setAudioOffMuted(audioOffMuted) }
         CarAudioOff.addListener(audioOffListener)
+        audioOffListener(CarAudioOff.muted)
         assistantMonitor = appContext?.let { context ->
             AssistantPlaybackMonitor(context) { speaking ->
                 audioFocusCoordinator.setAssistantSpeaking(speaking)
@@ -2824,7 +2825,7 @@ private class AudioRenderer(
                 // Report only the two settled levels, not each step of the ramp.
                 if (percent != lastDuckingPercent && (percent == 100 || percent == 25)) {
                     lastDuckingPercent = percent
-                    runCatching { report("Audio: music gain=${percent}% applied to PCM") }
+                    runCatching { report("Audio: music gain=${percent}% applied to PCM audioOff=$audioOffMuted") }
                 }
             }
             val writeLength = if (playbackStarted) {
