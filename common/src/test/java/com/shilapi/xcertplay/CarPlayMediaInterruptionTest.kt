@@ -60,6 +60,17 @@ class CarPlayMediaInterruptionTest {
         verify(controller, never()).sendMediaButton(CarPlayMediaButton.PAUSE)
         verify(controller, never()).sendMediaButton(CarPlayMediaButton.PLAY)
     }
+
+    @Test fun playbackStoppingOnThePhoneBeforeThePauseDelayDoesNotCreateAnAutoResume() {
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        shadowOf(Looper.getMainLooper()).idleFor(50, TimeUnit.MILLISECONDS)
+        CarPlayMediaKeys.onMediaAudioChanged(false)
+        shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS)
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS)
+        verify(controller, never()).sendMediaButton(CarPlayMediaButton.PAUSE)
+        verify(controller, never()).sendMediaButton(CarPlayMediaButton.PLAY)
+    }
     @Test fun detachedControllerMustNotReceiveDelayedPlay() {
         listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
         shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS)

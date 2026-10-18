@@ -442,6 +442,9 @@ internal object CarPlayMediaKeys {
                     if (assistantPausePending !== action || controller !== expected ||
                         assistantIntentRevision != revision || !assistantFocusLost) return@Runnable
                     assistantPausePending = null
+                    // Playback may have stopped on the phone during the debounce window.
+                    // That is not a pause we own and must never create an automatic resume.
+                    if (!mediaAudioActive && !nowPlaying.playing) return@Runnable
                     assistantPauseInFlight = expected
                 }
                 val sent = expected.sendMediaButton(CarPlayMediaButton.PAUSE)
