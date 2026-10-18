@@ -9,19 +9,19 @@ import org.junit.Test
 import kotlin.random.Random
 
 class MediaClockTrimTest {
-    @Test fun congestionDoesNotTeachAPermanentFasterClockAndRecoveryReturnsToNativeRate() {
-        MediaClockTrim.learnedTrim = -0.01
+    @Test fun congestionPreservesLearnedDriftAndRecoveryRestoresThatCalibration() {
+        MediaClockTrim.learnedTrim = -0.0075
         val trim = MediaClockTrim(48_000, 14_400)
         repeat(10) { second ->
             val now = second * 1_000_000_000L
             trim.sample(12_000, now, inputQueueFraction = 1.0)
             trim.rateDue(now)
             assertTrue(trim.rate in 48_000..48_720)
-            assertEquals(0.0, MediaClockTrim.learnedTrim, 0.00001)
+            assertEquals(-0.0075, MediaClockTrim.learnedTrim, 0.00001)
         }
         trim.sample(14_400, 11_000_000_000L, inputQueueFraction = 0.0)
         trim.rateDue(11_000_000_000L)
-        assertEquals(48_000, trim.rate)
+        assertEquals(47_640, trim.rate)
     }
     @Before fun forgetLearnedTrim() { MediaClockTrim.learnedTrim = 0.0 }
     @After fun cleanUp() { MediaClockTrim.learnedTrim = 0.0 }

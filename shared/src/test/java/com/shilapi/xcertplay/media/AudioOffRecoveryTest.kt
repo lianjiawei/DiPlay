@@ -104,4 +104,17 @@ class AudioOffRecoveryTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertFalse(CarAudioOff.muted)
     }
+
+    @Test fun repeatedCarSourceEventsAreStillForwardedToClusterListeners() {
+        val app = RuntimeEnvironment.getApplication()
+        CarAudioOff.attach(app)
+        val events = mutableListOf<Boolean>()
+        val listener: (Boolean) -> Unit = { events += it }
+        CarAudioOff.addListener(listener)
+        try {
+            repeat(2) { app.sendBroadcast(Intent(CarAudioOff.ACTION).putExtra("audio_off", true)) }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(listOf(true, true), events)
+        } finally { CarAudioOff.removeListener(listener) }
+    }
 }

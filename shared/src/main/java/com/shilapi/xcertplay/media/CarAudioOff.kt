@@ -56,7 +56,7 @@ object CarAudioOff {
                 if (intent.action == ACTION) {
                     if (!intent.hasExtra(EXTRA)) return
                     val off = intent.getBooleanExtra(EXTRA, false)
-                    update(if (off) Source.CAR else Source.NONE)
+                    update(if (off) Source.CAR else Source.NONE, forceNotify = true)
                 } else if (intent.getIntExtra(STREAM_TYPE, -1) == AudioManager.STREAM_MUSIC) {
                     refreshSystemMute()
                 }
@@ -105,10 +105,12 @@ object CarAudioOff {
     }
 
     @Synchronized
-    private fun update(next: Source) {
+    private fun update(next: Source, forceNotify: Boolean = false) {
         source = next
         val off = next != Source.NONE
-        if (currentMuted == off) return
+        // A repeated car broadcast can still mean its audio source changed and the cluster
+        // cleared its cards. Preserve that event for listeners even if mute stayed unchanged.
+        if (currentMuted == off && !forceNotify) return
         currentMuted = off
         Log.i(TAG, "car audio off=$off source=$muteSource")
         listeners.forEach { listener -> runCatching { listener(off) } }

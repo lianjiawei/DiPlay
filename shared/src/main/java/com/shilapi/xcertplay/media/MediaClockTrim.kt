@@ -51,11 +51,10 @@ internal class MediaClockTrim(
         val seconds = if (previousUpdate == null) 0.0 else ((nowNs - previousUpdate) / 1e9).coerceAtMost(MAX_STEP_SECONDS)
         lastUpdateNs = nowNs
         val congested = inputQueueFraction >= INPUT_QUEUE_HIGH_WATER
-        // A low hardware watermark is not starvation when decoded/input work is backed up.
-        // Forget negative wind-up and drain congestion within the existing pitch/rate bounds.
-        if (congested) integral = integral.coerceAtLeast(0.0)
-        val integralError = if (congested) error.coerceAtLeast(0.0) else error
-        integral = (integral + KI * integralError * seconds).coerceIn(-MAX_TRIM, MAX_TRIM)
+        // A low hardware watermark is not starvation when input work is backed up. Freeze
+        // learning during congestion: a network burst must not erase a real clock correction
+        // or teach a permanent faster clock just because we temporarily drain its backlog.
+        if (!congested) integral = (integral + KI * error * seconds).coerceIn(-MAX_TRIM, MAX_TRIM)
         learnedTrim = integral
         val minimumTrim = if (congested) {
             MAX_TRIM * (inputQueueFraction - INPUT_QUEUE_HIGH_WATER) / (1.0 - INPUT_QUEUE_HIGH_WATER)

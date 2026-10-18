@@ -26,11 +26,16 @@ class AudioPcmGainRegressionTest {
     @Test fun loudspeakerCallIsUnaffectedByDuckingAndTheCarMuteKey() =
         checkRendered(playing = true, maxWrite = 512, audioType = "telephony", muted = true)
 
+    @Test fun aMuteArrivingDuringAUnityPartialWriteAffectsTheUnwrittenRawTail() =
+        checkRendered(playing = true, maxWrite = 512, ducking = false, muteAfterFirstWrite = true)
+
     private fun checkRendered(playing: Boolean, maxWrite: Int = Int.MAX_VALUE,
-        audioType: String = "media", muted: Boolean = false) {
+        audioType: String = "media", muted: Boolean = false, ducking: Boolean = true,
+        muteAfterFirstWrite: Boolean = false) {
         LimitedWriteTrack.limit = maxWrite
         LimitedWriteTrack.output.reset()
-        val sink = AndroidMediaSink(navigationDuckingEnabled = true)
+        LimitedWriteTrack.afterFirstWrite = null
+        val sink = AndroidMediaSink(navigationDuckingEnabled = ducking)
         val type = Class.forName("com.shilapi.xcertplay.media.AudioRenderer")
         val renderer = AndroidMediaSink::class.java.getDeclaredMethod(
             "audioRenderer", AudioStreamId::class.java, AudioFormat::class.java,
@@ -50,6 +55,10 @@ class AudioPcmGainRegressionTest {
             type.getDeclaredField("playbackStarted").apply { isAccessible = true }.setBoolean(renderer, playing)
             type.getDeclaredMethod("setAudioOffMuted", Boolean::class.javaPrimitiveType)
                 .apply { isAccessible = true }.invoke(renderer, muted)
+            if (muteAfterFirstWrite) LimitedWriteTrack.afterFirstWrite = {
+                type.getDeclaredMethod("setAudioOffMuted", Boolean::class.javaPrimitiveType)
+                    .apply { isAccessible = true }.invoke(renderer, true)
+            }
             val coordinator = sink.javaClass.getDeclaredField("audioFocusCoordinator")
                 .apply { isAccessible = true }.get(sink) as AudioFocusCoordinator
             var now = 1_000_000_000L
@@ -63,8 +72,12 @@ class AudioPcmGainRegressionTest {
             val rendered = LimitedWriteTrack.output.toByteArray()
             assertEquals(pcm.size, rendered.size)
             assertArrayEquals(pcm, rendered)
-            val expected = if (audioType == "telephony") 16_384 else 4_115
             for (offset in rendered.indices step 2) {
+                val expected = when {
+                    muteAfterFirstWrite && offset >= 512 -> 0
+                    audioType == "telephony" || !ducking -> 16_384
+                    else -> 4_115
+                }
                 val sample = ((rendered[offset].toInt() and 255) or
                     (rendered[offset + 1].toInt() shl 8)).toShort().toInt()
                 assertEquals("Incorrect gain at sample ${offset / 2}", expected, sample)
@@ -77,6 +90,7 @@ class AudioPcmGainRegressionTest {
         @Implementation fun write(bytes: ByteArray, offset: Int, size: Int, mode: Int): Int {
             val count = minOf(size, limit)
             output.write(bytes, offset, count)
+            afterFirstWrite?.let { afterFirstWrite = null; it() }
             return count
         }
         @Implementation fun getUnderrunCount() = 0
@@ -84,6 +98,7 @@ class AudioPcmGainRegressionTest {
         @Implementation fun play() = Unit
         companion object {
             var limit = Int.MAX_VALUE
+            var afterFirstWrite: (() -> Unit)? = null
             val output = ByteArrayOutputStream()
         }
     }

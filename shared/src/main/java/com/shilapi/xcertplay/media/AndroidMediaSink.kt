@@ -2817,17 +2817,22 @@ private class AudioRenderer(
         // sound back. Calls were excluded when the flag was set.
         var written = 0
         var preparedUntil = 0
+        var preparedScaled = false
         while (written < length && running) {
             // Long-running PCM writes may span several slider adjustments.
             applyNavigationAttenuation()
             // Prepare a bounded block exactly once. A partial AudioTrack write retries the
             // already-scaled tail; it must not multiply that tail by the gain a second time.
-            if (written == preparedUntil) {
-                val chunkLength = minOf(length - written, PREBUFFER_WRITE_CHUNK_BYTES)
+            if (written == preparedUntil || !preparedScaled) {
                 val music = mappedChannel == AudioChannel.MEDIA && format.audioType != "telephony"
                 if (music) audioFocusCoordinator.tickNavigationDucking()
                 val gain = if (music) audioFocusCoordinator.musicPcmGain else 1f
                 val muted = audioOffMuted
+                // Keep normal full-size writes unchanged. A unity-gain tail is still raw and
+                // can adopt a newly arriving mute/duck after a partial write.
+                preparedScaled = muted || gain < PcmGain.UNITY
+                val chunkLength = if (playbackStarted && !preparedScaled) length - written
+                    else minOf(length - written, PREBUFFER_WRITE_CHUNK_BYTES)
                 val gainBand = when { gain <= 0f -> 0; gain >= PcmGain.UNITY -> 100; else -> 1 }
                 val nowNs = System.nanoTime()
                 val probe = lastPcmProbeMuted != muted || lastPcmProbeGainBand != gainBand ||
