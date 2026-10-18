@@ -124,6 +124,20 @@ class CarPlayMediaInterruptionTest {
         verify(controller, never()).sendMediaButton(CarPlayMediaButton.PLAY)
     }
 
+    @Test fun permanentLossCancelsPendingResumeUntilFocusIsActuallyGrantedAgain() {
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS)
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        shadowOf(Looper.getMainLooper()).idleFor(50, TimeUnit.MILLISECONDS)
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
+        shadowOf(Looper.getMainLooper()).idleFor(500, TimeUnit.MILLISECONDS)
+        verify(controller, never()).sendMediaButton(CarPlayMediaButton.PLAY)
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS)
+        verify(controller, times(1)).sendMediaButton(CarPlayMediaButton.PAUSE)
+        verify(controller, times(1)).sendMediaButton(CarPlayMediaButton.PLAY)
+    }
+
     @Test fun gainWhilePauseIsBeingAcceptedStillRestoresTheMusic() {
         doAnswer {
             listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)

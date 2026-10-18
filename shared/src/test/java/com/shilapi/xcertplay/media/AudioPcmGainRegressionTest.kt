@@ -29,9 +29,13 @@ class AudioPcmGainRegressionTest {
     @Test fun aMuteArrivingDuringAUnityPartialWriteAffectsTheUnwrittenRawTail() =
         checkRendered(playing = true, maxWrite = 512, ducking = false, muteAfterFirstWrite = true)
 
+    @Test fun anUnmuteDuringAPartialWriteRecoversTheUnwrittenRawTail() =
+        checkRendered(playing = true, maxWrite = 512, ducking = false, muted = true,
+            unmuteAfterFirstWrite = true)
+
     private fun checkRendered(playing: Boolean, maxWrite: Int = Int.MAX_VALUE,
         audioType: String = "media", muted: Boolean = false, ducking: Boolean = true,
-        muteAfterFirstWrite: Boolean = false) {
+        muteAfterFirstWrite: Boolean = false, unmuteAfterFirstWrite: Boolean = false) {
         LimitedWriteTrack.limit = maxWrite
         LimitedWriteTrack.output.reset()
         LimitedWriteTrack.afterFirstWrite = null
@@ -55,9 +59,9 @@ class AudioPcmGainRegressionTest {
             type.getDeclaredField("playbackStarted").apply { isAccessible = true }.setBoolean(renderer, playing)
             type.getDeclaredMethod("setAudioOffMuted", Boolean::class.javaPrimitiveType)
                 .apply { isAccessible = true }.invoke(renderer, muted)
-            if (muteAfterFirstWrite) LimitedWriteTrack.afterFirstWrite = {
+            if (muteAfterFirstWrite || unmuteAfterFirstWrite) LimitedWriteTrack.afterFirstWrite = {
                 type.getDeclaredMethod("setAudioOffMuted", Boolean::class.javaPrimitiveType)
-                    .apply { isAccessible = true }.invoke(renderer, true)
+                    .apply { isAccessible = true }.invoke(renderer, muteAfterFirstWrite)
             }
             val coordinator = sink.javaClass.getDeclaredField("audioFocusCoordinator")
                 .apply { isAccessible = true }.get(sink) as AudioFocusCoordinator
@@ -71,10 +75,14 @@ class AudioPcmGainRegressionTest {
                 Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(renderer, pcm, 0, pcm.size)
             val rendered = LimitedWriteTrack.output.toByteArray()
             assertEquals(pcm.size, rendered.size)
-            assertArrayEquals(pcm, rendered)
+            // Music uses the upstream scratch writer: gain must leave its source PCM intact.
+            val raw = ByteArray(pcm.size)
+            for (i in raw.indices step 2) raw[i + 1] = 0x40
+            assertArrayEquals(raw, pcm)
             for (offset in rendered.indices step 2) {
                 val expected = when {
                     muteAfterFirstWrite && offset >= 512 -> 0
+                    unmuteAfterFirstWrite && offset < 512 -> 0
                     audioType == "telephony" || !ducking -> 16_384
                     else -> 4_115
                 }

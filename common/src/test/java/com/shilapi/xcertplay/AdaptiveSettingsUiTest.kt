@@ -48,6 +48,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowAlertDialog
@@ -730,6 +731,8 @@ class AdaptiveSettingsUiTest {
         assertFalse(text(R.string.settings_ambient_title) in audio)
         assertFalse(text(R.string.settings_ambient_title) in vehicle)
         assertFalse(text(R.string.settings_ambient_title) in display)
+        assertTrue(text(R.string.settings_home_card_media) in advanced)
+        assertFalse(text(R.string.settings_home_card_media) in display)
         assertTrue(text(R.string.side_panel) in advanced)
         assertTrue(display.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(audio.any { it.startsWith(text(R.string.settings_app_appearance)) })
@@ -780,6 +783,50 @@ class AdaptiveSettingsUiTest {
 
     @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
     fun navigationSliderScreenshotCompactArabicRtlLargeFont() = captureNavigationSlider("compact-ar-rtl", 1.3f)
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun cornerRadiusScreenshotCompactLargeFont() = captureCornerRadius("compact-zh")
+
+    @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun cornerRadiusScreenshotExpandedLargeFont() = captureCornerRadius("expanded-en")
+
+    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun cornerRadiusScreenshotArabicRtlLargeFont() = captureCornerRadius("compact-ar-rtl")
+
+    private fun captureCornerRadius(name: String) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val screen = openSettings()
+        for ((category, titleId, prefix) in listOf(
+            Triple(SettingsCategory.DISPLAY, R.string.settings_carplay_corner_radius, "corner"),
+            Triple(SettingsCategory.ADVANCED, R.string.settings_home_card_media, "home-card"),
+        )) {
+            ReflectionHelpers.setField(screen, "settingsCategory", category)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            layoutRoot(screen)
+            val title = texts(screen).single { it.text == screen.getString(titleId) }
+            val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+            val content = scroll.getChildAt(0)
+            val layout = requireNotNull(title.layout)
+            assertTrue("The setting title must wrap without truncation",
+                (0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 })
+            // Capture the entire scroll content: Robolectric's scroll shadow does not render
+            // the viewport offset. The second image shows the new control at its actual size.
+            for ((suffix, view) in listOf("page" to content, "control" to (title.parent.parent as View))) {
+                val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                try {
+                    view.draw(Canvas(bitmap))
+                    val output = Paths.get("build/reports/corner-radius-ui/$prefix-$name-$suffix.png")
+                    Files.createDirectories(output.parent)
+                    Files.newOutputStream(output).use { stream ->
+                        assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+                    }
+                } finally { bitmap.recycle() }
+            }
+        }
+    }
 
     private fun captureNavigationSlider(name: String, fontScale: Float) {
         RuntimeEnvironment.setFontScale(fontScale)
@@ -1083,7 +1130,7 @@ class AdaptiveSettingsUiTest {
         open(R.string.language_section_title)
         assertEquals(SettingsCategory.LANGUAGE, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.language_hint) })
-        assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_language_summary) })
+        assertTrue(texts(screen).any { it.text == VehicleBranding.text(screen, R.string.settings_language_summary) })
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "openSettingsCategory",
             ReflectionHelpers.ClassParameter(SettingsCategory::class.java, SettingsCategory.OVERVIEW))
         open(R.string.about)

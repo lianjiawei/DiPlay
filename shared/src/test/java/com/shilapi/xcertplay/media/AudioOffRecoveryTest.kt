@@ -17,13 +17,18 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import java.io.ByteArrayOutputStream
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [25, 28, 33], manifest = Config.NONE)
 class AudioOffRecoveryTest {
     @After fun cleanup() { CarAudioOff.detach() }
 
-    @Test fun carMuteStillSilencesMusicWithNavigationDuckingOffAndIsReported() {
+    @Test @Config(shadows = [CaptureTrack::class])
+    fun carMuteStillSilencesMusicWithNavigationDuckingOffAndIsReported() {
+        CaptureTrack.output.reset()
         val app = RuntimeEnvironment.getApplication()
         val audio = app.getSystemService(AudioManager::class.java)
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
@@ -54,11 +59,13 @@ class AudioOffRecoveryTest {
             for (i in pcm.indices step 2) pcm[i + 1] = 0x40
             type.getDeclaredMethod("writePcm", ByteArray::class.java, Int::class.javaPrimitiveType,
                 Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(renderer, pcm, 0, pcm.size)
-            assertTrue("Audio-off must actually silence the samples", pcm.all { it == 0.toByte() })
+            val output = CaptureTrack.output.toByteArray()
+            assertEquals(pcm.size, output.size)
+            assertTrue("Audio-off must silence the PCM sent to AudioTrack", output.all { it == 0.toByte() })
             assertTrue(diagnostics.any { it.contains("audio-off muted=true source=system") })
             assertTrue(diagnostics.any { it.contains("audioOff=true") })
             assertTrue(diagnostics.any { it.contains("outputPeak=0 effectiveGain=0.0 audioOff=true") })
-        } finally { sink.close() }
+        } finally { sink.close(); track.release() }
     }
 
     @Test fun systemUnmuteRecoversTheInferredMuteWhenSessionReattaches() {
@@ -116,5 +123,14 @@ class AudioOffRecoveryTest {
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals(listOf(true, true), events)
         } finally { CarAudioOff.removeListener(listener) }
+    }
+
+    @Implements(AudioTrack::class)
+    class CaptureTrack {
+        @Implementation fun write(bytes: ByteArray, offset: Int, size: Int, mode: Int): Int {
+            output.write(bytes, offset, size)
+            return size
+        }
+        companion object { val output = ByteArrayOutputStream() }
     }
 }

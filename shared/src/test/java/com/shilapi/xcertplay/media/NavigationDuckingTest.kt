@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.media
 import android.media.AudioAttributes
 import android.media.AudioFormat as AndroidAudioFormat
 import android.media.AudioTrack
+import java.io.ByteArrayOutputStream
 import com.shilapi.xcertplay.airplay.AudioCodecKind
 import com.shilapi.xcertplay.airplay.AudioFormat
 import com.shilapi.xcertplay.airplay.AudioStreamId
@@ -30,6 +31,7 @@ class NavigationDuckingTest {
     @After fun cleanup() {
         tracks.forEach(AudioTrack::release)
         VolumeTrack.volumes.clear()
+        VolumeTrack.pcm.clear()
     }
 
     @Test fun guidanceDucksMusicAndReleasesAfterTheHold() {
@@ -240,6 +242,7 @@ class NavigationDuckingTest {
             val untouched = music.copyOf()
             write.invoke(renderer, music, 0, music.size)
             org.junit.Assert.assertArrayEquals(untouched, music)
+            org.junit.Assert.assertArrayEquals(untouched, VolumeTrack.pcm.getValue(track).toByteArray())
 
             // Arm guidance from the navigation renderer, let the ramp settle, then play music again.
             val coordinator = sink.javaClass.getDeclaredField("audioFocusCoordinator")
@@ -251,19 +254,21 @@ class NavigationDuckingTest {
             assertEquals(NavigationDuckSettings.linear(-12), coordinator.musicPcmGain, 0.001f)
 
             val ducked = loudBytes()
+            VolumeTrack.pcm.getValue(track).reset()
             write.invoke(renderer, ducked, 0, ducked.size)
-            val peak = (0 until ducked.size / 2).maxOf { index ->
-                kotlin.math.abs(((ducked[index * 2].toInt() and 0xff) or (ducked[index * 2 + 1].toInt() shl 8)).toShort().toInt())
-            }
+            val actual = VolumeTrack.pcm.getValue(track).toByteArray()
+            assertEquals(ducked.size, actual.size)
+            val peak = volumeOf(actual)
             assertTrue("Music PCM must be quieter while guidance speaks, peak=$peak", peak < 9_000)
             assertTrue("Music PCM must not be silenced, peak=$peak", peak > 1_000)
 
             // Turning the switch off restores unity without touching AudioTrack volume.
             sink.setNavigationDuckingEnabled(false)
             val restored = loudBytes()
+            VolumeTrack.pcm.getValue(track).reset()
             write.invoke(renderer, restored, 0, restored.size)
             assertTrue(volumes(track).isEmpty())
-            assertEquals(16_384, volumeOf(restored))
+            assertEquals(16_384, volumeOf(VolumeTrack.pcm.getValue(track).toByteArray()))
         } finally {
             sink.close()
         }
@@ -296,6 +301,16 @@ class NavigationDuckingTest {
             volumes.getOrPut(track) { mutableListOf() }.add(left)
             return AudioTrack.SUCCESS
         }
-        companion object { val volumes = linkedMapOf<AudioTrack, MutableList<Float>>() }
+        @Implementation fun write(bytes: ByteArray, offset: Int, length: Int, mode: Int): Int {
+            pcm.getOrPut(track) { ByteArrayOutputStream() }.write(bytes, offset, length)
+            return length
+        }
+        @Implementation fun play() = Unit
+        @Implementation fun getPlaybackHeadPosition() = 0
+        @Implementation fun getUnderrunCount() = 0
+        companion object {
+            val volumes = linkedMapOf<AudioTrack, MutableList<Float>>()
+            val pcm = linkedMapOf<AudioTrack, ByteArrayOutputStream>()
+        }
     }
 }
