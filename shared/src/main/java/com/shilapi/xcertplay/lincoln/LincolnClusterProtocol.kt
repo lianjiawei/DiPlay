@@ -68,13 +68,13 @@ object LincolnClusterProtocol {
         else -> "turn_front"
     }
 
-    /** The cluster rounds to 10 m / 100 m / 1 km; null when the value is out of the accepted range. */
+    /** Round to 5 m / 50 m / 500 m for the cluster; null outside the accepted range. */
     fun roundDistance(meters: Int): Int? {
         if (meters < 0 || meters > MAX_DISTANCE_METERS) return null
         return when {
-            meters < 1_000 -> (meters + 5) / 10 * 10
-            meters < 10_000 -> (meters + 50) / 100 * 100
-            else -> (meters + 500) / 1_000 * 1_000
+            meters < 1_000 -> (meters + 2) / 5 * 5
+            meters < 10_000 -> (meters + 25) / 50 * 50
+            else -> (meters + 250) / 500 * 500
         }
     }
 
