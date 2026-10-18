@@ -885,4 +885,6 @@
     <string name="settings_lincoln_cluster_remaining">Distancia y tiempo restantes en el cuadro (experimental)</string>
     <string name="settings_lincoln_cluster_remaining_description">Envía además la distancia y el tiempo totales restantes. El cuadro probado ignora los campos desconocidos, así que solo es útil cuando una sonda confirme los nombres de campo que acepta tu cuadro.</string>
     <string name="settings_lincoln_cluster_status">App del cuadro: %1$s\n%2$s</string>
+    <string name="settings_microphone_without_48khz">Micrófono: no ofrecer 48 kHz (experimental)</string>
+    <string name="settings_microphone_without_48khz_description">Los mensajes de voz y las llamadas de WeChat pueden grabarse sin sonido cuando el iPhone abre el micrófono a 48 kHz, mientras Siri y las llamadas telefónicas funcionan a frecuencias inferiores. Limita las frecuencias ofrecidas para el micrófono a 32 kHz o menos. Vuelve a conectar CarPlay.</string>
 </resources>

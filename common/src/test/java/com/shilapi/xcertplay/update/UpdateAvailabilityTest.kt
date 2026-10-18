@@ -19,6 +19,23 @@ class UpdateAvailabilityTest {
 
     @After fun clear() = UpdateAvailability.clearAllForTest(context)
 
+    @Test fun migratingUpdateSourceDropsTheOldCachedApkButKeepsUserPreferences() {
+        UpdateAvailability.saveBackgroundChecksEnabled(context, false)
+        UpdateAvailability.save(context, release("v0.2.99"))
+        context.getSharedPreferences("diplay_update_availability", Context.MODE_PRIVATE)
+            .edit().putString("release_source", "previous-author").commit()
+        assertNull(UpdateAvailability.available(context, "0.2.24"))
+        assertFalse(UpdateAvailability.backgroundChecksEnabled(context))
+    }
+
+    @Test fun switchingUpdateSourceDoesNotWaitOnThePreviousChannelsDailyTimer() {
+        UpdateAvailability.recordAttempt(context, 100_000L)
+        assertFalse(UpdateAvailability.shouldCheck(context, 100_001L))
+        context.getSharedPreferences("diplay_update_availability", Context.MODE_PRIVATE)
+            .edit().putString("check_source", "previous-author").commit()
+        assertTrue(UpdateAvailability.shouldCheck(context, 100_001L))
+    }
+
     @Test fun persistsAReleaseThatIsNewerThanTheInstalledBuild() {
         val release = release("v0.2.16")
         UpdateAvailability.save(context, release)

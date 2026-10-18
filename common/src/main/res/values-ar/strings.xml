@@ -934,4 +934,6 @@
     <string name="settings_lincoln_cluster_remaining">المسافة والوقت المتبقيان في العدادات (تجريبي)</string>
     <string name="settings_lincoln_cluster_remaining_description">يرسل أيضًا إجمالي المسافة والوقت المتبقيين. العدادات المُختبَرة تتجاهل الحقول غير المعروفة، لذا لا فائدة منه إلا بعد أن يؤكد الفحص أسماء الحقول التي يقبلها عدّادك.</string>
     <string name="settings_lincoln_cluster_status">تطبيق العدادات: %1$s\n%2$s</string>
+    <string name="settings_microphone_without_48khz">الميكروفون: عدم عرض 48 كيلوهرتز (تجريبي)</string>
+    <string name="settings_microphone_without_48khz_description">قد تُسجَّل رسائل WeChat الصوتية ومكالماته بلا صوت عندما يفتح iPhone الميكروفون بمعدل 48 كيلوهرتز، بينما يعمل Siri والمكالمات الهاتفية بمعدلات أقل. يقتصر عرض معدلات الميكروفون على 32 كيلوهرتز أو أقل ليختار iPhone أحدها. يُعيد الاتصال بـ CarPlay.</string>
 </resources>

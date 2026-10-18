@@ -5,6 +5,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpdateVersionTest {
+    @Test fun personalRevisionUpdatesWithinTheSameBaseVersion() {
+        assertTrue(UpdateVersion.isNewer("v0.2.24-precision.2", "0.2.24-precision.1"))
+        assertTrue(UpdateVersion.isNewer("v0.2.24-precision.10", "0.2.24-precision.2"))
+        assertTrue(UpdateVersion.isNewer("v0.2.24-precision.1", "0.2.24"))
+        assertFalse(UpdateVersion.isNewer("v0.2.24-precision.2", "0.2.24-precision.2"))
+        assertFalse(UpdateVersion.isNewer("v0.2.24", "0.2.24-precision.2"))
+        assertFalse(UpdateVersion.isNewer("v0.2.23-precision.99", "0.2.24-precision.2"))
+    }
+
+    @Test fun oversizedNumericVersionIsIgnoredWithoutCrashingTheCheck() {
+        assertFalse(UpdateVersion.isNewer("v999999999999999999.2.0", "0.2.24"))
+    }
     @Test
     fun newerTagIsAnUpdate() {
         assertTrue(UpdateVersion.isNewer("v0.2.15", "0.2.14"))

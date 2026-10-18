@@ -9,11 +9,9 @@ import java.net.URL
 import java.net.URLConnection
 
 internal object UpdateClient {
-    // This build is a Lincoln/Ford derivative and must never offer the upstream BYD package, so it
-    // checks its own fork's releases. That fork currently publishes no releases, which makes the
-    // update check a no-op until this project ships its own tagged APK.
+    // Personal releases retain their own signing key and must stay on this fork's update channel.
     internal const val RELEASES_URL =
-        "https://api.github.com/repos/kriskwok/DiPlay/releases?per_page=3"
+        "https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=3"
     private const val CONNECT_TIMEOUT_MILLIS = 10_000
     private const val READ_TIMEOUT_MILLIS = 30_000
     private const val MAXIMUM_TEXT_BYTES = 4 * 1024 * 1024

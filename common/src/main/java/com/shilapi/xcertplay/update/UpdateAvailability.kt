@@ -9,6 +9,8 @@ internal object UpdateAvailability {
     private const val APK_NAME = "apk_name"
     private const val APK_URL = "apk_url"
     private const val CHECKSUMS_URL = "checksums_url"
+    private const val RELEASE_SOURCE = "release_source"
+    private const val CHECK_SOURCE = "check_source"
     private const val LAST_ATTEMPT_MILLIS = "last_attempt_millis"
     private const val BACKGROUND_CHECKS = "background_checks"
     private const val LAST_RESULT = "last_result"
@@ -30,6 +32,12 @@ internal object UpdateAvailability {
 
     fun available(context: Context, installedVersion: String): UpdateRelease? {
         val values = preferences(context)
+        if (values.getString(RELEASE_SOURCE, null) != UpdateClient.RELEASES_URL) {
+            // Preserve the user's background-check choice, but never offer a cached APK from
+            // the previous author's signing/update channel after this fork is installed.
+            if (values.contains(TAG)) clear(context)
+            return null
+        }
         val release = UpdateRelease(
             tagName = values.getString(TAG, null) ?: return null,
             apkName = values.getString(APK_NAME, null) ?: return null,
@@ -47,6 +55,7 @@ internal object UpdateAvailability {
             .putString(APK_NAME, release.apkName)
             .putString(APK_URL, release.apkUrl)
             .putString(CHECKSUMS_URL, release.checksumsUrl)
+            .putString(RELEASE_SOURCE, UpdateClient.RELEASES_URL)
             .apply()
     }
 
@@ -56,16 +65,19 @@ internal object UpdateAvailability {
             .remove(APK_NAME)
             .remove(APK_URL)
             .remove(CHECKSUMS_URL)
+            .remove(RELEASE_SOURCE)
             .apply()
     }
 
     fun shouldCheck(context: Context, nowMillis: Long): Boolean {
+        if (preferences(context).getString(CHECK_SOURCE, null) != UpdateClient.RELEASES_URL) return true
         val lastAttempt = preferences(context).getLong(LAST_ATTEMPT_MILLIS, 0L)
         return lastAttempt <= 0L || nowMillis < lastAttempt || nowMillis - lastAttempt >= CHECK_INTERVAL_MILLIS
     }
 
     fun recordAttempt(context: Context, nowMillis: Long) {
-        preferences(context).edit().putLong(LAST_ATTEMPT_MILLIS, nowMillis).apply()
+        preferences(context).edit().putLong(LAST_ATTEMPT_MILLIS, nowMillis)
+            .putString(CHECK_SOURCE, UpdateClient.RELEASES_URL).apply()
     }
 
     fun recordResult(context: Context, nowMillis: Long, result: String) {

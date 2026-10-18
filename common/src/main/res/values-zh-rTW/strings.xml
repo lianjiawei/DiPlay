@@ -945,4 +945,6 @@
     <string name="settings_lincoln_cluster_remaining">儀錶剩餘里程與時間（實驗性）</string>
     <string name="settings_lincoln_cluster_remaining_description">額外傳送總剩餘里程與時間。已驗證的儀錶會忽略未知欄位，因此只有在探測確認你的儀錶接受的欄位名稱後才有意義。</string>
     <string name="settings_lincoln_cluster_status">儀錶應用程式：%1$s\n%2$s</string>
+    <string name="settings_microphone_without_48khz">麥克風：不提供 48 kHz（實驗性）</string>
+    <string name="settings_microphone_without_48khz_description">當 iPhone 開啟 48 kHz 的麥克風串流時，微信語音訊息和通話可能錄到靜音，而 Siri 和一般電話通話會使用較低的取樣率。將麥克風提供的最高取樣率限制為 32 kHz，讓 iPhone 協商使用這些較低的取樣率。會重新連線 CarPlay。</string>
 </resources>

@@ -987,4 +987,6 @@
     <string name="settings_lincoln_cluster_remaining">メーターの残距離・残時間（実験的）</string>
     <string name="settings_lincoln_cluster_remaining_description">残りの総距離と時間も送ります。検証済みのメーターは未知のフィールドを無視するため、お使いのメーターが受け付けるフィールド名を確認できてから意味があります。</string>
     <string name="settings_lincoln_cluster_status">メーターアプリ: %1$s\n%2$s</string>
+    <string name="settings_microphone_without_48khz">マイク：48 kHz を提示しない（実験的機能）</string>
+    <string name="settings_microphone_without_48khz_description">iPhone が 48 kHz のマイク入力を開始すると、WeChat の音声メッセージや通話が無音になることがあります。Siri や通常の電話は低いサンプリング周波数で動作します。マイクで提示する周波数を 32 kHz 以下に制限します。CarPlay に再接続します。</string>
 </resources>

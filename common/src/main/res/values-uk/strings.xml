@@ -897,4 +897,6 @@
     <string name="settings_lincoln_cluster_remaining">Залишок відстані й часу на панелі (експериментально)</string>
     <string name="settings_lincoln_cluster_remaining_description">Додатково надсилає загальний залишок відстані й часу. Перевірена панель ігнорує невідомі поля, тому це корисно лише після підтвердження назв полів, які приймає ваша панель.</string>
     <string name="settings_lincoln_cluster_status">Застосунок панелі: %1$s\n%2$s</string>
+    <string name="settings_microphone_without_48khz">Мікрофон: не пропонувати 48 кГц (експериментально)</string>
+    <string name="settings_microphone_without_48khz_description">Голосові повідомлення та дзвінки WeChat можуть записуватися без звуку, коли iPhone відкриває мікрофон із частотою 48 кГц, тоді як Siri та телефонні дзвінки працюють на нижчих частотах. Обмежує пропоновані частоти мікрофона значенням 32 кГц або нижче. Перепідключає CarPlay.</string>
 </resources>
