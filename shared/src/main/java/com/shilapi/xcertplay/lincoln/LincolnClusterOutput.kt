@@ -44,12 +44,12 @@ object LincolnClusterOutput {
     private var musicSent = 0
     private var remainSent = 0
     private var lastReason = "init"
-    // The last state acted on, so the 1 s tick is cheap: an unchanged glance with unchanged
-    // switches is skipped, while a real change (a route expiring, or a switch flipped without a
-    // new frame) still runs the forwarding and clearing below.
+    // Only diagnostics skip an unchanged state. Output maintenance still runs so a timer or
+    // remaining-info switch can clear a readout even without another iPhone frame.
     private var lastSnapshot: CarPlayGlance.Snapshot? = null
     private var lastNavEnabled: Boolean? = null
     private var lastMusicEnabled: Boolean? = null
+    private var lastRemainingEnabled: Boolean? = null
     // The iPhone sends a transient NoRouteSet for a few tens of milliseconds when a route starts or
     // is rerouted. Acting on it cleared the card and drew it again, which is the blink that was
     // still visible after the 30 s staleness fix. An end has to stick before the cluster is cleared.
@@ -133,6 +133,7 @@ object LincolnClusterOutput {
             lastSnapshot = null
             lastNavEnabled = null
             lastMusicEnabled = null
+            lastRemainingEnabled = null
             endedSinceNs = 0L
         }
     }
@@ -165,21 +166,17 @@ object LincolnClusterOutput {
         else -> "就绪"
     }
 
-    private fun onSnapshot(snapshot: CarPlayGlance.Snapshot) {
-        val app = context ?: return
+    private fun onSnapshot(snapshot: CarPlayGlance.Snapshot) = synchronized(lock) {
+        val app = context ?: return@synchronized
         val navEnabled = LincolnClusterSettings.navigation(app)
         val musicEnabled = LincolnClusterSettings.music(app)
-        if (snapshot == lastSnapshot && navEnabled == lastNavEnabled && musicEnabled == lastMusicEnabled) {
-            // Nothing changed, but the cluster still retires a nav card it has not heard about within
-            // a few seconds, so keep repeating the current one (the send itself is throttled).
-            if (navEnabled && snapshot.connected && navStateOn == true) {
-                synchronized(lock) { maintainNavLocked(app, snapshot) }
-            }
-            return
-        }
+        val remainingEnabled = LincolnClusterSettings.remaining(app)
+        val changed = snapshot != lastSnapshot || navEnabled != lastNavEnabled ||
+            musicEnabled != lastMusicEnabled || remainingEnabled != lastRemainingEnabled
         lastSnapshot = snapshot
         lastNavEnabled = navEnabled
         lastMusicEnabled = musicEnabled
+        lastRemainingEnabled = remainingEnabled
         val turn = LincolnClusterProtocol.turnCode(snapshot.maneuverType, snapshot.drivingSide)
         val distance = LincolnClusterProtocol.roundDistance(snapshot.distanceMeters)
         lastReason = when {
@@ -191,34 +188,24 @@ object LincolnClusterOutput {
             distance == null -> "distance out of range ${snapshot.distanceMeters}"
             else -> "guidance $turn ${distance}m '${snapshot.road}'"
         }
-        Log.i(TAG, "glance connected=${snapshot.connected} maneuver=${snapshot.maneuverType} " +
+        if (changed) Log.i(TAG, "glance connected=${snapshot.connected} maneuver=${snapshot.maneuverType} " +
             "distance=${snapshot.distanceMeters} road='${snapshot.road}' song='${snapshot.song}' " +
             "playing=${snapshot.playing} remain=${snapshot.remainingMeters}/${snapshot.remainingSeconds} " +
             "routeActive=${snapshot.routeActive} routeEnded=${snapshot.routeEnded} " +
             "nav=$navEnabled music=$musicEnabled -> $lastReason")
-        if (!navEnabled && !musicEnabled) {
-            synchronized(lock) {
-                clearNavLocked(app)
-                clearRemainLocked(app)
-                clearMusicLocked(app)
-            }
-            return
+        if (snapshot.routeEnded) {
+            if (endedSinceNs == 0L) endedSinceNs = nanoTime()
+        } else {
+            endedSinceNs = 0L
         }
-        synchronized(lock) {
-            if (snapshot.routeEnded) {
-                if (endedSinceNs == 0L) endedSinceNs = nanoTime()
-            } else {
-                endedSinceNs = 0L
-            }
-            if (navEnabled && snapshot.connected) {
-                sendNavLocked(app, snapshot)
-                sendRemainLocked(app, snapshot)
-            } else {
-                clearNavLocked(app)
-                clearRemainLocked(app)
-            }
-            if (musicEnabled && snapshot.connected) sendMusicLocked(app, snapshot) else clearMusicLocked(app)
+        if (navEnabled && snapshot.connected && !(snapshot.routeEnded && endSettled())) {
+            sendNavLocked(app, snapshot)
+            sendRemainLocked(app, snapshot)
+        } else {
+            clearNavLocked(app)
+            clearRemainLocked(app)
         }
+        if (musicEnabled && snapshot.connected) sendMusicLocked(app, snapshot) else clearMusicLocked(app)
     }
 
     private fun sendNavLocked(app: Context, snapshot: CarPlayGlance.Snapshot) {
@@ -392,7 +379,6 @@ object LincolnClusterOutput {
             lastNavDistance = null
             lastNavRoad = ""
             lastNavSentNs = 0L
-            endedSinceNs = 0L
             Log.i(TAG, "nav cleared")
         }
     }

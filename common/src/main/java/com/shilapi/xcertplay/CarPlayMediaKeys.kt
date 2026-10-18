@@ -86,6 +86,10 @@ internal object CarPlayMediaKeys {
      */
     private var pausedForAssistant: CarPlayController? = null
     private var assistantPausePending: Runnable? = null
+    private var assistantResumePending: Runnable? = null
+    private var assistantPauseInFlight: CarPlayController? = null
+    private var assistantFocusLost = false
+    private var assistantIntentRevision = 0L
     private var appContext: Context? = null
     private var mediaAudioActive = false
     private var nowPlaying = CarPlayNowPlaying()
@@ -355,6 +359,8 @@ internal object CarPlayMediaKeys {
                 // Only permanent loss moves media keys elsewhere; transient losses come back.
                 if (change == AudioManager.AUDIOFOCUS_LOSS) focusHeld = false
                 else if (change == AudioManager.AUDIOFOCUS_GAIN) focusHeld = true
+                if (change == AudioManager.AUDIOFOCUS_GAIN) assistantFocusLost = false
+                if (change == AudioManager.AUDIOFOCUS_LOSS) clearAssistantInterruptionLocked()
                 true
             }
         }
@@ -369,17 +375,10 @@ internal object CarPlayMediaKeys {
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 restoreMusicVolumeAfterTransientLoss()
-                // Only rebuild when this interruption actually paused music. Every focus request
-                // receives a GAIN on startup, and rebuilding unconditionally there costs an
-                // unnecessary track allocation and a short prebuffer.
-                if (resumeAfterAssistant(expectedController)) {
-                    CarPlayBackgroundSession.snapshot()?.takeIf { it.controller === expectedController }
-                        ?.sink?.rerouteMediaTracks()
-                }
+                resumeAfterAssistant(expectedController)
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
                 clearMusicVolumeGuard()
-                resumeAfterAssistant(expectedController)
             }
         }
         // Resolve the matching sink and invoke it outside the media-key monitor. An abandoned
@@ -428,42 +427,77 @@ internal object CarPlayMediaKeys {
      * blip (the head unit requesting and releasing focus for a chime) from stopping the music.
      */
     private fun pauseForAssistant(expected: CarPlayController) {
-        val shouldPause = synchronized(this) {
+        synchronized(this) {
             if (controller !== expected) return
-            if (pausedForAssistant != null) return
+            assistantFocusLost = true
+            assistantResumePending?.let(mainHandler::removeCallbacks)
+            assistantResumePending = null
+            if (pausedForAssistant != null || assistantPausePending != null || assistantPauseInFlight != null) return
             val playing = mediaAudioActive || nowPlaying.playing
             if (!playing) return
-            pausedForAssistant = expected
-            true
-        }
-        assistantPausePending?.let(mainHandler::removeCallbacks)
-        val action = Runnable {
-            synchronized(this) { assistantPausePending = null }
-            if (!expected.sendMediaButton(CarPlayMediaButton.PAUSE)) {
-                synchronized(this) { if (pausedForAssistant === expected) pausedForAssistant = null }
-                return@Runnable
+            val revision = assistantIntentRevision
+            lateinit var action: Runnable
+            action = Runnable {
+                synchronized(this) {
+                    if (assistantPausePending !== action || controller !== expected ||
+                        assistantIntentRevision != revision || !assistantFocusLost) return@Runnable
+                    assistantPausePending = null
+                    assistantPauseInFlight = expected
+                }
+                val sent = expected.sendMediaButton(CarPlayMediaButton.PAUSE)
+                val resume = synchronized(this) {
+                    if (controller !== expected || assistantIntentRevision != revision) return@Runnable
+                    assistantPauseInFlight = null
+                    if (!sent) return@Runnable
+                    pausedForAssistant = expected
+                    !assistantFocusLost && focusHeld
+                }
+                WheelKeyLog.note("media keys paused CarPlay for the car assistant")
+                // A gain can arrive while the controller is accepting the pause command.
+                if (resume) resumeAfterAssistant(expected)
             }
-            WheelKeyLog.note("media keys paused CarPlay for the car assistant")
+            assistantPausePending = action
+            mainHandler.postDelayed(action, ASSISTANT_PAUSE_DELAY_MILLIS)
         }
-        assistantPausePending = action
-        mainHandler.postDelayed(action, ASSISTANT_PAUSE_DELAY_MILLIS)
     }
 
     /** Resumes only the playback this module paused for an assistant interruption. */
-    private fun resumeAfterAssistant(expected: CarPlayController): Boolean {
-        val paused = synchronized(this) {
+    private fun resumeAfterAssistant(expected: CarPlayController) {
+        synchronized(this) {
             assistantPausePending?.let(mainHandler::removeCallbacks)
             assistantPausePending = null
-            if (pausedForAssistant !== expected) return false
-            pausedForAssistant = null
-            true
-        }
-        mainHandler.postDelayed({
-            if (expected.sendMediaButton(CarPlayMediaButton.PLAY)) {
-                WheelKeyLog.note("media keys resumed CarPlay after the car assistant")
+            if (controller !== expected || pausedForAssistant !== expected || assistantFocusLost ||
+                !focusHeld || assistantResumePending != null) return
+            val owner = focusOwner
+            val revision = assistantIntentRevision
+            lateinit var action: Runnable
+            action = Runnable {
+                synchronized(this) {
+                    if (assistantResumePending !== action || controller !== expected || focusOwner !== owner ||
+                        assistantIntentRevision != revision || assistantFocusLost || !focusHeld) return@Runnable
+                    assistantResumePending = null
+                    pausedForAssistant = null
+                }
+                if (expected.sendMediaButton(CarPlayMediaButton.PLAY)) {
+                    WheelKeyLog.note("media keys resumed CarPlay after the car assistant")
+                    CarPlayBackgroundSession.snapshot()?.takeIf { it.controller === expected }
+                        ?.sink?.rerouteMediaTracks()
+                }
             }
-        }, ASSISTANT_RESUME_DELAY_MILLIS)
-        return paused
+            assistantResumePending = action
+            mainHandler.postDelayed(action, ASSISTANT_RESUME_DELAY_MILLIS)
+        }
+    }
+
+    private fun clearAssistantInterruptionLocked() {
+        assistantIntentRevision++
+        assistantPausePending?.let(mainHandler::removeCallbacks)
+        assistantResumePending?.let(mainHandler::removeCallbacks)
+        assistantPausePending = null
+        assistantResumePending = null
+        assistantPauseInFlight = null
+        pausedForAssistant = null
+        assistantFocusLost = false
     }
 
     /**
@@ -534,9 +568,7 @@ internal object CarPlayMediaKeys {
         focusRequest?.let { request -> appContext?.getSystemService(AudioManager::class.java)?.let(request::abandon) }
         focusRequest = null
         focusHeld = false
-        assistantPausePending?.let(mainHandler::removeCallbacks)
-        assistantPausePending = null
-        pausedForAssistant = null
+        clearAssistantInterruptionLocked()
         clearMusicVolumeGuard()
     }
 
@@ -562,6 +594,10 @@ internal object CarPlayMediaKeys {
     }
 
     private fun send(index: Int, source: String) {
+        if (index == CarPlayMediaButton.PLAY || index == CarPlayMediaButton.PAUSE ||
+            index == CarPlayMediaButton.PLAY_PAUSE) {
+            synchronized(this) { clearAssistantInterruptionLocked() }
+        }
         // While the car's video player is on screen the wheel drives it: a CarPlay play/pause would
         // make the iPhone end the video session.
         if (CarPlayVideo.onMediaKey(index)) {
