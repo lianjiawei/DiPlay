@@ -883,7 +883,7 @@
     <string name="backup_summary">%1$d件の設定を取り込み、%2$d件をスキップしました。</string>
     <string name="backup_import_invalid">Lincolnの設定バックアップファイルではありません。</string>
     <string name="settings_background_update_checks">バックグラウンドで更新を確認</string>
-    <string name="settings_background_update_checks_description">1日1回GitHubで新しいバージョンを確認し、あればホーム画面に表示します。タップしない限りダウンロードしません。</string>
+    <string name="settings_background_update_checks_description">Lincoln は GitHub の更新を毎日確認します。ホーム画面では、新しいバージョンごとに一度、更新内容とダウンロードボタンを表示します。タップするまでダウンロードは開始しません。</string>
     <string name="setup_guide">初期設定ガイド</string>
     <string name="setup_guide_description">DiLinkのバージョンを確認し、接続方法と車に合う機能を選択します。</string>
     <string name="setup_step_of">ステップ %1$d／%2$d</string>
@@ -1013,4 +1013,11 @@
     <string name="settings_carplay_corner_radius">CarPlayの角の丸み</string>
     <string name="settings_home_card_media">ホームカードに曲名と歌詞を表示（実験的機能）</string>
     <string name="settings_home_card_media_description">CarPlay の再生中はホームカードに曲名と現在の歌詞を表示し、一時停止すると通常の CarPlay 表示に戻ります。ADB root で対応する改造ランチャーをインストールする必要があります。初期設定はオフです。</string>
+    <string name="update_prompt_title">新しいバージョン：%1$s</string>
+    <string name="update_later">後で</string>
+    <string name="update_downloading_unknown">ダウンロード中…</string>
+    <string name="update_install_now">今すぐインストール</string>
+    <string name="update_ready_to_install">ダウンロードが完了しました。「今すぐインストール」をタップすると Android のインストーラーが開きます。</string>
+    <string name="update_retry">再試行</string>
+    <string name="update_hide">閉じる</string>
 </resources>

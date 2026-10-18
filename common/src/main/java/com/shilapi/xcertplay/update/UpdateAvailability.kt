@@ -12,6 +12,8 @@ internal object UpdateAvailability {
     private const val RELEASE_SOURCE = "release_source"
     private const val CHECK_SOURCE = "check_source"
     private const val RELEASE_NOTES = "release_notes"
+    private const val PROMPTED_TAG = "prompted_tag"
+    private const val PROMPTED_SOURCE = "prompted_source"
     private const val LAST_ATTEMPT_MILLIS = "last_attempt_millis"
     private const val BACKGROUND_CHECKS = "background_checks"
     private const val LAST_RESULT = "last_result"
@@ -29,6 +31,20 @@ internal object UpdateAvailability {
 
     fun saveBackgroundChecksEnabled(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(BACKGROUND_CHECKS, enabled).apply()
+    }
+
+    fun shouldPrompt(context: Context, release: UpdateRelease): Boolean {
+        if (!backgroundChecksEnabled(context)) return false
+        val values = preferences(context)
+        return values.getString(PROMPTED_SOURCE, null) != UpdateClient.RELEASES_URL ||
+            values.getString(PROMPTED_TAG, null) != release.tagName
+    }
+
+    fun recordPrompt(context: Context, release: UpdateRelease) {
+        preferences(context).edit()
+            .putString(PROMPTED_SOURCE, UpdateClient.RELEASES_URL)
+            .putString(PROMPTED_TAG, release.tagName)
+            .apply()
     }
 
     fun available(context: Context, installedVersion: String): UpdateRelease? {

@@ -882,7 +882,7 @@
     <string name="backup_summary">Imported %1$d settings, skipped %2$d.</string>
     <string name="backup_import_invalid">This file is not a Lincoln settings backup.</string>
     <string name="settings_background_update_checks">Check for updates in the background</string>
-    <string name="settings_background_update_checks_description">Once a day, Lincoln checks GitHub for a new version and shows it on the home screen. It never downloads without your tap.</string>
+    <string name="settings_background_update_checks_description">Once a day, Lincoln checks GitHub for updates. On the home screen, each new version is offered once with release notes and a download button. Downloads start only when you tap.</string>
     <string name="setup_guide">Setup guide</string>
     <string name="setup_guide_description">Find your DiLink version, choose a connection and turn on the features that suit your car.</string>
     <string name="setup_step_of">STEP %1$d OF %2$d</string>
@@ -1014,4 +1014,11 @@
     <string name="settings_carplay_corner_radius">CarPlay corner radius</string>
     <string name="settings_home_card_media">Show song and lyrics on the home card (experimental)</string>
     <string name="settings_home_card_media_description">Shows the song and current lyric on the CarPlay home card while playing; pausing restores the plain CarPlay title. Requires a compatible modified launcher installed with ADB root. Default off.</string>
+    <string name="update_prompt_title">Update available: %1$s</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading_unknown">Downloading…</string>
+    <string name="update_install_now">Install now</string>
+    <string name="update_ready_to_install">Download complete. Tap Install now to open the Android installer.</string>
+    <string name="update_retry">Retry</string>
+    <string name="update_hide">Hide</string>
 </resources>

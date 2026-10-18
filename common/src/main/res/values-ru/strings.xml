@@ -708,7 +708,7 @@
     <string name="backup_summary">Импортировано настроек: %1$d, пропущено: %2$d.</string>
     <string name="backup_import_invalid">Этот файл не является резервной копией настроек Lincoln.</string>
     <string name="settings_background_update_checks">Проверять обновления в фоне</string>
-    <string name="settings_background_update_checks_description">Раз в сутки Lincoln проверяет GitHub на новую версию и показывает её на главном экране. Загрузка начинается только после вашего нажатия.</string>
+    <string name="settings_background_update_checks_description">Lincoln проверяет обновления на GitHub раз в день. На главном экране каждая новая версия предлагается один раз с описанием изменений и кнопкой загрузки. Загрузка начинается только после нажатия.</string>
     <string name="setup_guide">Мастер настройки</string>
     <string name="setup_guide_description">Определите версию DiLink, выберите подключение и включите функции, подходящие вашему автомобилю.</string>
     <string name="setup_step_of">ШАГ %1$d ИЗ %2$d</string>
@@ -898,4 +898,11 @@
     <string name="settings_carplay_corner_radius">Радиус углов CarPlay</string>
     <string name="settings_home_card_media">Песня и текст на карточке главного экрана (экспериментально)</string>
     <string name="settings_home_card_media_description">Во время воспроизведения карточка CarPlay показывает песню и текущую строку текста; при паузе возвращается заголовок CarPlay. Нужен совместимый изменённый лаунчер, установленный через ADB root. По умолчанию выключено.</string>
+    <string name="update_prompt_title">Доступно обновление: %1$s</string>
+    <string name="update_later">Позже</string>
+    <string name="update_downloading_unknown">Загрузка…</string>
+    <string name="update_install_now">Установить</string>
+    <string name="update_ready_to_install">Загрузка завершена. Нажмите «Установить», чтобы открыть установщик Android.</string>
+    <string name="update_retry">Повторить</string>
+    <string name="update_hide">Скрыть</string>
 </resources>

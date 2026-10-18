@@ -839,7 +839,7 @@
     <string name="backup_summary">已导入 %1$d 项设置，跳过 %2$d 项。</string>
     <string name="backup_import_invalid">这不是 Lincoln 设置备份文件。</string>
     <string name="settings_background_update_checks">在后台检查更新</string>
-    <string name="settings_background_update_checks_description">Lincoln 每天会在 GitHub 上检查一次新版本，并显示在主屏幕上。未经你点击，绝不会下载。</string>
+    <string name="settings_background_update_checks_description">Lincoln 每天在 GitHub 检查一次更新。回到首页后，每个新版本会弹窗提示一次，显示更新说明和下载按钮；只有你点击后才会下载。</string>
     <string name="setup_guide">设置向导</string>
     <string name="setup_guide_description">识别 DiLink 版本，选择连接方式，并开启适合你车辆的功能。</string>
     <string name="setup_step_of">第 %1$d 步，共 %2$d 步</string>
@@ -971,4 +971,11 @@
     <string name="settings_carplay_corner_radius">CarPlay 圆角</string>
     <string name="settings_home_card_media">桌面卡片显示歌名和歌词（实验性）</string>
     <string name="settings_home_card_media_description">CarPlay 播放时，桌面卡片显示歌名和当前歌词；暂停或停止后恢复为“CarPlay”。需要通过 ADB root 安装适配的桌面修改包。默认关闭。</string>
+    <string name="update_prompt_title">发现新版本：%1$s</string>
+    <string name="update_later">稍后</string>
+    <string name="update_downloading_unknown">正在下载…</string>
+    <string name="update_install_now">立即安装</string>
+    <string name="update_ready_to_install">下载完成。点击“立即安装”打开系统安装界面。</string>
+    <string name="update_retry">重试</string>
+    <string name="update_hide">收起</string>
 </resources>

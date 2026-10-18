@@ -237,10 +237,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var adbCheckGeneration = 0
     private var adbStatus: TextView? = null
     private var availableUpdate: UpdateRelease? = null
+    private val installedUpdateVersion by lazy { version() }
+    private var updatePromptResumed = false
+    private var updatePrompt: UpdatePromptDialog? = null
+    private var updatePromptForDownload = false
+    private val automaticUpdatePrompt = Runnable { showUpdatePrompt(automatic = true) }
     private var updateSavedPath: String? = null
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
+    internal var updateDownloadWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-download").start() }
+    internal var updateLookup: () -> UpdateRelease? = { UpdateReleaseLookup.latest(version(), userAgent()) }
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var backupServer: SettingsBackupServer? = null
     @Volatile private var backupEndpoint: SettingsBackupEndpoint? = null
@@ -300,7 +307,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         connect(notificationTransport)
     }
     private val tick = object : Runnable {
-        override fun run() { refreshStatus(); handler.postDelayed(this, 1000) }
+        override fun run() {
+            refreshStatus()
+            refreshUpdateAvailability()
+            handler.postDelayed(this, 1000)
+        }
     }
     private val appearancePoll = object : Runnable {
         override fun run() {
@@ -523,6 +534,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onResume() {
         super.onResume()
+        updatePromptResumed = true
         WheelKeyService.restoreIfNeeded(this)
         applyFullscreenMode()
         // Returning from another activity can bring the head unit's own density back.
@@ -551,8 +563,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 handler.post { connect(DiPlayPreferences.autoConnectWireless(this)) }
             }
         }
+        if (updatePromptForDownload) handler.post { refreshUpdatePrompt() }
     }
     override fun onPause() {
+        updatePromptResumed = false
+        handler.removeCallbacks(automaticUpdatePrompt)
+        updatePrompt?.dismiss()
+        updatePrompt = null
         appearanceUpdatesResumed = false
         appearanceObserverRemoval?.invoke()
         appearanceObserverRemoval = null
@@ -564,6 +581,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(automaticUpdatePrompt)
+        updatePrompt?.dismiss()
+        updatePrompt = null
         settingsSearchPopup?.dismiss()
         appearanceObserverRemoval?.invoke()
         appearanceObserverRemoval = null
@@ -2714,8 +2734,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     isEnabled = historyStage == HistoryStage.IDLE
                 },
                 matchButton(10, 60))
-            UpdateStage.DOWNLOADING -> container.addView(label(brandString(R.string.update_downloading, updateProgress ?: 0), 14, MUTED))
-            UpdateStage.VERIFYING -> container.addView(label(brandString(R.string.update_verifying), 14, MUTED))
+            UpdateStage.DOWNLOADING -> container.addView(
+                button(updateProgress?.let { brandString(R.string.update_downloading, it) }
+                    ?: brandString(R.string.update_downloading_unknown), false) { openUpdateProgress() },
+                matchButton(10, 60))
+            UpdateStage.VERIFYING -> container.addView(
+                button(brandString(R.string.update_verifying), false) { openUpdateProgress() }, matchButton(10, 60))
             UpdateStage.READY -> {
                 container.addView(
                     button(brandString(R.string.update_install, updateRelease?.tagName.orEmpty()), true) { installUpdate() },
@@ -2775,6 +2799,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             updateStage = UpdateStage.AVAILABLE
                         }
                         render()
+                        if (release != null && page == "settings" && settingsCategory == SettingsCategory.ABOUT) {
+                            showUpdatePrompt(release, automatic = false)
+                        }
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update check failed", failure)
@@ -2788,7 +2815,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun latestRelease(): UpdateRelease? {
-        return UpdateReleaseLookup.latest(version(), userAgent())
+        return updateLookup()
     }
 
     private fun loadHistoryReleases() {
@@ -2927,12 +2954,89 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
+        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING ||
+            updateStage == UpdateStage.READY) {
+            page = "settings"
+            settingsCategory = SettingsCategory.ABOUT
+            render()
+            if (updateStage != UpdateStage.CHECKING) openUpdateProgress()
+            return
+        }
         updateRelease = release
         updateMessage = null
         updateStage = UpdateStage.AVAILABLE
         page = "settings"
         settingsCategory = SettingsCategory.ABOUT
         render()
+        showUpdatePrompt(release, automatic = false)
+    }
+
+    /** The existing foreground tick also picks up results saved by WorkManager. No network I/O. */
+    private fun refreshUpdateAvailability() {
+        val release = UpdateAvailability.available(this, installedUpdateVersion)
+        if (availableUpdate != release) {
+            availableUpdate = release
+            if (page == "home") render()
+        }
+        // Queue after pending auto-connect work, so the updater never wins the launch race.
+        if (release != null) {
+            handler.removeCallbacks(automaticUpdatePrompt)
+            handler.post(automaticUpdatePrompt)
+        }
+    }
+
+    private fun showUpdatePrompt(release: UpdateRelease? = availableUpdate, automatic: Boolean) {
+        if (release == null || !updatePromptResumed || isFinishing || isDestroyed ||
+            updatePrompt?.isShowing == true || historyStage != HistoryStage.IDLE ||
+            updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING ||
+            updateStage == UpdateStage.VERIFYING || updateStage == UpdateStage.READY) return
+        if (automatic && (page != "home" || !window.decorView.hasWindowFocus() ||
+                CarPlayBackgroundSession.hasSession() || !UpdateAvailability.shouldPrompt(this, release))) return
+        val prompt = createUpdatePrompt()
+        updatePrompt = prompt
+        prompt.show(release, UpdatePromptStage.OFFER, null, null)
+        UpdateAvailability.recordPrompt(this, release)
+    }
+
+    private fun createUpdatePrompt(): UpdatePromptDialog {
+        val prompt = UpdatePromptDialog(this,
+            onDownload = { displayedRelease ->
+                updateRelease = displayedRelease
+                updateMessage = null
+                page = "settings"
+                settingsCategory = SettingsCategory.ABOUT
+                downloadUpdate()
+            },
+            onInstall = { if (updateStage == UpdateStage.READY) installUpdate() },
+            onHide = { updatePromptForDownload = false },
+        )
+        prompt.dialog.setOnDismissListener { if (updatePrompt === prompt) updatePrompt = null }
+        return prompt
+    }
+
+    private fun refreshUpdatePrompt() {
+        if (!updatePromptResumed || isFinishing || isDestroyed) return
+        val release = updateRelease ?: return
+        val state = when (updateStage) {
+            UpdateStage.DOWNLOADING -> UpdatePromptStage.DOWNLOADING
+            UpdateStage.VERIFYING -> UpdatePromptStage.VERIFYING
+            UpdateStage.READY -> UpdatePromptStage.READY
+            UpdateStage.FAILED -> UpdatePromptStage.FAILED
+            else -> return
+        }
+        val prompt = updatePrompt
+        if (prompt != null) prompt.update(release, state, updateProgress, updateMessage)
+        else if (updatePromptForDownload) {
+            createUpdatePrompt().also {
+                updatePrompt = it
+                it.show(release, state, updateProgress, updateMessage)
+            }
+        }
+    }
+
+    private fun openUpdateProgress() {
+        updatePromptForDownload = true
+        refreshUpdatePrompt()
     }
 
     private fun scheduleBackgroundUpdateChecks() {
@@ -2941,22 +3045,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun downloadUpdate() {
-        if (updateRelease == null) return
+        val requestedRelease = updateRelease ?: return
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING) return
         if (historyStage == HistoryStage.DOWNLOADING || historyStage == HistoryStage.VERIFYING) return
         lateinit var release: UpdateRelease
         updateStage = UpdateStage.DOWNLOADING
         updateSavedPath = null
         updateSavedUri = null
+        updateFile = null
         updateProgress = null
         updateMessage = null
+        updatePromptForDownload = true
+        UpdateAvailability.recordPrompt(this, requestedRelease)
         val generation = ++updateGeneration
         render()
-        Thread({
+        refreshUpdatePrompt()
+        updateDownloadWorker(Runnable {
             // Each attempt owns its files, including across activity recreation.
             val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
             val outcome = runCatching {
                 // The cached release can be a day old. Download the newest one.
                 release = latestRelease() ?: throw IOException(brandString(R.string.update_up_to_date))
+                refreshUpdateUi(generation, release)
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
                 UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
                 val apkFile = File(directory, release.apkName)
@@ -2990,16 +3100,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         updateSavedUri = saved?.uri
                         updateStage = UpdateStage.READY
                         render()
+                        refreshUpdatePrompt()
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update download failed", failure)
                         updateMessage = failure.message ?: brandString(R.string.update_failed)
                         updateStage = UpdateStage.FAILED
                         render()
+                        refreshUpdatePrompt()
                     },
                 )
             }
-        }, "diplay-update-download").start()
+        })
     }
 
     private fun installUpdate() {
@@ -3050,10 +3162,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         copy != null && copy == UpdateChecksums.sha256Hex(verified)
     }.getOrDefault(false)
 
-    private fun refreshUpdateUi(generation: Int) {
+    private fun refreshUpdateUi(generation: Int, release: UpdateRelease? = null) {
         runOnUiThread {
-            if (generation != updateGeneration || isFinishing || isDestroyed || !(page == "settings" && settingsCategory == SettingsCategory.ABOUT)) return@runOnUiThread
-            render()
+            if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+            if (release != null) updateRelease = release
+            refreshUpdatePrompt()
+            if (page == "settings" && settingsCategory == SettingsCategory.ABOUT) render()
         }
     }
 

@@ -720,7 +720,7 @@
     <string name="backup_summary">Імпортовано налаштувань: %1$d, пропущено: %2$d.</string>
     <string name="backup_import_invalid">Цей файл не є резервною копією налаштувань Lincoln.</string>
     <string name="settings_background_update_checks">Перевіряти оновлення у фоні</string>
-    <string name="settings_background_update_checks_description">Раз на добу Lincoln перевіряє GitHub на нову версію і показує її на головному екрані. Завантаження починається лише після вашого дотику.</string>
+    <string name="settings_background_update_checks_description">Lincoln перевіряє оновлення на GitHub раз на день. На головному екрані кожна нова версія пропонується один раз з описом змін і кнопкою завантаження. Завантаження починається лише після натискання.</string>
     <string name="setup_guide">Майстер налаштування</string>
     <string name="setup_guide_description">Визначте версію DiLink, оберіть підключення та увімкніть функції, що підходять вашому авто.</string>
     <string name="setup_step_of">КРОК %1$d З %2$d</string>
@@ -910,4 +910,11 @@
     <string name="settings_carplay_corner_radius">Радіус кутів CarPlay</string>
     <string name="settings_home_card_media">Пісня й текст на картці головного екрана (експериментально)</string>
     <string name="settings_home_card_media_description">Під час відтворення картка CarPlay показує пісню й поточний рядок тексту; після паузи повертається заголовок CarPlay. Потрібен сумісний змінений лаунчер, встановлений через ADB root. Типово вимкнено.</string>
+    <string name="update_prompt_title">Доступне оновлення: %1$s</string>
+    <string name="update_later">Пізніше</string>
+    <string name="update_downloading_unknown">Завантаження…</string>
+    <string name="update_install_now">Установити</string>
+    <string name="update_ready_to_install">Завантаження завершено. Натисніть «Установити», щоб відкрити інсталятор Android.</string>
+    <string name="update_retry">Повторити</string>
+    <string name="update_hide">Згорнути</string>
 </resources>

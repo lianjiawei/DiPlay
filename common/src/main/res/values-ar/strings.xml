@@ -708,7 +708,7 @@
     <string name="backup_summary">تم استيراد %1$d من الإعدادات، وتجاهل %2$d.</string>
     <string name="backup_import_invalid">هذا الملف ليس نسخة احتياطية لإعدادات Lincoln.</string>
     <string name="settings_background_update_checks">التحقق من التحديثات في الخلفية</string>
-    <string name="settings_background_update_checks_description">مرة كل يوم، يتحقق Lincoln من GitHub عن إصدار جديد ويعرضه في الشاشة الرئيسية. لا يتم التنزيل أبدًا دون نقرتك.</string>
+    <string name="settings_background_update_checks_description">يتحقق Lincoln من تحديثات GitHub مرة يوميًا. تعرض الشاشة الرئيسية كل إصدار جديد مرة واحدة مع ملاحظات الإصدار وزر التنزيل. لا يبدأ التنزيل إلا عند الضغط على الزر.</string>
     <string name="setup_guide">دليل الإعداد</string>
     <string name="setup_guide_description">اعرف إصدار DiLink، واختر طريقة الاتصال، وفعّل الميزات المناسبة لسيارتك.</string>
     <string name="setup_step_of">الخطوة %1$d من %2$d</string>
@@ -947,4 +947,11 @@
     <string name="settings_carplay_corner_radius">نصف قطر زوايا CarPlay</string>
     <string name="settings_home_card_media">عرض الأغنية وكلماتها في بطاقة الشاشة الرئيسية (تجريبي)</string>
     <string name="settings_home_card_media_description">تعرض بطاقة CarPlay اسم الأغنية والكلمات الحالية أثناء التشغيل، وتعود إلى عنوان CarPlay عند الإيقاف المؤقت. يتطلب مشغّل شاشة رئيسية معدّلًا ومتوافقًا مثبتًا عبر ADB root. معطّل افتراضيًا.</string>
+    <string name="update_prompt_title">تحديث متاح: %1$s</string>
+    <string name="update_later">لاحقًا</string>
+    <string name="update_downloading_unknown">جارٍ التنزيل…</string>
+    <string name="update_install_now">التثبيت الآن</string>
+    <string name="update_ready_to_install">اكتمل التنزيل. اضغط على التثبيت الآن لفتح أداة تثبيت Android.</string>
+    <string name="update_retry">إعادة المحاولة</string>
+    <string name="update_hide">إخفاء</string>
 </resources>

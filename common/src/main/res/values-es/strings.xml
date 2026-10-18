@@ -708,7 +708,7 @@
     <string name="backup_summary">Se importaron %1$d ajustes, se omitieron %2$d.</string>
     <string name="backup_import_invalid">Este archivo no es una copia de seguridad de ajustes de Lincoln.</string>
     <string name="settings_background_update_checks">Buscar actualizaciones en segundo plano</string>
-    <string name="settings_background_update_checks_description">Una vez al día, Lincoln busca una versión nueva en GitHub y la muestra en la pantalla de inicio. Nunca descarga sin que lo toques.</string>
+    <string name="settings_background_update_checks_description">Lincoln busca actualizaciones en GitHub una vez al día. En la pantalla principal, cada versión nueva se ofrece una vez con las novedades y un botón de descarga. La descarga solo comienza cuando lo pulsas.</string>
     <string name="setup_guide">Guía de configuración</string>
     <string name="setup_guide_description">Detecta tu versión de DiLink, elige una conexión y activa las funciones adecuadas para tu coche.</string>
     <string name="setup_step_of">PASO %1$d DE %2$d</string>
@@ -898,4 +898,11 @@
     <string name="settings_carplay_corner_radius">Radio de las esquinas de CarPlay</string>
     <string name="settings_home_card_media">Canción y letra en la tarjeta de inicio (experimental)</string>
     <string name="settings_home_card_media_description">Muestra la canción y la letra actual en la tarjeta de CarPlay durante la reproducción; al pausar, vuelve al título CarPlay. Requiere un lanzador modificado compatible instalado mediante ADB root. Desactivado por defecto.</string>
+    <string name="update_prompt_title">Nueva versión: %1$s</string>
+    <string name="update_later">Más tarde</string>
+    <string name="update_downloading_unknown">Descargando…</string>
+    <string name="update_install_now">Instalar ahora</string>
+    <string name="update_ready_to_install">Descarga completada. Pulsa Instalar ahora para abrir el instalador de Android.</string>
+    <string name="update_retry">Reintentar</string>
+    <string name="update_hide">Ocultar</string>
 </resources>

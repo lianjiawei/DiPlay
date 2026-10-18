@@ -84,6 +84,37 @@ class UpdateAvailabilityTest {
         assertTrue(UpdateAvailability.shouldCheck(context, now - 1))
     }
 
+    @Test fun eachVersionIsAutomaticallyOfferedOnceButANewerOneCanBeOffered() {
+        val first = release("0.2.26-precision.3")
+        assertTrue(UpdateAvailability.shouldPrompt(context, first))
+        UpdateAvailability.recordPrompt(context, first)
+        assertFalse(UpdateAvailability.shouldPrompt(context, first))
+        assertTrue(UpdateAvailability.shouldPrompt(context, release("0.2.26-precision.4")))
+    }
+
+    @Test fun changingUpdateSourceDoesNotInheritAnotherChannelsPromptSuppression() {
+        val release = release("0.2.26-precision.3")
+        UpdateAvailability.recordPrompt(context, release)
+        context.getSharedPreferences("diplay_update_availability", Context.MODE_PRIVATE).edit()
+            .putString("prompted_source", "previous-author").commit()
+        assertTrue(UpdateAvailability.shouldPrompt(context, release))
+    }
+
+    @Test fun disablingBackgroundChecksAlsoDisablesAutomaticPrompts() {
+        val release = release("0.2.26-precision.3")
+        UpdateAvailability.save(context, release)
+        UpdateAvailability.saveBackgroundChecksEnabled(context, false)
+        assertFalse(UpdateAvailability.shouldPrompt(context, release))
+        assertEquals(release, UpdateAvailability.available(context, "0.2.26-precision.2"))
+    }
+
+    @Test fun clearingCachedReleaseDoesNotResetPromptHistory() {
+        val release = release("0.2.26-precision.3")
+        UpdateAvailability.recordPrompt(context, release)
+        UpdateAvailability.clear(context)
+        assertFalse(UpdateAvailability.shouldPrompt(context, release))
+    }
+
     private fun release(tag: String) = UpdateRelease(
         tagName = tag,
         apkName = "DiPlay-$tag.apk",
