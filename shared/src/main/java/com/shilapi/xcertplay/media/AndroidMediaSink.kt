@@ -117,6 +117,10 @@ internal class AudioFocusCoordinator(
             return if (navigationDuckGain < interruptionGain) navigationDuckGain else interruptionGain
         }
 
+    @Synchronized
+    fun duckingDiagnostic(): String = "navEnabled=$navigationDuckingEnabled navGain=$navigationDuckGain " +
+        "interruptionGain=$interruptionGain assistantSpeaking=$assistantSpeaking"
+
     private fun listenerFor(generation: Long) = AudioManager.OnAudioFocusChangeListener { change ->
         synchronized(this) {
             // Android may have queued callbacks before a request was abandoned or replaced.
@@ -2134,6 +2138,9 @@ private class AudioRenderer(
     private var outputBuffers = 0
     private var firstPcmLogged = false
     @Volatile private var lastDuckingPercent = -1
+    private var lastPcmProbeNs = 0L
+    private var lastPcmProbeMuted: Boolean? = null
+    private var lastPcmProbeGainBand = -1
     /**
      * Set when the car's assistant released the output. The head unit's audio policy can keep the
      * primary output on its louder voice source after the assistant stops, and only a new audio
@@ -2808,31 +2815,43 @@ private class AudioRenderer(
         // The car's audio-off key: silence the samples ourselves because this head unit's HAL
         // ignores the STREAM_MUSIC mute the key sets. After the fade-in, so the ramp cannot put
         // sound back. Calls were excluded when the flag was set.
-        if (audioOffMuted) PcmGain.scaleS16(data, offset, length, 0f)
         var written = 0
+        var preparedUntil = 0
         while (written < length && running) {
             // Long-running PCM writes may span several slider adjustments.
             applyNavigationAttenuation()
-            // Scale the music samples themselves: several head-unit HALs ignore AudioTrack.setVolume
-            // for a whole stream, which made the ducking inaudible on the MEK-MX8Q. Doing it per
-            // write chunk, not per buffer, lets a long blocking write pick up the ramp.
-            // A loudspeaker call is mapped to MEDIA, but it is speech and must keep its level.
-            if (mappedChannel == AudioChannel.MEDIA && format.audioType != "telephony") {
-                audioFocusCoordinator.tickNavigationDucking()
-                val gain = audioFocusCoordinator.musicPcmGain
-                PcmGain.scaleS16(data, offset + written, length - written, gain)
+            // Prepare a bounded block exactly once. A partial AudioTrack write retries the
+            // already-scaled tail; it must not multiply that tail by the gain a second time.
+            if (written == preparedUntil) {
+                val chunkLength = minOf(length - written, PREBUFFER_WRITE_CHUNK_BYTES)
+                val music = mappedChannel == AudioChannel.MEDIA && format.audioType != "telephony"
+                if (music) audioFocusCoordinator.tickNavigationDucking()
+                val gain = if (music) audioFocusCoordinator.musicPcmGain else 1f
+                val muted = audioOffMuted
+                val gainBand = when { gain <= 0f -> 0; gain >= PcmGain.UNITY -> 100; else -> 1 }
+                val nowNs = System.nanoTime()
+                val probe = lastPcmProbeMuted != muted || lastPcmProbeGainBand != gainBand ||
+                    nowNs - lastPcmProbeNs >= 5_000_000_000L
+                val inputPeak = if (probe) PcmGain.peakS16(data, offset + written, chunkLength) else 0
+                PcmGain.scaleS16(data, offset + written, chunkLength, if (muted) 0f else gain)
+                preparedUntil = written + chunkLength
+                if (probe) {
+                    lastPcmProbeNs = nowNs
+                    lastPcmProbeMuted = muted
+                    lastPcmProbeGainBand = gainBand
+                    val outputPeak = PcmGain.peakS16(data, offset + written, chunkLength)
+                    runCatching { report("Audio: PCM audioType=${format.audioType} inputPeak=$inputPeak " +
+                        "outputPeak=$outputPeak effectiveGain=${if (muted) 0f else gain} audioOff=$muted " +
+                        audioFocusCoordinator.duckingDiagnostic()) }
+                }
                 val percent = (gain * 100).toInt()
                 // Report only the two settled levels, not each step of the ramp.
-                if (percent != lastDuckingPercent && (percent == 100 || percent == 25)) {
+                if (music && percent != lastDuckingPercent && (percent == 100 || percent == 25)) {
                     lastDuckingPercent = percent
                     runCatching { report("Audio: music gain=${percent}% applied to PCM audioOff=$audioOffMuted") }
                 }
             }
-            val writeLength = if (playbackStarted) {
-                length - written
-            } else {
-                minOf(length - written, PREBUFFER_WRITE_CHUNK_BYTES)
-            }
+            val writeLength = preparedUntil - written
             val writeStarted = System.nanoTime()
             diagnosticStage = "track-write"
             val count = track.write(data, offset + written, writeLength, AudioTrack.WRITE_BLOCKING)
@@ -2909,7 +2928,8 @@ private class AudioRenderer(
     private fun trimClock(track: AudioTrack) {
         val trim = clockTrim ?: return
         val now = System.nanoTime()
-        trim.sample(bufferProgress.queuedBytes(track.playbackHeadPosition) / frameBytes, now)
+        trim.sample(bufferProgress.queuedBytes(track.playbackHeadPosition) / frameBytes, now,
+            queue.size.toDouble() / MAX_QUEUED_PACKETS)
         val rate = trim.rateDue(now) ?: return
         val result = runCatching { track.setPlaybackRate(rate) }.getOrDefault(AudioTrack.ERROR)
         if (result != AudioTrack.SUCCESS) {

@@ -5,6 +5,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PcmGainTest {
+    @Test fun diagnosticsMeasureFullScaleNegativeSamplesAndOnlyTheRequestedSlice() {
+        val data = samples(-32768, 1000, -500)
+        assertEquals(32768, PcmGain.peakS16(data, 0, data.size))
+        assertEquals(1000, PcmGain.peakS16(data, 2, 4))
+        assertEquals(0, PcmGain.peakS16(data, data.size, 1))
+    }
     @Test fun unityLeavesTheBufferByteForByte() {
         val data = samples(1000, -1000, 32767, -32768)
         val before = data.copyOf()

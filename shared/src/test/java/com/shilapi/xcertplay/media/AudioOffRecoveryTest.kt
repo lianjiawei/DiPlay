@@ -57,6 +57,7 @@ class AudioOffRecoveryTest {
             assertTrue("Audio-off must actually silence the samples", pcm.all { it == 0.toByte() })
             assertTrue(diagnostics.any { it.contains("audio-off muted=true source=system") })
             assertTrue(diagnostics.any { it.contains("audioOff=true") })
+            assertTrue(diagnostics.any { it.contains("outputPeak=0 effectiveGain=0.0 audioOff=true") })
         } finally { sink.close() }
     }
 

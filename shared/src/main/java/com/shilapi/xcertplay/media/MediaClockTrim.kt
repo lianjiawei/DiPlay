@@ -22,14 +22,16 @@ internal class MediaClockTrim(
     private var level: Double? = null
     private var lastSampleNs = 0L
     private var lastUpdateNs: Long? = null
+    private var inputQueueFraction = 0.0
 
     /** The playback rate last asked of the track, in Hz. */
     var rate = sampleRate
         private set
 
     /** Records the queued level right after a write while music plays. */
-    fun sample(queuedFrames: Long, nowNs: Long) {
+    fun sample(queuedFrames: Long, nowNs: Long, inputQueueFraction: Double = 0.0) {
         if (targetFrames <= 0L) return
+        this.inputQueueFraction = inputQueueFraction.coerceIn(0.0, 1.0)
         val error = (queuedFrames - targetFrames).toDouble() / targetFrames
         val previous = level
         // After a pause, a rebuffer or the first write the average restarts from what is queued now.
@@ -48,9 +50,18 @@ internal class MediaClockTrim(
         // A pause between updates is not drift: integrate at most one normal step over it.
         val seconds = if (previousUpdate == null) 0.0 else ((nowNs - previousUpdate) / 1e9).coerceAtMost(MAX_STEP_SECONDS)
         lastUpdateNs = nowNs
-        integral = (integral + KI * error * seconds).coerceIn(-MAX_TRIM, MAX_TRIM)
+        val congested = inputQueueFraction >= INPUT_QUEUE_HIGH_WATER
+        // A low hardware watermark is not starvation when decoded/input work is backed up.
+        // Forget negative wind-up and drain congestion within the existing pitch/rate bounds.
+        if (congested) integral = integral.coerceAtLeast(0.0)
+        val integralError = if (congested) error.coerceAtLeast(0.0) else error
+        integral = (integral + KI * integralError * seconds).coerceIn(-MAX_TRIM, MAX_TRIM)
         learnedTrim = integral
-        val raw = (sampleRate * (1.0 + (KP * error + integral).coerceIn(-MAX_TRIM, MAX_TRIM))).roundToInt()
+        val minimumTrim = if (congested) {
+            MAX_TRIM * (inputQueueFraction - INPUT_QUEUE_HIGH_WATER) / (1.0 - INPUT_QUEUE_HIGH_WATER)
+        } else -MAX_TRIM
+        val correction = (KP * error + integral).coerceIn(minimumTrim, MAX_TRIM)
+        val raw = (sampleRate * (1.0 + correction)).roundToInt()
         // Keep the native rate unless a real drift needs correcting. Any off-rate track makes the
         // platform resample the whole stream, and a small periodic correction holds that resampler
         // on continuously, which some head units (e.g. the Lincoln/Ford i.MX8) render as a faint
@@ -67,6 +78,7 @@ internal class MediaClockTrim(
         const val MAX_TRIM = 0.015
         /** Below this fraction the native rate is kept, so no resampler is inserted for a small correction. */
         const val DEADBAND = 0.002
+        const val INPUT_QUEUE_HIGH_WATER = 0.75
         const val KP = 0.03
         /** Per second, per unit of level error. */
         const val KI = 0.001
