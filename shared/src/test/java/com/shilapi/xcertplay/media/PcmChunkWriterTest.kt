@@ -218,9 +218,52 @@ class PcmChunkWriterTest {
             shouldContinue = { true },
         )
         assertEquals(0, result.bytesWritten)
-        assertEquals(4, result.zeroWrites)
+        assertEquals(5, result.zeroWrites)
         assertTrue(result.fellBackToBlocking)
         assertFalse(writer.usesNonBlocking)
+    }
+
+    @Test fun aTemporaryZeroAfterBlockingFallbackDoesNotDiscardTheUnwrittenPcm() {
+        val input = samples(1000, -1000, 2000, -2000)
+        val output = ByteArrayOutputStream()
+        var now = 0L
+        var blockingWrites = 0
+        val writer = PcmChunkWriter(stallTimeoutNs = 2_000_000L,
+            nanoTime = { now }, pause = { now += 1_000_000L })
+        val result = writer.write(
+            data = input, offset = 0, length = input.size,
+            prepareChunk = { _, _ -> },
+            writeChunk = { chunk, offset, length, blocking ->
+                if (!blocking || blockingWrites++ == 0) 0
+                else length.also { output.write(chunk, offset, it) }
+            },
+            afterWrite = { _, _, _ -> }, shouldContinue = { true },
+        )
+        assertEquals(input.size, result.bytesWritten)
+        assertArrayEquals(input, output.toByteArray())
+    }
+
+    @Test fun aPermanentStallAfterPartialProgressReportsOnlyAcceptedBytes() {
+        val input = samples(1000, -1000, 2000, -2000)
+        val output = ByteArrayOutputStream()
+        var now = 0L
+        var first = true
+        var writes = 0
+        val writer = PcmChunkWriter(stallTimeoutNs = 2_000_000L,
+            nanoTime = { now }, pause = { now += 1_000_000L })
+        val result = writer.write(
+            data = input, offset = 0, length = input.size,
+            prepareChunk = { _, _ -> },
+            writeChunk = { chunk, offset, _, _ ->
+                check(++writes < 10) { "Unbounded stalled write" }
+                if (first) { first = false; output.write(chunk, offset, 2); 2 } else 0
+            },
+            afterWrite = { _, _, _ -> }, shouldContinue = { true },
+        )
+        assertEquals(2, result.bytesWritten)
+        assertEquals(5, result.zeroWrites)
+        assertEquals(1, result.partialWrites)
+        assertArrayEquals(input.copyOfRange(0, 2), output.toByteArray())
     }
 
     private fun samples(vararg values: Int): ByteArray = ByteArray(values.size * 2).also { out ->

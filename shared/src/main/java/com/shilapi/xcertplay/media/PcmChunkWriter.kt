@@ -71,20 +71,20 @@ internal class PcmChunkWriter(
                 }
                 if (count == 0) {
                     zeroWrites++
-                    if (blocking) {
-                        // A blocking write should wait for space itself. A vendor track that
-                        // still returns zero cannot be drained by spinning here indefinitely.
-                        return Result(completed, zeroWrites, partialWrites, null,
-                            fellBackToBlocking)
-                    }
-                    if (!blocking) {
-                        val now = nanoTime()
-                        val stalledSince = stalledSinceNs
-                        if (stalledSince == null) {
-                            stalledSinceNs = now
-                        } else if (now - stalledSince >= stallTimeoutNs) {
+                    val now = nanoTime()
+                    val stalledSince = stalledSinceNs
+                    if (stalledSince == null) {
+                        stalledSinceNs = now
+                    } else if (now - stalledSince >= stallTimeoutNs) {
+                        if (blocking) {
+                            // Preserve PCM across a transient zero in blocking mode too, while
+                            // keeping a permanently stalled vendor track bounded.
+                            return Result(completed, zeroWrites, partialWrites, null,
+                                fellBackToBlocking)
+                        } else {
                             blocking = true
                             fellBackToBlocking = true
+                            stalledSinceNs = now
                         }
                     }
                     pause()

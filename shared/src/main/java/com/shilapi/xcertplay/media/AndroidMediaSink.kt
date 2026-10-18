@@ -2165,6 +2165,7 @@ private class AudioRenderer(
     private var partialWritesThisWindow = 0
     private val musicPcmWriter = PcmChunkWriter()
     private var musicWriteFallbackReported = false
+    private var musicWriteStallReports = 0
     private var lastPlaybackHeadFrames: Long? = null
     private var maxWriteMs = 0L
     private var statsWindowStartNs = 0L
@@ -2881,6 +2882,14 @@ private class AudioRenderer(
                 musicWriteFallbackReported = true
                 runCatching {
                     report("Audio: music write fell back to blocking after no output progress")
+                }
+            }
+            if (running && result.bytesWritten < length && result.writeError == null &&
+                musicWriteStallReports < 5) {
+                musicWriteStallReports++
+                runCatching {
+                    report("Audio: music PCM stalled bytesWritten=${result.bytesWritten} " +
+                        "droppedBytes=${length - result.bytesWritten} zeroWrites=${result.zeroWrites}")
                 }
             }
             return

@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import com.shilapi.xcertplay.airplay.AirPlayListenerIdentity
@@ -214,6 +215,8 @@ class CarPlayController(
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
+    @Volatile private var wiredReenumeration: WiredUsbReenumeration? = null
+    private var requestedIphonePermissionKey: String? = null
     @Volatile private var wiredDeviceName: String? = null
     private val usbAdbGrantAttempts = mutableSetOf<String>()
     private val pendingUsbAdbGrants = mutableSetOf<String>()
@@ -645,6 +648,7 @@ class CarPlayController(
         closeReceivers()
         availabilityPollGeneration.incrementAndGet()
         permissionPollGeneration += 1
+        cancelWiredReenumeration()
         touchExecutor.shutdownNow()
         tunnelExecutor.shutdownNow()
         val service = vpnService
@@ -838,6 +842,7 @@ class CarPlayController(
 
     private fun startMfi() {
         if (!hasRequiredUsbService()) return
+        cancelWiredReenumeration()
         availabilityPollGeneration.incrementAndGet()
         phase = Phase.MFI
         onStatus(CarPlayStatus.DiscoveringMfi)
@@ -1829,15 +1834,20 @@ class CarPlayController(
     }
 
     private fun startIphone() {
-        diagnosticRun.incrementAndGet()
-        availabilityPollGeneration.incrementAndGet()
-        permissionPollGeneration++
-        usbAdbGrantAttempts.clear()
-        pendingUsbAdbGrants.clear()
-        phase = Phase.IPHONE
-        reenumerationAttempts = 0
-        onStatus(CarPlayStatus.DiscoveringIphone)
-        checkIphoneAvailability()
+        mainHandler.post {
+            if (closed) return@post
+            cancelWiredReenumeration()
+            diagnosticRun.incrementAndGet()
+            availabilityPollGeneration.incrementAndGet()
+            permissionPollGeneration++
+            requestedIphonePermissionKey = null
+            usbAdbGrantAttempts.clear()
+            pendingUsbAdbGrants.clear()
+            phase = Phase.IPHONE
+            reenumerationAttempts = 0
+            onStatus(CarPlayStatus.DiscoveringIphone)
+            checkIphoneAvailability()
+        }
     }
 
     private fun checkIphoneAvailability() {
@@ -1861,7 +1871,18 @@ class CarPlayController(
     }
 
     private fun requestIphonePermission(device: UsbDevice) {
-        mainHandler.post { doRequestIphonePermission(device) }
+        val run = diagnosticRun.get()
+        val expectedPhase = phase
+        val transitions = reenumerationAttempts
+        mainHandler.post {
+            if (closed || diagnosticRun.get() != run || phase != expectedPhase ||
+                reenumerationAttempts != transitions ||
+                (phase != Phase.IPHONE && phase != Phase.REENUMERATION)) return@post
+            val key = usbAdbGrantKey(device)
+            if (requestedIphonePermissionKey == key) return@post
+            requestedIphonePermissionKey = key
+            doRequestIphonePermission(device)
+        }
     }
 
     private fun doRequestIphonePermission(device: UsbDevice, allowAdbFallback: Boolean = true) {
@@ -1932,6 +1953,13 @@ class CarPlayController(
     }
 
     private fun onIphonePermission(result: IphoneUsbHost.PermissionResult) {
+        if (closed || (phase != Phase.IPHONE && phase != Phase.REENUMERATION)) return
+        val device = when (result) {
+            is IphoneUsbHost.PermissionResult.Granted -> result.device
+            is IphoneUsbHost.PermissionResult.Denied -> result.device
+        }
+        // A broadcast from the previous node/request cannot restart its old mode switch.
+        if (requestedIphonePermissionKey != usbAdbGrantKey(device)) return
         when (result) {
             is IphoneUsbHost.PermissionResult.Granted -> {
                 // The system broadcast and the polling fallback can both observe the grant.
@@ -2018,37 +2046,110 @@ class CarPlayController(
 
     /** [fallbackAfterRejection]: the iPhone already offers USBMUX and NCM, so try that if it refuses. */
     private fun beginReenumeration(device: UsbDevice, fallbackAfterRejection: Boolean = false) {
+        if (closed) return
+        cancelWiredReenumeration()
+        availabilityPollGeneration.incrementAndGet()
+        permissionPollGeneration++
+        requestedIphonePermissionKey = null
         phase = Phase.REENUMERATION
         reenumerationAttempts += 1
+        val wait = WiredUsbReenumeration(device,
+            runCatching { iphoneHost.discover() }.getOrDefault(listOf(device)),
+            SystemClock.elapsedRealtime() + USB_REENUMERATION_TIMEOUT_MILLIS)
+        wait.poll = Runnable { checkWiredReenumeration(wait) }
+        wiredReenumeration = wait
+        scheduleWiredReenumerationPoll(wait)
         connectionDiagnostic("USB transition requested count=$reenumerationAttempts")
         onStatus(CarPlayStatus.SelectingConfiguration)
         iphoneHost.requestCarPlayReenumerationAsync(device, executor) { transition ->
-            when (transition) {
-                IphoneUsbHost.TransitionResult.ReenumerationRequested ->
-                    onStatus(CarPlayStatus.WaitingForReenumeration)
-                is IphoneUsbHost.TransitionResult.Failed -> if (fallbackAfterRejection) {
-                    connectionDiagnostic(
-                        "USB transition rejected; using the configuration the iPhone offers " +
-                            "error=${transition.error.message}",
-                    )
-                    mainHandler.post {
-                        if (!closed && phase == Phase.REENUMERATION) openDataPaths(device)
+            mainHandler.post {
+                if (!isCurrentWiredReenumeration(wait)) return@post
+                when (transition) {
+                    IphoneUsbHost.TransitionResult.ReenumerationRequested -> {
+                        wait.transitionReady = true
+                        onStatus(CarPlayStatus.WaitingForReenumeration)
+                        checkWiredReenumeration(wait)
                     }
-                } else {
-                    fail(transition.error)
+                    is IphoneUsbHost.TransitionResult.Failed -> {
+                        cancelWiredReenumeration()
+                        if (fallbackAfterRejection) {
+                            connectionDiagnostic(
+                                "USB transition rejected; using the configuration the iPhone offers " +
+                                    "error=${transition.error.message}",
+                            )
+                            openDataPaths(device)
+                        } else {
+                            fail(transition.error)
+                        }
+                    }
                 }
             }
         }
     }
 
     private fun onIphoneAttached(device: UsbDevice) {
-        when (phase) {
-            Phase.REENUMERATION, Phase.IPHONE -> {
-                availabilityPollGeneration.incrementAndGet()
-                requestIphonePermission(device)
+        val run = diagnosticRun.get()
+        val expectedPhase = phase
+        val transitions = reenumerationAttempts
+        mainHandler.post {
+            if (closed || diagnosticRun.get() != run || phase != expectedPhase ||
+                reenumerationAttempts != transitions) return@post
+            when (phase) {
+                Phase.REENUMERATION -> {
+                    val wait = wiredReenumeration ?: return@post
+                    wait.attached(device)
+                    checkWiredReenumeration(wait)
+                }
+                Phase.IPHONE -> {
+                    availabilityPollGeneration.incrementAndGet()
+                    requestIphonePermission(device)
+                }
+                else -> Unit
             }
-            else -> Unit
         }
+    }
+
+    private fun isCurrentWiredReenumeration(wait: WiredUsbReenumeration): Boolean =
+        !closed && phase == Phase.REENUMERATION && wiredReenumeration === wait
+
+    private fun cancelWiredReenumeration() {
+        val wait = wiredReenumeration
+        wiredReenumeration = null
+        wait?.poll?.let(mainHandler::removeCallbacks)
+    }
+
+    private fun scheduleWiredReenumerationPoll(wait: WiredUsbReenumeration) {
+        if (!isCurrentWiredReenumeration(wait)) return
+        wait.poll?.let {
+            mainHandler.removeCallbacks(it)
+            mainHandler.postDelayed(it, IPHONE_AVAILABILITY_POLL_INTERVAL_MILLIS)
+        }
+    }
+
+    private fun checkWiredReenumeration(wait: WiredUsbReenumeration) {
+        if (!isCurrentWiredReenumeration(wait)) return
+        val current: List<UsbDevice>? = runCatching { iphoneHost.discover() }.getOrElse { error ->
+            if (!wait.scanFailureReported) {
+                wait.scanFailureReported = true
+                connectionDiagnostic("USB reenumeration scan failed class=${diagnosticFailureClass(error)}")
+            }
+            // An unavailable scan does not prove the old device actually disappeared.
+            null
+        }
+        val device = current?.let(wait::candidate)
+        if (device != null) {
+            cancelWiredReenumeration()
+            connectionDiagnostic("USB reenumeration detected; requesting access to the current node")
+            requestIphonePermission(device)
+            return
+        }
+        if (SystemClock.elapsedRealtime() >= wait.deadlineMillis) {
+            cancelWiredReenumeration()
+            connectionDiagnostic("USB reenumeration timed out")
+            fail(IphoneUsbException.DeviceUnavailable("iPhone CarPlay USB re-enumeration timed out"))
+            return
+        }
+        scheduleWiredReenumerationPoll(wait)
     }
 
     /**
@@ -2077,12 +2178,20 @@ class CarPlayController(
     }
 
     private fun openDataPaths(device: UsbDevice) {
+        if (closed) return
+        val run = diagnosticRun.get()
+        val transition = reenumerationAttempts
         phase = Phase.DATAPATHS
         wiredDeviceName = device.deviceName
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
         onStatus(CarPlayStatus.OpeningDataPaths)
         iphoneHost.openIap2UsbSessionAsync(device, executor) { result ->
+            if (closed || diagnosticRun.get() != run || phase != Phase.DATAPATHS ||
+                reenumerationAttempts != transition) {
+                if (result is IphoneUsbHost.Iap2SessionResult.Connected) result.session.close()
+                return@openIap2UsbSessionAsync
+            }
             when (result) {
                 is IphoneUsbHost.Iap2SessionResult.Connected -> {
                     try {
@@ -2120,7 +2229,10 @@ class CarPlayController(
         phase = Phase.CONTROL
         var ncmOwnedLocally = true
         try {
-            if (closed) return
+            if (closed) {
+                usbSession.close()
+                return
+            }
             val mux = Iap2UsbMuxHost.open(usbSession, onDiagnostic = ::connectionDiagnostic)
             this.mux = mux
             debugLog("wired USBMUX host opened")
@@ -3048,6 +3160,7 @@ class CarPlayController(
         private const val DEVICE_AVAILABILITY_POLL_INTERVAL_MILLIS = 2_000L
         /** Much faster: the wired session waits on this between re-enumeration and data paths. */
         private const val IPHONE_AVAILABILITY_POLL_INTERVAL_MILLIS = 300L
+        private const val USB_REENUMERATION_TIMEOUT_MILLIS = 30_000L
         private const val WIRELESS_HANDOFF_TIMEOUT_MILLIS = 45_000L
         private const val RFCOMM_CONNECT_TIMEOUT_MILLIS = 15_000L
         private const val MAXIMUM_REENUMERATION_ATTEMPTS = 2
