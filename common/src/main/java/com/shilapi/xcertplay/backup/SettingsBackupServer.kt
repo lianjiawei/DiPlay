@@ -100,6 +100,7 @@ class SettingsBackupServer(
     }
 
     fun stop() {
+        val stoppedThread = thread
         closed = true
         runCatching { server?.close() }
         server = null
@@ -110,6 +111,15 @@ class SettingsBackupServer(
         // Walked in place: connection threads drop their own entry at any moment, and a copy taken
         // with toList() can fail when one goes between its size check and its read.
         for (socket in open) runCatching { socket.close() }
+        // A socket can remain bound while another thread is still returning from accept().
+        // Finish that generation before a caller immediately starts the same typed address.
+        if (stoppedThread != null && stoppedThread !== Thread.currentThread()) {
+            try {
+                stoppedThread.join(ACCEPT_POLL_MILLIS.toLong() * 2)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
     }
 
     private fun loop() {

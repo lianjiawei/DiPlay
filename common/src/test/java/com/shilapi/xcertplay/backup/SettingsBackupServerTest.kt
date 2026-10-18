@@ -293,10 +293,11 @@ class SettingsBackupServerTest {
         val wanted = freePort()
         val typed = typedServer().apply { typedPort = wanted }
         try {
-            assertEquals(wanted, typed.start()!!.port)
-            Socket("127.0.0.1", wanted).close()
-            typed.stop()
-            assertEquals(wanted, typed.start()!!.port)
+            repeat(10) {
+                assertEquals(wanted, typed.start()!!.port)
+                Socket("127.0.0.1", wanted).close()
+                typed.stop()
+            }
         } finally {
             typed.stop()
         }
