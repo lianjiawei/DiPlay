@@ -150,8 +150,8 @@ if [ -d "$BUILD_TOOLS" ]; then
     echo "$badging" | grep -E "^minSdkVersion" || true
     echo "$badging" | grep "^package:" | grep -q "versionName='$next_version'" \
       || die "APK versionName does not match $next_version"
-    echo "$badging" | grep "^package:" | grep -q "name='com.corsairplay'" \
-      || die "APK package name is not com.corsairplay"
+    echo "$badging" | grep "^package:" | grep -q "name='cn.manstep.phonemirrorBox'" \
+      || die "APK package name is not cn.manstep.phonemirrorBox"
   fi
   APKSIGNER="$(find "$BUILD_TOOLS" -maxdepth 2 -name apksigner 2>/dev/null | sort -V | tail -1)"
   if [ -n "$APKSIGNER" ]; then

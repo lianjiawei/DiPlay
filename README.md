@@ -9,7 +9,7 @@
 - 主要面向林肯/福特车型。
 - 已重点适配 Android 8.1 车机。
 - 最低支持 Android 7.1。
-- 安装包名：`com.corsairplay`
+- 安装包名：`cn.manstep.phonemirrorBox`（Debug 为 `cn.manstep.phonemirrorBox.hudtest`）
 - 当前版本：`0.2.24`
 
 ## 主要功能
@@ -32,6 +32,8 @@
 
 ## 升级
 
+- 本分支现已从 `com.corsairplay` 改为 `cn.manstep.phonemirrorBox`。Android 会将新旧包名视为两个应用，旧版设置不会自动迁移。
+- 新包沿用个人签名，与参考“第三代CarPlay”APK 的签名不同，不能直接覆盖该 APK；包名相同不代表签名兼容。
 - 后续版本使用相同包名和签名，可以直接覆盖安装，原有设置会保留。
 - 如果车机上已有不同签名的同包名版本，需要先卸载旧版再安装。
 - 在线更新只会在远端版本号更高时提示，同版本不会重复安装。

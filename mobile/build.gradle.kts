@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.corsairplay"
+        applicationId = "cn.manstep.phonemirrorBox"
         minSdk = 25
         targetSdk = 37
         versionCode = 51

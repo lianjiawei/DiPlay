@@ -31,7 +31,7 @@ class BydOptionalOutputSettingsTest {
     @Test fun installedStockReceiverDoesNotEnableUnverifiedDilink4Hud() {
         val app = RuntimeEnvironment.getApplication()
         val knownApp = object : ContextWrapper(app) {
-            override fun getPackageName(): String = "com.corsairplay"
+            override fun getPackageName(): String = "cn.manstep.phonemirrorBox"
         }
         ShadowBuild.setFingerprint("BYD/DiLink4:10/unverified")
         val info = PackageInfo().apply {
