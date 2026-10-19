@@ -550,7 +550,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var reconnectScheduled = false
     private var requestedSmallWindowForStream: Boolean? = null
     @Volatile private var adbNaviMode: com.shilapi.xcertplay.hud.BydClusterNaviMode? = null
-    private var sessionLog: SessionLogFile? = null
+    @Volatile private var sessionLog: SessionDiagnosticLog? = null
     private var gestureFingerCount = 3
     private var settingsGestureHint: TextView? = null
     private var gestureSequenceActive = false
@@ -1766,8 +1766,7 @@ class CarPlayHostActivity : ComponentActivity() {
         carPlayRootView = null
         fallbackVideoView = null
         fallbackVideoBounds = null
-        sessionLog?.append("Activity destroyed")
-        sessionLog?.close()
+        sessionLog?.finish("Activity destroyed")
         sessionLog = null
         super.onDestroy()
     }
@@ -5069,11 +5068,7 @@ class CarPlayHostActivity : ComponentActivity() {
             },
             mediaBufferMillis = AirPlayPersistence.loadMediaBufferMillis(this, wireless = wirelessEnabled),
             onAudioDiagnostic = { message ->
-                if (message.startsWith("Microphone: ")) {
-                    AsyncDiagnosticLog.append(diagnosticLog, message)
-                } else {
-                    diagnosticLog?.append(formattedLogLine(message, System.currentTimeMillis()))
-                }
+                AsyncDiagnosticLog.append(diagnosticLog, message)
             },
             onMediaAudioChanged = CarPlayMediaKeys::onMediaAudioChanged,
             callEchoCancellation = AirPlayPersistence.loadCallEchoCancellation(this),
@@ -5099,6 +5094,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun createSessionListener(controllerGeneration: Int): AirPlaySessionListener =
         object : AirPlaySessionListener {
+            // DiagnosticRedactor rejects every TRACE payload. Do not encode it just to discard it.
+            override val protocolTraceEnabled = false
             private val diagnosticLog = sessionLog
 
             override fun onSessionActive(session: AirPlaySession) {
@@ -6080,7 +6077,11 @@ class CarPlayHostActivity : ComponentActivity() {
             applicationContext.stopService(Intent(applicationContext, DiPlaySessionService::class.java))
             teardownExecutor.shutdown()
             mainHandler.post { completion() }
-            if (terminateProcess) Process.killProcess(Process.myPid())
+            if (terminateProcess) {
+                val drained = AsyncDiagnosticLog.flush(AsyncDiagnosticLog.FLUSH_TIMEOUT_MILLIS)
+                Log.i(TAG, "shutdown diagnostics pendingCompleted=$drained")
+                Process.killProcess(Process.myPid())
+            }
         }
     }
 
@@ -6419,28 +6420,21 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun appendLog(message: String) {
-        val safe = DiagnosticRedactor.redact(message) ?: return
-        sessionLog?.append(formattedLogLine(safe, System.currentTimeMillis()))
+        AsyncDiagnosticLog.append(sessionLog, message)
     }
 
     private fun appendFileLog(message: String) {
-        sessionLog?.append(formattedLogLine(message, System.currentTimeMillis()))
+        AsyncDiagnosticLog.append(sessionLog, message)
     }
-
-    private fun formattedLogLine(message: String, nowMillis: Long): String =
-        "${SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(nowMillis))}  $message"
 
     private fun initializeSessionLog() {
         val logFile = File(File(filesDir, "logs"), "diplay.log")
-        val activeLog = SessionLogFile(logFile)
-        runCatching {
-            activeLog.reset(
-                "DiPlay log started " +
-                    "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())} " +
-                    "pid=${Process.myPid()} path=${logFile.absolutePath}",
-            )
-        }
-        sessionLog = activeLog
+        sessionLog = AsyncDiagnosticLog.open(
+            logFile,
+            "DiPlay log started " +
+                "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())} " +
+                "pid=${Process.myPid()} path=${logFile.absolutePath}",
+        )
     }
 
     private fun refreshLogView(nowMillis: Long) {

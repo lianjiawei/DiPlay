@@ -259,6 +259,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateRelease: UpdateRelease? = null
     private var updateFile: File? = null
     private var updateMessage: String? = null
+    private var renderedUpdateStage: UpdateStage? = null
+    private var renderedHistoryStage: HistoryStage? = null
+    private var updateProgressButton: TextView? = null
+    private var historyProgressLabel: TextView? = null
     @Volatile private var historyStage = HistoryStage.IDLE
     @Volatile private var historyProgress: Int? = null
     @Volatile private var historyGeneration = 0
@@ -710,6 +714,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         bydAdbControls = null
         adbSwitches.clear()
         adbStatus = null
+        renderedUpdateStage = null
+        renderedHistoryStage = null
+        updateProgressButton = null
+        historyProgressLabel = null
         val compact = isCompactLayout && when (page) {
             "settings" -> !SettingsLayoutPreferences.isActive(this)
             else -> true
@@ -2720,6 +2728,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun backupPageHtml(): ByteArray = assets.open("settings-backup.html").use { it.readBytes() }
 
     private fun updateRow(): View {
+        renderedUpdateStage = updateStage
+        renderedHistoryStage = historyStage
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
         updateMessage?.let { container.addView(label(it, 14, MUTED)) }
         when (updateStage) {
@@ -2736,7 +2746,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 matchButton(10, 60))
             UpdateStage.DOWNLOADING -> container.addView(
                 button(updateProgress?.let { brandString(R.string.update_downloading, it) }
-                    ?: brandString(R.string.update_downloading_unknown), false) { openUpdateProgress() },
+                    ?: brandString(R.string.update_downloading_unknown), false) { openUpdateProgress() }
+                    .also { updateProgressButton = it },
                 matchButton(10, 60))
             UpdateStage.VERIFYING -> container.addView(
                 button(brandString(R.string.update_verifying), false) { openUpdateProgress() }, matchButton(10, 60))
@@ -2765,7 +2776,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             HistoryStage.DOWNLOADING -> container.addView(
                 label(brandString(R.string.update_history_downloading, historyProgress ?: 0), 14, MUTED).apply {
                     setPadding(0, dp(10), 0, 0)
-                },
+                }.also { historyProgressLabel = it },
             )
             HistoryStage.VERIFYING -> container.addView(
                 label(brandString(R.string.update_history_verifying), 14, MUTED).apply {
@@ -3167,7 +3178,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
             if (release != null) updateRelease = release
             refreshUpdatePrompt()
-            if (page == "settings" && settingsCategory == SettingsCategory.ABOUT) render()
+            refreshUpdateRow()
         }
     }
 
@@ -3177,8 +3188,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 !(page == "settings" && settingsCategory == SettingsCategory.ABOUT)) {
                 return@runOnUiThread
             }
-            render()
+            refreshUpdateRow()
         }
+    }
+
+    /** Percentages change existing labels; only a new set of actions needs a new view tree. */
+    private fun refreshUpdateRow() {
+        if (page != "settings" || settingsCategory != SettingsCategory.ABOUT) return
+        if (renderedUpdateStage != updateStage || renderedHistoryStage != historyStage) {
+            render()
+            return
+        }
+        updateProgressButton?.text = updateProgress?.let { brandString(R.string.update_downloading, it) }
+            ?: brandString(R.string.update_downloading_unknown)
+        historyProgressLabel?.text = brandString(R.string.update_history_downloading, historyProgress ?: 0)
     }
 
     private fun userAgent() = "Lincoln/${version()}"
@@ -6100,6 +6123,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         appendLine()
         appendLine("--- Last crash recorded by DiPlay ---")
         appendLine(CrashRecord.report(appContext))
+        appendLine()
+        val logsCompleted = AsyncDiagnosticLog.flush(AsyncDiagnosticLog.FLUSH_TIMEOUT_MILLIS)
+        appendLine("${AsyncDiagnosticLog.status()} pendingCompleted=$logsCompleted")
         appendLine()
         for (name in SessionLogFile.REPORT_NAMES) {
             val file = File(appContext.filesDir, "logs/$name")

@@ -53,4 +53,8 @@ class CarPlayConnectionDiagnosticLogTest {
         assertTrue(AsyncDiagnosticLog.awaitIdle(2_000))
         assertFalse(log.contains("private-token"))
     }
+
+    @Test fun theHostRejectsProtocolTracesBeforeTheirPayloadIsFormatted() {
+        assertFalse(listener.protocolTraceEnabled)
+    }
 }

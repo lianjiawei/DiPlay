@@ -7,10 +7,9 @@ import org.junit.Test
 class AsyncDiagnosticLogTest {
     @Test fun queuedEvidenceIsRedactedAndTimestampedBeforeUsingItsCapturedFileTarget() {
         val folder = Files.createTempDirectory("diplay-async-log").toFile()
-        val old = SessionLogFile(folder.resolve("old.log"))
-        val current = SessionLogFile(folder.resolve("current.log"))
+        val old = AsyncDiagnosticLog.open(folder.resolve("old.log"), "old session")
+        val current = AsyncDiagnosticLog.open(folder.resolve("current.log"), "current session")
         try {
-            old.reset("old session"); current.reset("current session")
             AsyncDiagnosticLog.append(old, "CONNECTION_DIAGNOSTIC attempt=1 teardown end elapsedMs=117", 0)
             AsyncDiagnosticLog.append(old, "Microphone: start type=telephony codec=OPUS peer=192.168.49.1", 0)
             AsyncDiagnosticLog.append(old, "CONNECTION_DIAGNOSTIC token=private-token", 0)

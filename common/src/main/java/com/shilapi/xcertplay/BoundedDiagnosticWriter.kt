@@ -9,17 +9,18 @@ internal class BoundedDiagnosticWriter<T : Any>(
     private val write: (T) -> Unit,
 ) : Closeable {
     private val monitor = Object()
-    private val pending = ArrayDeque<T>()
+    private data class Pending<T>(val sequence: Long, val value: T)
+    private val pending = ArrayDeque<Pending<T>>()
     private var closed = false
     private var active = false
     private var dropped = 0L
+    private var acceptedSequence = 0L
+    private var retiredSequence = 0L
 
-    init {
-        require(maxPending > 0)
-        Thread(::drain, "diplay-diagnostic-writer").apply {
-            isDaemon = true
-            start()
-        }
+    init { require(maxPending > 0) }
+    private val thread = Thread(::drain, "diplay-diagnostic-writer").apply {
+        isDaemon = true
+        start()
     }
 
     /** Never waits for disk. Under overload, discard the oldest pending entry. */
@@ -29,7 +30,7 @@ internal class BoundedDiagnosticWriter<T : Any>(
             pending.removeFirst()
             dropped++
         }
-        pending.addLast(entry)
+        pending.addLast(Pending(++acceptedSequence, entry))
         monitor.notifyAll()
         true
     }
@@ -43,18 +44,39 @@ internal class BoundedDiagnosticWriter<T : Any>(
                 while (pending.isEmpty() && !closed) monitor.wait()
                 if (pending.isEmpty()) return
                 active = true
-                pending.removeFirst()
+                pending.removeFirst().also {
+                    // Every earlier entry has been attempted or evicted. A flush need not wait
+                    // for later traffic that arrived after its own snapshot.
+                    retiredSequence = it.sequence - 1
+                    monitor.notifyAll()
+                }
             }
             // Disk failures or a broken diagnostic callback must not stop later writes.
             try {
-                runCatching { write(next) }
+                runCatching { write(next.value) }
             } finally {
                 synchronized(monitor) {
                     active = false
+                    retiredSequence = next.sequence
                     monitor.notifyAll()
                 }
             }
         }
+    }
+
+    /** Wait only for entries accepted before this call; never enqueue a droppable barrier. */
+    fun flush(timeoutMillis: Long): Boolean = synchronized(monitor) {
+        val target = acceptedSequence
+        if (retiredSequence >= target) return@synchronized true
+        if (Thread.currentThread() === thread) return@synchronized false
+        val started = System.nanoTime()
+        val timeoutNs = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMillis.coerceAtLeast(0))
+        while (retiredSequence < target) {
+            val remaining = timeoutNs - (System.nanoTime() - started)
+            if (remaining <= 0) return@synchronized false
+            monitor.wait(remaining / 1_000_000L, (remaining % 1_000_000L).toInt())
+        }
+        true
     }
 
     /** For a bounded best-effort flush outside transport/UI callbacks, or deterministic tests. */

@@ -161,6 +161,112 @@ class UpdatePromptFlowTest {
         assertNull(shadowOf(c.get()).nextStartedActivity)
     }
 
+    @Test fun downloadPercentagesKeepThePageAndProgressButtonInsteadOfRebuildingSettings() {
+        UpdateAvailability.save(app, release)
+        val c = screen()
+        c.get().updateDownloadWorker = {}
+        clickHomeUpdate(c.get())
+        prompt(c.get())!!.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        val scroll = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
+        val button = descendants(scroll).filterIsInstance<TextView>()
+            .single { it.text == c.get().getString(R.string.update_downloading_unknown) }
+        button.requestFocus()
+        val generation = ReflectionHelpers.getField<Int>(c.get(), "updateGeneration")
+        for (percent in 1..100) {
+            ReflectionHelpers.setField(c.get(), "updateProgress", percent)
+            ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "refreshUpdateUi",
+                ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, generation),
+                ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, null))
+            idle()
+            assertSame("percent-only changes must retain the page", scroll,
+                ReflectionHelpers.getField<View>(c.get(), "rootScroll"))
+            assertEquals(c.get().getString(R.string.update_downloading, percent), button.text.toString())
+            assertEquals(percent, prompt(c.get())!!.progress.progress)
+        }
+        assertTrue(button.hasFocus())
+        prompt(c.get())!!.dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+        button.performClick()
+        assertTrue(prompt(c.get())!!.isShowing)
+    }
+
+    @Test fun historyPercentagesKeepThePageAndItsStatusLabel() {
+        val c = screen()
+        ReflectionHelpers.setField(c.get(), "page", "settings")
+        ReflectionHelpers.setField(c.get(), "settingsCategory", SettingsCategory.ABOUT)
+        setStage(c.get(), "historyStage", "DOWNLOADING")
+        call(c.get(), "render")
+        val scroll = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
+        val label = descendants(scroll).filterIsInstance<TextView>()
+            .single { it.text == c.get().getString(R.string.update_history_downloading, 0) }
+        val generation = ReflectionHelpers.getField<Int>(c.get(), "historyGeneration")
+        for (percent in 1..100) {
+            ReflectionHelpers.setField(c.get(), "historyProgress", percent)
+            ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "refreshHistoryUi",
+                ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, generation))
+            idle()
+            assertSame(scroll, ReflectionHelpers.getField<View>(c.get(), "rootScroll"))
+            assertEquals(c.get().getString(R.string.update_history_downloading, percent), label.text.toString())
+        }
+    }
+
+    private fun setStage(screen: DiPlayActivity, field: String, name: String) {
+        val target = DiPlayActivity::class.java.getDeclaredField(field).apply { isAccessible = true }
+        target.set(screen, target.type.enumConstants.single { (it as Enum<*>).name == name })
+    }
+
+    @Test fun progressRefreshesUseTheNewViewsAfterANormalPageRender() {
+        UpdateAvailability.save(app, release)
+        val c = screen()
+        c.get().updateDownloadWorker = {}
+        clickHomeUpdate(c.get())
+        prompt(c.get())!!.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        val oldScroll = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
+        call(c.get(), "render")
+        val replacement = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
+        assertNotSame(oldScroll, replacement)
+        ReflectionHelpers.setField(c.get(), "updateProgress", 73)
+        refreshProgress(c.get())
+        assertSame(replacement, ReflectionHelpers.getField<View>(c.get(), "rootScroll"))
+        assertTrue(descendants(replacement).filterIsInstance<TextView>()
+            .any { it.text.toString() == c.get().getString(R.string.update_downloading, 73) })
+        assertFalse(descendants(oldScroll).filterIsInstance<TextView>()
+            .any { it.text.toString() == c.get().getString(R.string.update_downloading, 73) })
+    }
+
+    @Test fun stageChangesStillReplaceActionsButLateProgressDoesNotRebuildTheCompletedPage() {
+        val c = screen()
+        ReflectionHelpers.setField(c.get(), "page", "settings")
+        ReflectionHelpers.setField(c.get(), "settingsCategory", SettingsCategory.ABOUT)
+        ReflectionHelpers.setField(c.get(), "updateRelease", release)
+        setStage(c.get(), "updateStage", "DOWNLOADING")
+        call(c.get(), "render")
+        setStage(c.get(), "updateStage", "VERIFYING")
+        refreshProgress(c.get())
+        assertTrue(descendants(c.get().window.decorView).filterIsInstance<TextView>()
+            .any { it.text.toString() == c.get().getString(R.string.update_verifying) })
+        setStage(c.get(), "updateStage", "READY")
+        refreshProgress(c.get())
+        val completed = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
+        assertTrue(descendants(completed).filterIsInstance<TextView>()
+            .any { it.text.toString() == c.get().getString(R.string.update_install, release.tagName) })
+        repeat(20) { refreshProgress(c.get()) }
+        assertSame(completed, ReflectionHelpers.getField<View>(c.get(), "rootScroll"))
+        assertNull(shadowOf(c.get()).nextStartedActivity)
+        ReflectionHelpers.setField(c.get(), "page", "home")
+        call(c.get(), "render")
+        val home = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
+        refreshProgress(c.get())
+        assertSame(home, ReflectionHelpers.getField<View>(c.get(), "rootScroll"))
+    }
+
+    private fun refreshProgress(screen: DiPlayActivity) {
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "refreshUpdateUi",
+            ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType,
+                ReflectionHelpers.getField<Int>(screen, "updateGeneration")),
+            ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, null))
+        idle()
+    }
+
     @Test fun hidingProgressDoesNotCancelOrAutomaticallyReopenIt() {
         UpdateAvailability.save(app, release)
         val c = screen()

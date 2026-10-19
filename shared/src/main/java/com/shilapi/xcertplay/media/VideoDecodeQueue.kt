@@ -56,8 +56,17 @@ internal class VideoDecodeQueue(
 
     @Synchronized fun offer(job: VideoJob) {
         if (job is VideoJob.Frame) {
-            val frames = jobs.filterIsInstance<VideoJob.Frame>()
-            if (frames.size >= maxFrames || frames.sumOf { it.nalus.size.toLong() } + job.nalus.size > maxBytes) {
+            // Count in place: allocating a temporary frame list for every received picture
+            // creates continuous garbage, especially while the decoder is catching up.
+            var frameCount = 0
+            var frameBytes = job.nalus.size.toLong()
+            for (pending in jobs) {
+                if (pending is VideoJob.Frame) {
+                    frameCount++
+                    frameBytes += pending.nalus.size
+                }
+            }
+            if (frameCount >= maxFrames || frameBytes > maxBytes) {
                 discardFrames()
                 jobs.offer(VideoJob.Resync)
             }

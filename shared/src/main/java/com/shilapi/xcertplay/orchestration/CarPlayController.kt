@@ -317,6 +317,7 @@ class CarPlayController(
     }
 
     private val sessionListener = object : AirPlaySessionListener {
+        override val protocolTraceEnabled: Boolean get() = uiListener?.protocolTraceEnabled == true
         override fun onSessionActive(session: AirPlaySession) {
             val replacement = activeSession !== session
             if (replacement) {

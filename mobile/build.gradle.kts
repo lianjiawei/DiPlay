@@ -16,8 +16,8 @@ android {
         applicationId = "com.corsairplay"
         minSdk = 25
         targetSdk = 37
-        versionCode = 50
-        versionName = "0.2.26-precision.3"
+        versionCode = 51
+        versionName = "0.2.26-precision.4"
 
     }
 

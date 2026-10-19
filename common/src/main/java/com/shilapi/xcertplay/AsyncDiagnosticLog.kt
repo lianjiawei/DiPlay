@@ -1,20 +1,19 @@
 package com.shilapi.xcertplay
 
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.io.File
 
 /** Queued entries retain only their exact file target and a redacted, bounded metadata string. */
 internal object AsyncDiagnosticLog {
-    private data class Entry(val target: SessionLogFile, val line: String)
-    private val writer = BoundedDiagnosticWriter<Entry> { it.target.append(it.line) }
+    const val FLUSH_TIMEOUT_MILLIS = 1_000L
+    private val writer = SessionDiagnosticLogWriter()
 
-    fun append(target: SessionLogFile?, message: String, nowMillis: Long = System.currentTimeMillis()) {
-        if (target == null) return
-        val safe = DiagnosticRedactor.redact(message) ?: return
-        val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(nowMillis))
-        runCatching { writer.enqueue(Entry(target, "$timestamp  $safe")) }
+    fun open(file: File, header: String): SessionDiagnosticLog = writer.open(file, header)
+
+    fun append(target: SessionDiagnosticLog?, message: String, nowMillis: Long = System.currentTimeMillis()) {
+        target?.append(message, nowMillis)
     }
 
+    fun flush(timeoutMillis: Long): Boolean = writer.flush(timeoutMillis)
+    fun status(): String = writer.status()
     internal fun awaitIdle(timeoutMillis: Long): Boolean = writer.awaitIdle(timeoutMillis)
 }
