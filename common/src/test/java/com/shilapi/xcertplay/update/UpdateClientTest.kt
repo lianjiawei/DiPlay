@@ -107,4 +107,21 @@ class UpdateClientTest {
             assertTrue(!destination.exists())
         }
     }
+
+    @Test
+    fun downloadUsesTheSelectedNetworkForTheActualTransfer() {
+        val payload = byteArrayOf(4, 5, 6)
+        server.createContext("/network-apk") { exchange ->
+            exchange.sendResponseHeaders(200, payload.size.toLong())
+            exchange.responseBody.use { it.write(payload) }
+        }
+        val destination = File(temporaryFolder.root, "network.apk")
+        val requested = mutableListOf<String>()
+        UpdateClient.download("https://example.invalid/app.apk", destination, { _, _ -> }) { url ->
+            requested += url.toString()
+            java.net.URL("$root/network-apk").openConnection()
+        }
+        assertEquals(listOf("https://example.invalid/app.apk"), requested)
+        assertEquals(payload.toList(), destination.readBytes().toList())
+    }
 }

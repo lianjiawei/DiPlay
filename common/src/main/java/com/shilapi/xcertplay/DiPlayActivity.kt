@@ -24,6 +24,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.media.MediaFormat
 import android.net.Uri
+import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -89,11 +90,14 @@ import com.shilapi.xcertplay.update.UpdateAvailability
 import com.shilapi.xcertplay.update.UpdateCatalog
 import com.shilapi.xcertplay.update.UpdateChecksums
 import com.shilapi.xcertplay.update.UpdateClient
+import com.shilapi.xcertplay.update.InternetNetworkSelector
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import com.shilapi.xcertplay.update.UpdateReleaseNotes
 import java.io.File
 import java.io.IOException
+import java.net.URL
+import java.net.URLConnection
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -247,7 +251,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
     internal var updateDownloadWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-download").start() }
-    internal var updateLookup: () -> UpdateRelease? = { UpdateReleaseLookup.latest(version(), userAgent()) }
+    internal var updateConnection: (URL) -> URLConnection = ::openUpdateConnection
+    internal var updateLookup: () -> UpdateRelease? = {
+        UpdateReleaseLookup.latest(version(), userAgent(), updateConnection)
+    }
     @Volatile private var updateStage = UpdateStage.IDLE
     @Volatile private var backupServer: SettingsBackupServer? = null
     @Volatile private var backupEndpoint: SettingsBackupEndpoint? = null
@@ -2825,6 +2832,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }, "diplay-update-check").start()
     }
 
+    /** Bind only update requests, leaving the CarPlay process network unchanged. */
+    private fun openUpdateConnection(url: URL): URLConnection {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val network = connectivity?.let {
+            runCatching { InternetNetworkSelector.select(it) }.getOrNull()
+        }
+        return network?.openConnection(url) ?: url.openConnection()
+    }
+
     private fun latestRelease(): UpdateRelease? {
         return updateLookup()
     }
@@ -2836,7 +2852,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         historyMessage = null
         render()
         Thread({
-            val outcome = runCatching { UpdateReleaseLookup.history(userAgent()) }
+            val outcome = runCatching { UpdateReleaseLookup.history(userAgent(), updateConnection) }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 historyStage = HistoryStage.IDLE
@@ -2923,15 +2939,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val directory = File(cacheDir, "history/${java.util.UUID.randomUUID()}")
             val outcome = runCatching {
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
-                UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
+                UpdateClient.download(release.checksumsUrl, checksumsFile, { _, _ -> }, updateConnection)
                 val apkFile = File(directory, release.apkName)
-                UpdateClient.download(release.apkUrl, apkFile) { written, total ->
+                UpdateClient.download(release.apkUrl, apkFile, onProgress = { written, total ->
                     val percent = total?.takeIf { it > 0 }?.let { (written * 100 / it).toInt() } ?: return@download
                     if (percent != historyProgress) {
                         historyProgress = percent
                         refreshHistoryUi(generation)
                     }
-                }
+                }, openConnection = updateConnection)
                 historyStage = HistoryStage.VERIFYING
                 refreshHistoryUi(generation)
                 val expected = UpdateChecksums.parse(checksumsFile.readText())
@@ -3079,15 +3095,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 release = latestRelease() ?: throw IOException(brandString(R.string.update_up_to_date))
                 refreshUpdateUi(generation, release)
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
-                UpdateClient.download(release.checksumsUrl, checksumsFile) { _, _ -> }
+                UpdateClient.download(release.checksumsUrl, checksumsFile, { _, _ -> }, updateConnection)
                 val apkFile = File(directory, release.apkName)
-                UpdateClient.download(release.apkUrl, apkFile) { written, total ->
+                UpdateClient.download(release.apkUrl, apkFile, onProgress = { written, total ->
                     val percent = total?.takeIf { it > 0 }?.let { (written * 100 / it).toInt() } ?: return@download
                     if (percent != updateProgress) {
                         updateProgress = percent
                         refreshUpdateUi(generation)
                     }
-                }
+                }, openConnection = updateConnection)
                 updateStage = UpdateStage.VERIFYING
                 refreshUpdateUi(generation)
                 val expected = UpdateChecksums.parse(checksumsFile.readText())

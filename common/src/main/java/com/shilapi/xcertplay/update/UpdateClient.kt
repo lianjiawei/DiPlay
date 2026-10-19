@@ -43,8 +43,18 @@ internal object UpdateClient {
     }
 
     internal fun download(url: String, destination: File, onProgress: (Long, Long?) -> Unit) {
+        download(url, destination, onProgress) { it.openConnection() }
+    }
+
+    internal fun download(
+        url: String,
+        destination: File,
+        onProgress: (Long, Long?) -> Unit,
+        openConnection: (URL) -> URLConnection,
+    ) {
         destination.parentFile?.mkdirs()
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val connection = openConnection(URL(url)) as? HttpURLConnection
+            ?: throw IOException("Download from $url did not open an HTTP connection")
         try {
             connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
             connection.readTimeout = READ_TIMEOUT_MILLIS

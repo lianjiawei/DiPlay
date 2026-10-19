@@ -304,8 +304,14 @@ class UpdatePromptFlowTest {
         val latest = published.copy(tagName = "99.0.0-precision.4")
         c.get().updateLookup = { latest }
         c.get().updateDownloadWorker = { it.run() }
+        val requests = mutableListOf<String>()
+        c.get().updateConnection = { url ->
+            requests += url.toString()
+            url.openConnection()
+        }
         val original = prompt(c.get())!!
         original.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals(listOf(latest.checksumsUrl, latest.apkUrl), requests)
         assertSame(original, prompt(c.get()))
         assertEquals(100, original.progress.progress)
         assertFalse(original.progress.isIndeterminate)
@@ -344,6 +350,48 @@ class UpdatePromptFlowTest {
         assertEquals(c.get().getString(R.string.update_install_now), dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
         assertNotNull(ReflectionHelpers.getField<File?>(c.get(), "updateFile"))
         assertNull(shadowOf(c.get()).nextStartedActivity)
+    }
+
+    @Test fun releaseChecksHistoryAndHistoryDownloadsUseTheSameUpdateRoute() {
+        val published = serveUpdate(validChecksum = { true })
+        val json = """[{"tag_name":"${published.tagName}","assets":[
+            {"name":"${published.apkName}","browser_download_url":"${published.apkUrl}"},
+            {"name":"SHA256SUMS.txt","browser_download_url":"${published.checksumsUrl}"}
+        ]}]"""
+        server!!.createContext("/releases") { exchange ->
+            val bytes = json.toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        val c = screen()
+        val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+        c.get().updateConnection = { url ->
+            requests += url.toString()
+            if (url.host == "api.github.com") java.net.URL(published.apkUrl.replace("/apk", "/releases")).openConnection()
+            else url.openConnection()
+        }
+
+        val latest = ReflectionHelpers.callInstanceMethod<UpdateRelease?>(c.get(), "latestRelease")
+        assertEquals(published.tagName, latest?.tagName)
+        assertEquals("https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30", requests.single())
+
+        call(c.get(), "loadHistoryReleases")
+        awaitHistory(c.get())
+        assertEquals(2, requests.count { it.contains("/repos/lianjiawei/DiPlay/releases") })
+        ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "downloadHistoryRelease",
+            ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, published))
+        awaitHistory(c.get())
+        assertEquals(listOf(published.checksumsUrl, published.apkUrl), requests.takeLast(2))
+    }
+
+    private fun awaitHistory(screen: DiPlayActivity) {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (ReflectionHelpers.getField<Any>(screen, "historyStage").toString() != "IDLE" &&
+            System.nanoTime() < deadline) {
+            Thread.sleep(10)
+            idle()
+        }
+        assertEquals("IDLE", ReflectionHelpers.getField<Any>(screen, "historyStage").toString())
     }
 
     private fun screen(): ActivityController<DiPlayActivity> {
