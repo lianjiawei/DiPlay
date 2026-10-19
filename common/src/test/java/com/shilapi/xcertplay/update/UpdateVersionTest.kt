@@ -5,6 +5,27 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpdateVersionTest {
+    @Test fun shortPersonalNamesCompareWithLegacyTagsWithoutOfferingTheInstalledBuildAgain() {
+        assertTrue(UpdateVersion.isNewer("v0.2.26-precision.6", "0.2.26-precision.5"))
+        assertTrue(UpdateVersion.isNewer("precision.6", "0.2.26-precision.5"))
+        assertFalse(UpdateVersion.isNewer("v0.2.26-precision.6", "precision.6"))
+        assertFalse(UpdateVersion.isNewer("v0.2.26-precision.5", "precision.6"))
+    }
+
+    @Test fun shortPersonalNamesOrderRevisionsNumerically() {
+        assertTrue(UpdateVersion.isNewer("vprecision.10", "precision.6"))
+        assertTrue(UpdateVersion.isNewer("precision.7", "precision.6-hud-test"))
+        assertFalse(UpdateVersion.isNewer("precision.6", "precision.6"))
+        assertFalse(UpdateVersion.isNewer("precision.5", "precision.6"))
+        assertFalse(UpdateVersion.isNewer("v0.2.27", "precision.6"))
+    }
+
+    @Test fun invalidShortPersonalRevisionDoesNotOfferAnUpdate() {
+        assertFalse(UpdateVersion.isNewer("precision.999999999999999999999", "precision.6"))
+        assertFalse(UpdateVersion.isNewer("precision.invalid", "precision.6"))
+        assertFalse(UpdateVersion.isNewer("precision.7invalid", "precision.6"))
+    }
+
     @Test fun personalRevisionUpdatesWithinTheSameBaseVersion() {
         assertTrue(UpdateVersion.isNewer("v0.2.24-precision.2", "0.2.24-precision.1"))
         assertTrue(UpdateVersion.isNewer("v0.2.24-precision.10", "0.2.24-precision.2"))
