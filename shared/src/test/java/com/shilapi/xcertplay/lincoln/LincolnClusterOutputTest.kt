@@ -69,6 +69,28 @@ class LincolnClusterOutputTest {
         assertTrue("The card must keep being refreshed", infos().size > info)
     }
 
+    @Test fun sendsTheCompleteRoadNameAndKeepsItDuringQuietGuidance() {
+        val road = "沿这条道路继续行驶到下一个路口然后驶入目的地所在的道路".repeat(3) + "🛣️终点"
+        send(guidance().copy(road = road))
+        assertEquals(road, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+
+        now += 1_000_000_000L
+        send(quiet())
+        assertEquals(road, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+    }
+
+    @Test fun sendsTheCompleteLyricWithoutAddingTheSongName() {
+        LincolnClusterSettings.setMusic(app, true)
+        val lyric = "x".repeat(31) + "🎵" + "这一行歌词超过三十二个字符也应当完整发送到原厂仪表".repeat(3)
+        send(CarPlayGlance.Snapshot(connected = true, songTitle = lyric,
+            song = "$lyric — Song name", songArtist = "Song name", playing = true))
+
+        val media = shadowOf(app).broadcastIntents.last { it.action == LincolnClusterProtocol.ACTION_MEDIA_INFO }
+        assertEquals(lyric, media.getStringExtra(LincolnClusterProtocol.EXTRA_TITLE))
+        assertEquals("", media.getStringExtra(LincolnClusterProtocol.EXTRA_ARTIST))
+        assertTrue(media.getBooleanExtra(LincolnClusterProtocol.EXTRA_PLAYING, false))
+    }
+
     private fun send(snapshot: CarPlayGlance.Snapshot) {
         LincolnClusterOutput.javaClass.getDeclaredMethod("onSnapshot", CarPlayGlance.Snapshot::class.java)
             .apply { isAccessible = true }

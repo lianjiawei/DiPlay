@@ -63,7 +63,9 @@ class LincolnClusterProtocolTest {
         assertEquals("Main Street", LincolnClusterProtocol.sanitizeText("Main Street"))
         assertNull(LincolnClusterProtocol.sanitizeText("   "))
         assertNull(LincolnClusterProtocol.sanitizeText(null))
-        val long = "x".repeat(50)
-        assertEquals(LincolnClusterProtocol.MAX_TEXT_CHARS, LincolnClusterProtocol.sanitizeText(long)!!.length)
+        assertNull(LincolnClusterProtocol.sanitizeText("\n\t\u0000"))
+        assertEquals("Main Street", LincolnClusterProtocol.sanitizeText("Main\n\t\u0000 Street"))
+        val long = "x".repeat(31) + "🚗" + "这是完整的路名和歌词文字".repeat(4)
+        assertEquals(long, LincolnClusterProtocol.sanitizeText(long))
     }
 }

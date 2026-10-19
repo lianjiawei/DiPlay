@@ -43,9 +43,6 @@ object LincolnClusterProtocol {
     const val SOURCE_NAME = "CarPlay"
     const val SOURCE_TYPE = 1
 
-    /** The field build truncates cluster text to this many characters. */
-    const val MAX_TEXT_CHARS = 32
-
     /** Beyond this the cluster is not asked to show a distance (matches the field build). */
     const val MAX_DISTANCE_METERS = 2_000_000
 
@@ -78,12 +75,12 @@ object LincolnClusterProtocol {
         }
     }
 
-    /** The cluster drops non-printable characters and keeps at most [MAX_TEXT_CHARS]. */
+    /** Remove control characters without shortening the text; the cluster owns its layout. */
     fun sanitizeText(text: String?): String? {
         if (text == null) return null
         val printable = text.filter { it.code in 32..126 || it.code > 126 }
         if (printable.isBlank()) return null
-        return printable.take(MAX_TEXT_CHARS)
+        return printable
     }
 
     /** Beyond this the cluster drops the remaining readout. */
