@@ -47,7 +47,7 @@ The required full CI command passed for source commit `1f297f4b`: **3339 tests, 
   :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug
 ```
 
-`python3 scripts/check_public_tree.py` and `git diff --check` also pass. Local execution used the prepared Android environment, offline dependencies, one Gradle worker and a 1 GiB Gradle heap. Shared test inputs were unchanged and their existing successful result was reused by Gradle; Common and Home tests ran in this full invocation.
+`python3 scripts/check_public_tree.py` and `git diff --check` also pass. Local execution used the prepared Android environment, offline dependencies, one Gradle worker and a 1 GiB Gradle heap. Common tests ran in this full invocation. Gradle reused the successful Shared and Home test results because their tracked inputs were unchanged.
 
 The resolution matrix covers 800×480, 1024×600 mdpi and xhdpi, 1280×720, 1920×1080, 1920×720, 320×600 portrait, 400×300 split window and Arabic RTL 1280×720. Every configuration runs at font scales 1.0 and 1.3, including all settings categories and update stages. It checks ellipsis, horizontal and vertical text clipping, parent bounds and scroll access.
 
