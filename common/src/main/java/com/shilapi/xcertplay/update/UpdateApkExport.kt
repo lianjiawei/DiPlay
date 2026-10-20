@@ -1,6 +1,5 @@
 package com.shilapi.xcertplay.update
 
-import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -21,75 +20,80 @@ internal object UpdateApkExport {
 
     /** Returns null when no public copy could be made. */
     fun copy(context: Context, apk: File): Saved? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                return copyToDownloads(context.contentResolver, apk, replaceAll = false)
-            } catch (_: Exception) {
-                // Fall through: some head units ship without a working Downloads provider.
+        synchronized(UpdateStorage) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    return copyToDownloads(context, apk)
+                } catch (_: Exception) {
+                    // Fall through: some head units ship without a working Downloads provider.
+                }
             }
-        }
-        return try {
-            val directory = File(context.getExternalFilesDir(null) ?: return null, "update")
-            Saved(copyToDirectory(directory, apk).absolutePath, null)
-        } catch (_: Exception) {
-            null
+            return try {
+                val directory = File(context.getExternalFilesDir(null) ?: return null, "update")
+                val destination = copyToDirectory(context, directory, apk)
+                rememberFile(context, destination, apk)
+                Saved(destination.absolutePath, null)
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
     /**
-     * Saves a historical APK in the visible system Downloads folder without pruning other versions.
+     * Saves a historical APK in visible Downloads, then applies the managed retention policy.
      * Android 9 and older need WRITE_EXTERNAL_STORAGE; Android 10+ uses MediaStore.
      */
     fun copyToSystemDownloads(context: Context, apk: File): Saved {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return copyToDownloads(context.contentResolver, apk, replaceAll = false)
-        }
-        val directory = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Lincoln",
-        )
-        if (!directory.isDirectory && !directory.mkdirs()) {
-            throw IOException("Downloads/Lincoln is unavailable")
-        }
-        val destination = File(directory, apk.name)
-        try {
-            apk.copyTo(destination, overwrite = true)
-            if (!destination.isFile || destination.length() != apk.length()) {
-                throw IOException("Downloads/Lincoln did not keep the APK")
+        synchronized(UpdateStorage) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                return copyToDownloads(context, apk)
             }
-        } catch (error: Exception) {
-            destination.delete()
-            throw error
+            val directory = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "Lincoln",
+            )
+            if (!directory.isDirectory && !directory.mkdirs()) {
+                throw IOException("Downloads/Lincoln is unavailable")
+            }
+            val destination = copyToDirectory(context, directory, apk)
+            rememberFile(context, destination, apk)
+            MediaScannerConnection.scanFile(
+                context.applicationContext,
+                arrayOf(destination.absolutePath),
+                arrayOf(APK_MIME),
+                null,
+            )
+            return Saved(destination.absolutePath, null)
         }
-        MediaScannerConnection.scanFile(
-            context.applicationContext,
-            arrayOf(destination.absolutePath),
-            arrayOf(APK_MIME),
-            null,
-        )
-        return Saved(destination.absolutePath, null)
     }
 
-    private fun copyToDirectory(directory: File, apk: File): File {
+    private fun rememberFile(context: Context, file: File, apk: File) {
+        UpdateStorage.remember(context, file.canonicalPath, apk.name, file.length(), file.lastModified(),
+            UpdateChecksums.sha256Hex(file), UpdateStorage.versionKey(context, apk))
+        runCatching { UpdateStorage.clean(context, manual = false) }
+    }
+
+    private fun copyToDirectory(context: Context, directory: File, apk: File): File {
         if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Update storage is unavailable")
-        // Keep downloaded versions: they are the driver's rollback copies.
-        return apk.copyTo(File(directory, apk.name), overwrite = true)
+        // Publish atomically and leave an existing copy intact until retention can safely prune it.
+        val destination = if (File(directory, apk.name).exists())
+            File(directory, "${apk.nameWithoutExtension}-${java.util.UUID.randomUUID()}.apk")
+        else File(directory, apk.name)
+        val temporary = File(directory, ".${java.util.UUID.randomUUID()}.part")
+        UpdateStorage.rememberTemporary(context, temporary)
+        try {
+            apk.copyTo(temporary)
+            if (temporary.length() != apk.length() || !temporary.renameTo(destination)) {
+                throw IOException("Update storage could not publish the APK")
+            }
+            return destination
+        } finally {
+            if (!temporary.exists() || temporary.delete()) UpdateStorage.forget(context, temporary.canonicalPath)
+        }
     }
 
-    private fun copyToDownloads(resolver: ContentResolver, apk: File, replaceAll: Boolean): Saved {
-        // Only entries created by this app are visible to these queries, so other apps' files are safe.
-        val selection = if (replaceAll) {
-            "${MediaStore.Downloads.RELATIVE_PATH}=? AND ${MediaStore.Downloads.MIME_TYPE}=?"
-        } else {
-            "${MediaStore.Downloads.RELATIVE_PATH}=? AND ${MediaStore.Downloads.MIME_TYPE}=? AND " +
-                "${MediaStore.Downloads.DISPLAY_NAME}=?"
-        }
-        val arguments = if (replaceAll) {
-            arrayOf("$DOWNLOADS_DIRECTORY/", APK_MIME)
-        } else {
-            arrayOf("$DOWNLOADS_DIRECTORY/", APK_MIME, apk.name)
-        }
-        resolver.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI, selection, arguments)
+    private fun copyToDownloads(context: Context, apk: File): Saved {
+        val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, apk.name)
             put(MediaStore.Downloads.MIME_TYPE, APK_MIME)
@@ -105,6 +109,10 @@ internal object UpdateApkExport {
                 put(MediaStore.Downloads.IS_PENDING, 0)
             }, null, null)
             if (published != 1) throw IOException("Downloads could not publish the update")
+            UpdateStorage.remember(context, uri.toString(), apk.name, apk.length(), version = UpdateStorage.versionKey(context, apk))
+            runCatching {
+                UpdateStorage.clean(context, manual = false)
+            }
             // MediaStore renames on a name clash, so report the name it actually stored.
             val name = resolver.query(uri, arrayOf(MediaStore.Downloads.DISPLAY_NAME), null, null, null)?.use {
                 if (it.moveToFirst()) it.getString(0) else null

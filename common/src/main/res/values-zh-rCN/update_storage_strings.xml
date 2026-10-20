@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_update_storage">更新存储管理</string>
+    <string name="settings_update_storage_hint">自动保留最近下载的两个版本，清理超过 24 小时的临时文件。手动清理会删除空闲安装包和临时文件，保留已安装的应用及设置。</string>
+    <string name="settings_update_storage_scanning">正在统计更新文件…</string>
+    <string name="settings_update_storage_clean">清理文件</string>
+    <string name="settings_update_storage_cleaning">正在清理更新文件…</string>
+    <string name="settings_update_storage_usage">安装包：%1$d 个 · %2$s\n临时缓存：%3$s</string>
+    <string name="settings_update_storage_result">已清理 %1$d 项，释放 %2$s。</string>
+    <string name="settings_update_storage_protected">%1$d 项正在使用或等待安装，暂时保留。</string>
+    <string name="settings_update_storage_partial">部分更新文件无法访问或删除，请在系统文件管理器中查看。</string>
+</resources>

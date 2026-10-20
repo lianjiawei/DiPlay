@@ -87,6 +87,7 @@ import com.shilapi.xcertplay.setup.DiLinkGeneration
 import com.shilapi.xcertplay.setup.SetupGuide
 import com.shilapi.xcertplay.transport.EvChargingConnectors
 import com.shilapi.xcertplay.update.BackgroundUpdateScheduler
+import com.shilapi.xcertplay.update.UpdateStorage
 import com.shilapi.xcertplay.update.UpdateApkExport
 import com.shilapi.xcertplay.update.UpdateAvailability
 import com.shilapi.xcertplay.update.UpdateCatalog
@@ -250,6 +251,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updatePrompt: UpdatePromptDialog? = null
     private var updatePromptForDownload = false
     private val automaticUpdatePrompt = Runnable { showUpdatePrompt(automatic = true) }
+    private var updateStorageDialog: AlertDialog? = null
+    internal var updateStorageWorker: (Runnable) -> Unit = UpdateStorage::execute
     private var updateSavedPath: String? = null
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
@@ -449,6 +452,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page")
             ?: "home"
+        UpdateStorage.start(applicationContext)
         render()
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -615,6 +619,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onDestroy() {
+        updateStorageDialog?.dismiss()
+        updateFile?.parentFile?.let { UpdateStorage.release(applicationContext, it) }
         handler.removeCallbacks(automaticUpdatePrompt)
         updatePrompt?.dismiss()
         updatePrompt = null
@@ -2645,6 +2651,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             toggle(card, brandString(R.string.settings_background_update_checks),
                 brandString(R.string.settings_background_update_checks_description),
                 UpdateAvailability.backgroundChecksEnabled(this)) { UpdateAvailability.saveBackgroundChecksEnabled(this, it) }
+            card.addView(button(brandString(R.string.settings_update_storage), false) { showUpdateStorage() }, matchButton(0, 60))
+            card.addView(label(brandString(R.string.settings_update_storage_hint), 14, MUTED))
         }
         section(content, brandString(R.string.backup_title)) { card ->
             card.addView(button(brandString(R.string.backup_open), false) { openBackup() }, matchButton(0, 60))
@@ -2653,6 +2661,65 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         section(content, brandString(R.string.made_possible_by_open_source)) { card ->
             card.addView(label(brandString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay), 16, MUTED))
         }
+    }
+
+    private fun showUpdateStorage() {
+        if (updateStorageDialog?.isShowing == true) return
+        val app = applicationContext
+        val dialog = appDialogBuilder().setTitle(brandString(R.string.settings_update_storage))
+            .setMessage(brandString(R.string.settings_update_storage_scanning))
+            .setPositiveButton(brandString(R.string.settings_update_storage_clean), null)
+            .setNegativeButton(android.R.string.cancel, null).create()
+        updateStorageDialog = dialog
+        dialog.setOnDismissListener { if (updateStorageDialog === dialog) updateStorageDialog = null }
+        dialog.show()
+        val clean = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        clean.isEnabled = false
+        fun showResult(usage: UpdateStorage.Usage, cleaned: UpdateStorage.Cleaned? = null) {
+            val size = { bytes: Long -> android.text.format.Formatter.formatFileSize(this, bytes) }
+            val summary = brandString(R.string.settings_update_storage_usage,
+                usage.apkCount, size(usage.apkBytes), size(usage.cacheBytes))
+            val result = cleaned?.let { brandString(R.string.settings_update_storage_result, it.files, size(it.bytes)) + "\n\n" }.orEmpty()
+            dialog.setMessage(result + summary + "\n\n" + brandString(R.string.settings_update_storage_hint) +
+                (if (usage.protectedCount > 0) "\n\n" + brandString(R.string.settings_update_storage_protected, usage.protectedCount) else "") +
+                (if (usage.problems > 0) "\n\n" + brandString(R.string.settings_update_storage_partial) else ""))
+            clean.isEnabled = usage.removableCount > 0 || usage.problems > 0
+        }
+        fun runCleanup() {
+            clean.isEnabled = false
+            dialog.setMessage(brandString(R.string.settings_update_storage_cleaning))
+            updateStorageWorker(Runnable {
+                val outcome = runCatching { UpdateStorage.clean(app, manual = true) }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed || !dialog.isShowing) return@runOnUiThread
+                    outcome.fold({ showResult(it.usage, it) }, {
+                        dialog.setMessage(brandString(R.string.settings_update_storage_partial))
+                        clean.isEnabled = true
+                    })
+                }
+            })
+        }
+        clean.setOnClickListener {
+            if (DiagnosticExportStore.needsStoragePermission(this)) {
+                storagePermissionAction = { granted ->
+                    if (dialog.isShowing && !isFinishing && !isDestroyed) {
+                        if (granted) runCleanup()
+                        else dialog.setMessage(brandString(R.string.settings_update_storage_partial))
+                    }
+                }
+                runCatching { reportStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) }
+                    .onFailure { storagePermissionAction = null; runCleanup() }
+            } else runCleanup()
+        }
+        updateStorageWorker(Runnable {
+            val outcome = runCatching { UpdateStorage.usage(app) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || !dialog.isShowing) return@runOnUiThread
+                outcome.fold({ showResult(it) }, {
+                    dialog.setMessage(brandString(R.string.settings_update_storage_partial))
+                })
+            }
+        })
     }
 
     private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING, READY, FAILED }
@@ -2988,8 +3055,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val generation = ++historyGeneration
         render()
         Thread({
-            val directory = File(cacheDir, "history/${java.util.UUID.randomUUID()}")
+            var attempt: File? = null
             val outcome = runCatching {
+                val directory = UpdateStorage.createAttempt(applicationContext, history = true)
+                attempt = directory
                 val checksumsFile = File(directory, UpdateCatalog.CHECKSUMS_FILE)
                 UpdateClient.download(release.checksumsUrl, checksumsFile, { _, _ -> }, updateConnection)
                 val apkFile = File(directory, release.apkName)
@@ -3009,7 +3078,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 }
                 UpdateApkExport.copyToSystemDownloads(applicationContext, apkFile)
             }
-            directory.deleteRecursively()
+            attempt?.let { UpdateStorage.discard(applicationContext, it) }
             runOnUiThread {
                 if (generation != historyGeneration || isFinishing || isDestroyed) return@runOnUiThread
                 historyStage = HistoryStage.IDLE
@@ -3052,6 +3121,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     /** The existing foreground tick also picks up results saved by WorkManager. No network I/O. */
     private fun refreshUpdateAvailability() {
+        UpdateStorage.start(applicationContext)
         val release = UpdateAvailability.available(this, installedUpdateVersion)
         if (availableUpdate != release) {
             availableUpdate = release
@@ -3131,6 +3201,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updateStage = UpdateStage.DOWNLOADING
         updateSavedPath = null
         updateSavedUri = null
+        updateFile?.parentFile?.let { UpdateStorage.release(applicationContext, it) }
         updateFile = null
         updateProgress = null
         updateMessage = null
@@ -3141,8 +3212,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         refreshUpdatePrompt()
         updateDownloadWorker(Runnable {
             // Each attempt owns its files, including across activity recreation.
-            val directory = File(cacheDir, "update/${java.util.UUID.randomUUID()}")
+            var attempt: File? = null
             val outcome = runCatching {
+                val directory = UpdateStorage.createAttempt(applicationContext, history = false)
+                attempt = directory
                 // The cached release can be a day old. Download the newest one.
                 release = latestRelease() ?: throw IOException(brandString(R.string.update_up_to_date))
                 refreshUpdateUi(generation, release)
@@ -3164,11 +3237,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     throw IOException("Checksum mismatch for ${release.apkName}")
                 }
                 apkFile
-            }.onFailure { directory.deleteRecursively() }
-            val saved = outcome.getOrNull()?.let { UpdateApkExport.copy(applicationContext, it) }
+            }.onFailure { attempt?.let { UpdateStorage.discard(applicationContext, it) } }
+            val saved = outcome.getOrNull()?.let { runCatching { UpdateApkExport.copy(applicationContext, it) }.getOrNull() }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) {
-                    directory.deleteRecursively()
+                    attempt?.let { UpdateStorage.release(applicationContext, it) }
                     return@runOnUiThread
                 }
                 outcome.fold(
@@ -3208,8 +3281,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val generation = updateGeneration
         updateInstallWorker(Runnable {
             val publicUri = savedUri?.takeIf { sameContent(it, file) }
+            val protection = runCatching { UpdateStorage.protectInstaller(applicationContext, file) }
             runOnUiThread {
-                if (generation == updateGeneration && !isFinishing && !isDestroyed) startInstaller(file, publicUri)
+                if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                protection.fold({ startInstaller(file, publicUri) }, { failure ->
+                    Log.w("DiPlay-Update", "installation protection failed", failure)
+                    updateMessage = brandString(R.string.update_failed)
+                    refreshUpdateRow()
+                })
             }
         })
     }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_update_storage">Almacenamiento de actualizaciones</string>
+    <string name="settings_update_storage_hint">Conserva las dos versiones descargadas más recientemente y elimina archivos temporales de más de 24 horas. La limpieza borra APK y archivos temporales sin uso y conserva la aplicación instalada y los ajustes.</string>
+    <string name="settings_update_storage_scanning">Comprobando archivos de actualización…</string>
+    <string name="settings_update_storage_clean">Limpiar</string>
+    <string name="settings_update_storage_cleaning">Limpiando archivos de actualización…</string>
+    <string name="settings_update_storage_usage">APK: %1$d · %2$s\nArchivos temporales: %3$s</string>
+    <string name="settings_update_storage_result">Se eliminaron %1$d elementos y se liberaron %2$s.</string>
+    <string name="settings_update_storage_protected">Se conservan %1$d elementos en uso o reservados para la instalación.</string>
+    <string name="settings_update_storage_partial">No se pudo acceder a algunos archivos de actualización o eliminarlos. Revísalos en el gestor de archivos del sistema.</string>
+</resources>

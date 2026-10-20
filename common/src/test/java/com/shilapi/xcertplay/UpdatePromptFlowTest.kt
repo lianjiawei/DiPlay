@@ -328,7 +328,13 @@ class UpdatePromptFlowTest {
         val installer = requireNotNull(shadowOf(c.get()).nextStartedActivity)
         assertEquals(Intent.ACTION_VIEW, installer.action)
         assertEquals("application/vnd.android.package-archive", installer.type)
-        assertTrue(installer.data!!.authority!!.endsWith(".update-apks"))
+        val authority = installer.data!!.authority!!
+        assertTrue(authority.endsWith(".update-apks") || authority == "media")
+        if (authority == "media") {
+            assertEquals(ReflectionHelpers.getField<android.net.Uri?>(c.get(), "updateSavedUri"), installer.data)
+            val verified = ReflectionHelpers.getField<File>(c.get(), "updateFile")
+            assertArrayEquals(verified.readBytes(), app.contentResolver.openInputStream(installer.data!!)!!.use { it.readBytes() })
+        }
         assertTrue(installer.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     }
 
