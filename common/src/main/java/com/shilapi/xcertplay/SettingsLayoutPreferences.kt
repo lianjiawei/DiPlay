@@ -7,7 +7,10 @@ import android.content.res.Configuration
 /** Independent override for the expanded Settings navigation. */
 object SettingsLayoutPreferences {
     fun isActive(context: Context): Boolean = forceFull(context) &&
-        context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        context.resources.configuration.let {
+            it.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                SettingsLayoutPolicy.canForceExpanded(it.screenWidthDp, it.fontScale)
+        }
 
     fun forceFull(context: Context): Boolean =
         context.getSharedPreferences("diplay", Context.MODE_PRIVATE)

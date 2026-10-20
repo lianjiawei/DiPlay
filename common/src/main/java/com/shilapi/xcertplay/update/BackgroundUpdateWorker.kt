@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.update
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
 import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -23,6 +24,10 @@ internal object BackgroundUpdatePolicy {
 
 internal class BackgroundUpdateWorker(context: Context, parameters: WorkerParameters) :
     Worker(context, parameters) {
+    internal var updateLookup: (String, Network) -> UpdateRelease? = { installed, network ->
+        UpdateReleaseLookup.latest(installed, "Lincoln/$installed", network::openConnection)
+    }
+
     override fun doWork(): Result {
         if (!UpdateAvailability.backgroundChecksEnabled(applicationContext)) return Result.success()
         if (BackgroundUpdatePolicy.connectionBusy(
@@ -40,14 +45,11 @@ internal class BackgroundUpdateWorker(context: Context, parameters: WorkerParame
             .getOrNull() ?: return retryOrGiveUp("no validated network")
         val installedVersion = applicationContext.packageManager
             .getPackageInfo(applicationContext.packageName, 0).versionName
-        // A dev build with no parsable version would otherwise show a permanent banner.
-        if (installedVersion == null || UpdateVersion.parse(installedVersion) == null) return Result.success()
+        // Both legacy numeric names and the shorter personal names are release builds.
+        // Unknown development versions would otherwise show a permanent banner.
+        if (installedVersion == null || !UpdateVersion.isSupportedInstalledVersion(installedVersion)) return Result.success()
         return try {
-            val release = UpdateReleaseLookup.latest(
-                installedVersion = installedVersion,
-                userAgent = "Lincoln/$installedVersion",
-                openConnection = network::openConnection,
-            )
+            val release = updateLookup(installedVersion, network)
             if (release == null) UpdateAvailability.clear(applicationContext)
             else UpdateAvailability.save(applicationContext, release)
             UpdateAvailability.recordAttempt(applicationContext, now)

@@ -9,6 +9,9 @@ internal object SettingsLayoutPolicy {
     // Two overview columns need about 320 dp each beside the rail.
     const val OVERVIEW_TWO_COLUMN_MIN_WIDTH_DP = 1000
     const val RAIL_WIDTH_DP = 240
+    const val SHELL_SIDE_PADDING_DP = 32
+    const val RAIL_GAP_DP = 24
+    private const val MIN_FORCED_CONTENT_WIDTH_DP = 320
     private const val MAX_RAIL_SCALE = 1.5f
 
     // Larger text needs proportionally more width before the rail and content fit side by side.
@@ -20,4 +23,9 @@ internal object SettingsLayoutPolicy {
         widthDp >= OVERVIEW_TWO_COLUMN_MIN_WIDTH_DP * fontScale.coerceAtLeast(1f)
 
     fun railWidthDp(fontScale: Float): Int = (RAIL_WIDTH_DP * fontScale.coerceIn(1f, MAX_RAIL_SCALE)).toInt()
+
+    /** Keep the override saved, but never squeeze the content into an unusable sliver. */
+    fun canForceExpanded(widthDp: Int, fontScale: Float): Boolean =
+        widthDp >= railWidthDp(fontScale) + SHELL_SIDE_PADDING_DP * 2 + RAIL_GAP_DP +
+            MIN_FORCED_CONTENT_WIDTH_DP * fontScale.coerceAtLeast(1f)
 }

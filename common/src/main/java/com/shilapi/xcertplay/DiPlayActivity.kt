@@ -31,6 +31,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -41,6 +42,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import androidx.core.widget.doAfterTextChanged
+import androidx.core.widget.TextViewCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
@@ -856,6 +858,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         addView(label(VehicleBranding.displayName(this@DiPlayActivity), if (compact) 20 else 26, TEXT, true,
             centreGlyphs = resources.configuration.locales[0].language != "zh").apply {
             setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
+            maxLines = 1
+            TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12,
+                if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(0, if (compact) dp(44) else dp(52), 1f))
         addView(appearanceButton(), LinearLayout.LayoutParams(dp(if (compact) 44 else 52), dp(if (compact) 44 else 52)).apply {
             marginEnd = dp(if (compact) 8 else 12)
@@ -1129,7 +1134,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     // Only the category scrolls, so the rail keeps showing where the driver is.
     private fun expandedSettingsShell(header: View, categoryScroll: ScrollView): LinearLayout = column().apply {
         setBackgroundColor(BG)
-        setPadding(dp(32), dp(24), dp(32), 0)
+        setPadding(dp(SettingsLayoutPolicy.SHELL_SIDE_PADDING_DP), dp(24),
+            dp(SettingsLayoutPolicy.SHELL_SIDE_PADDING_DP), 0)
         addView(header)
         addView(space(24))
         addView(reconnectBar(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
@@ -1143,7 +1149,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             settingsRailScroll = this
         },
             LinearLayout.LayoutParams(dp(SettingsLayoutPolicy.railWidthDp(resources.configuration.fontScale)), -2))
-        split.addView(space(24), LinearLayout.LayoutParams(dp(24), 1))
+        split.addView(space(SettingsLayoutPolicy.RAIL_GAP_DP),
+            LinearLayout.LayoutParams(dp(SettingsLayoutPolicy.RAIL_GAP_DP), 1))
         split.addView(categoryScroll, LinearLayout.LayoutParams(0, -1, 1f))
         addView(split, LinearLayout.LayoutParams(-1, 0, 1f))
     }
@@ -6795,6 +6802,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private val muted: Int,
         private val accent: Int,
     ) : Button(context) {
+        override fun setLayoutParams(params: ViewGroup.LayoutParams?) {
+            if (params is MinimumButtonLayoutParams) {
+                if (params.height > 0) params.minimumButtonHeight = params.height
+                minHeight = params.minimumButtonHeight
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            super.setLayoutParams(params)
+        }
+
         var action = false
         var contentOffsetY = 0f
         var alignVisibleGlyphs = true
@@ -6854,12 +6870,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun rounded(color: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = layoutCornerRadius() * 1.35f; setStroke(dp(1), stroke) }
-    private fun matchButton(top: Int = 0, height: Int = 68) = LinearLayout.LayoutParams(-1, dp(height)).apply { topMargin = dp(top) }
+    /** Buttons may grow for wrapped text; non-button rows retain their requested height. */
+    private class MinimumButtonLayoutParams(var minimumButtonHeight: Int) :
+        LinearLayout.LayoutParams(-1, minimumButtonHeight)
+
+    private fun matchButton(top: Int = 0, height: Int = 68) = MinimumButtonLayoutParams(dp(height)).apply { topMargin = dp(top) }
     private fun space(height: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(height)); tag = SPACER }
 
     /**
      * One vertical rhythm for every card, whatever margins each control builder chose:
-     * buttons are one height with one gap, a note under a button closes its group with a larger gap,
+     * buttons share a minimum height and gap, wrapped text can grow, and a note closes its group with a larger gap,
      * and the last item adds nothing to the card's own padding.
      */
     private fun normalizeSpacing(container: LinearLayout, isCard: Boolean = true) {

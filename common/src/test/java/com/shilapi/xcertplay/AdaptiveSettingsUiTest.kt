@@ -278,6 +278,15 @@ class AdaptiveSettingsUiTest {
         assertTrue(SettingsLayoutPreferences.forceFull(context))
     }
 
+    @Test @Config(qualifiers = "en-w400dp-h300dp-land")
+    fun smallWindowsKeepTheOverrideButUseAReadableSingleColumn() {
+        SettingsLayoutPreferences.saveForceFull(context, true)
+        val screen = openSettings()
+        assertTrue(SettingsLayoutPreferences.forceFull(screen))
+        assertFalse(SettingsLayoutPreferences.isActive(screen))
+        assertFalse(ReflectionHelpers.callInstanceMethod<Boolean>(screen, "isExpandedSettingsLayout"))
+    }
+
     @Test
     @Config(qualifiers = "en-w1000dp-h700dp-land")
     fun naturallyExpandedSettingsHideTheForceLayoutSwitch() {
@@ -523,7 +532,7 @@ class AdaptiveSettingsUiTest {
         assertFalse(index.any { it.title == screen.getString(R.string.auto_car_hotspot_title) })
     }
 
-    @Test fun cardControlsShareOneHeightAndGap() {
+    @Test fun cardControlsShareOneMinimumHeightAndGap() {
         val screen = openSettings()
         descendants(screen.window.decorView)
             .first { it.contentDescription == screen.getString(R.string.settings_open_category,
@@ -538,9 +547,14 @@ class AdaptiveSettingsUiTest {
             .toList()
 
         assertTrue(buttons.size >= 4)
+        layoutRoot(screen)
         buttons.forEach { button ->
             val lp = button.layoutParams as LinearLayout.LayoutParams
-            assertEquals(button.text.toString(), dp(60), lp.height)
+            assertEquals(button.text.toString(), ViewGroup.LayoutParams.WRAP_CONTENT, lp.height)
+            assertEquals(button.text.toString(), dp(60), button.minHeight)
+            if (generateSequence<View>(button) { it.parent as? View }.all { it.visibility == View.VISIBLE }) {
+                assertTrue(button.text.toString(), button.height >= dp(60))
+            }
             assertEquals(button.text.toString(), 0, lp.topMargin)
             assertTrue(button.text.toString(), lp.bottomMargin in setOf(0, dp(6), dp(12)))
         }

@@ -40,6 +40,14 @@ class SettingsLayoutPolicyTest {
         assertTrue(SettingsLayoutPolicy.isExpanded(1706, 960, 1.3f))
     }
 
+    @Test fun forcedRailStillNeedsAReadableContentColumn() {
+        assertFalse(SettingsLayoutPolicy.canForceExpanded(400, 1f))
+        assertFalse(SettingsLayoutPolicy.canForceExpanded(640, 1.3f))
+        assertFalse(SettingsLayoutPolicy.canForceExpanded(800, 1.3f))
+        assertTrue(SettingsLayoutPolicy.canForceExpanded(700, 1f))
+        assertTrue(SettingsLayoutPolicy.canForceExpanded(900, 1.3f))
+    }
+
     @Test fun railGrowsWithTextUpToALimit() {
         assertEquals(240, SettingsLayoutPolicy.railWidthDp(1f))
         assertEquals(312, SettingsLayoutPolicy.railWidthDp(1.3f))

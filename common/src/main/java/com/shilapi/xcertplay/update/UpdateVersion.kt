@@ -17,6 +17,9 @@ internal object UpdateVersion {
             Triple(major, minor, patch)
         }
 
+    internal fun isSupportedInstalledVersion(value: String): Boolean =
+        parse(value) != null || (PERSONAL_ONLY.containsMatchIn(value) && revision(value) != null)
+
     internal fun isNewer(remote: String, installed: String): Boolean {
         // New personal builds omit the upstream base. Keep legacy release tags readable
         // so existing clients can discover the first build with the shorter version name.
