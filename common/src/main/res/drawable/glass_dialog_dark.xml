@@ -1,0 +1,6 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="@dimen/glass_dialog_radius" />
+    <gradient android:angle="270" android:startColor="#F0395674" android:endColor="#F023394F" />
+    <stroke android:width="1dp" android:color="#B7D3E8" />
+    <padding android:left="@dimen/glass_dialog_edge_inset" android:top="@dimen/glass_dialog_edge_inset" android:right="@dimen/glass_dialog_edge_inset" android:bottom="@dimen/glass_dialog_edge_inset" />
+</shape>

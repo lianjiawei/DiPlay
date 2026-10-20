@@ -6821,11 +6821,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun layoutCornerRadius(): Float {
         val compact = isCompactLayout && (page != "settings" || !SettingsLayoutPreferences.isActive(this))
-        return dp(if (compact) 44 else 52) * 20f / 56
+        return dp(if (compact) 44 else 52) / 2f
     }
 
     private fun buttonShape(color: Int, stroke: Int, heightPx: Int = 0) = rounded(color, stroke).apply {
-        cornerRadius = if (heightPx > 0) minOf(dp(24).toFloat(), heightPx * 20f / 56) else layoutCornerRadius()
+        cornerRadius = if (heightPx > 0) heightPx / 2f else layoutCornerRadius()
     }
 
     private fun buttonFocusRing() = focusRing(
@@ -6833,7 +6833,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     )
 
     private fun button(title: String, primary: Boolean, click: () -> Unit) = SettingButton(this, MUTED, ACCENT).apply {
-        isAllCaps = false; textSize = 18f; setTextColor(if (primary) ON_ACCENT else TEXT)
+        isAllCaps = false; textSize = 18f; setTextColor(GlassChrome.textColors(if (primary) ON_ACCENT else TEXT, BUTTON))
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), buttonShape(if (primary) ACCENT else BUTTON, if (primary) ACCENT else BORDER), null)
         setPadding(dp(16), 0, dp(16), 0); minHeight = dp(56); stateListAnimator = null
@@ -6948,7 +6948,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         })
     }
 
-    private fun rounded(color: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = layoutCornerRadius() * 1.35f; setStroke(dp(1), stroke) }
+    private fun rounded(color: Int, stroke: Int) = GlassChrome.surface(
+        color, stroke, resources.displayMetrics.density, dp(GlassChrome.PANEL_RADIUS_DP).toFloat(),
+        primary = color == ACCENT,
+    )
     /** Buttons may grow for wrapped text; non-button rows retain their requested height. */
     private class MinimumButtonLayoutParams(var minimumButtonHeight: Int) :
         LinearLayout.LayoutParams(-1, minimumButtonHeight)

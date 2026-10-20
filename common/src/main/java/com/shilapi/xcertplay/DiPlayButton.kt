@@ -59,7 +59,7 @@ internal class DiPlayButton(context: Context) : Button(context) {
             }
             DiPlayButtonKind.DANGER -> {
                 fill = palette.overlayDanger
-                text = Color.WHITE
+                text = if (ColorUtils.calculateLuminance(fill) > .35) palette.onAccent else Color.WHITE
                 stroke = fill
             }
             DiPlayButtonKind.TONAL_DANGER -> {
@@ -71,15 +71,11 @@ internal class DiPlayButton(context: Context) : Button(context) {
                 stroke = ColorUtils.blendARGB(surface, palette.overlayDanger, 0.48f)
             }
         }
-        val radius = minOf(24f * density, (if (height > 0) height else minHeight) * 20f / 56)
-        setTextColor(text)
+        val radius = GlassChrome.radius(if (height > 0) height else minHeight, density)
+        setTextColor(GlassChrome.textColors(text, if (overlay) palette.overlayBackground else palette.surface))
         background = RippleDrawable(
             ColorStateList.valueOf(palette.ripple),
-            GradientDrawable().apply {
-                setColor(fill)
-                cornerRadius = radius
-                setStroke((1 * density).toInt().coerceAtLeast(1), stroke)
-            },
+            GlassChrome.surface(fill, stroke, density, radius, primary = kind == DiPlayButtonKind.PRIMARY),
             null,
         )
         // Remote and D-pad users need to see where they are; touch mode never shows it.

@@ -1,10 +1,11 @@
 package com.shilapi.xcertplay
 
 import android.content.ContextWrapper
-import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import com.shilapi.xcertplay.host.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -72,7 +73,9 @@ class AppDialogsTest {
         )
         try {
             assertEquals(palette.accent, attributes.getColor(0, 0))
-            assertEquals(palette.surface, (attributes.getDrawable(1) as ColorDrawable).color)
+            assertEquals(if (palette == DiPlayPalette.DARK) R.drawable.glass_dialog_dark
+                else R.drawable.glass_dialog_light, attributes.getResourceId(1, 0))
+            assertTrue(attributes.getDrawable(1) is GradientDrawable)
         } finally {
             attributes.recycle()
         }

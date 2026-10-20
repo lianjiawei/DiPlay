@@ -1,0 +1,4 @@
+<resources>
+    <dimen name="glass_dialog_radius">28dp</dimen>
+    <dimen name="glass_dialog_edge_inset">12dp</dimen>
+</resources>
