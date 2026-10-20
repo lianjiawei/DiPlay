@@ -10,7 +10,7 @@
 - 已重点适配 Android 8.1 车机。
 - 最低支持 Android 7.1。
 - 安装包名：`cn.manstep.phonemirrorBox`（Debug 为 `cn.manstep.phonemirrorBox.hudtest`）
-- 当前版本：`precision.6`
+- 当前版本：`precision.7`
 
 ## 主要功能
 
