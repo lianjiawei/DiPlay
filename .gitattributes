@@ -1,0 +1,2 @@
+# Preserve archived PDF bytes and avoid treating PDF streams as text diffs.
+docs/ui-redesign/**/*.pdf binary
