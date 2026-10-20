@@ -780,7 +780,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         } else {
             if (page == "home") {
                 val side = if (compact) CONTROL_GAP_DP else GlassChrome.GROUP_GAP_DP
-                content.setPadding(dp(side), dp(CONTROL_GAP_DP), dp(side), dp(CONTROL_GAP_DP))
+                val vertical = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                    resources.configuration.screenHeightDp < HOME_SHORT_HEIGHT_DP) SETTINGS_HEADER_COMPACT_GAP_DP else CONTROL_GAP_DP
+                content.setPadding(dp(side), dp(vertical), dp(side), dp(vertical))
             } else if (compact) content.setPadding(dp(12), dp(10), dp(12), dp(12))
             else content.setPadding(dp(32), dp(24), dp(32), dp(32))
             content.addView(header)
@@ -1007,6 +1009,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun home(content: LinearLayout) {
         val compact = isCompactLayout
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val shortHome = landscape && resources.configuration.screenHeightDp < HOME_SHORT_HEIGHT_DP
         fun homeButton(title: String, primary: Boolean, click: () -> Unit) = button(title, primary, click)
         val body = column()
         val card = column().apply { gravity = Gravity.CENTER_HORIZONTAL }
@@ -1014,12 +1017,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             gravity = Gravity.CENTER; letterSpacing = .08f
         }
         card.addView(homeCardTitle)
-        card.addView(label(brandString(R.string.ui_glass_home_title), if (compact) 26 else 30, TEXT, true).apply {
+        if (!shortHome) card.addView(label(brandString(R.string.ui_glass_home_title), if (compact) 26 else 30, TEXT, true).apply {
             gravity = Gravity.CENTER
         })
         homeConnectionRing = ConnectionRingView(this).apply { appearance(appNight) }
         val ringSize = dp(when {
-            resources.configuration.screenHeightDp < 400 -> HOME_RING_SHORT_DP
+            shortHome -> HOME_RING_SHORT_DP
             resources.configuration.screenHeightDp < 500 -> HOME_RING_LOW_DP
             else -> HOME_RING_DP
         })
@@ -1034,7 +1037,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if (CarPlayBackgroundSession.hasSession()) openProjection()
             else connect(true)
         }
-        card.addView(connectButton, matchButton(CONTROL_GAP_DP, CONTROL_HEIGHT_DP))
+        card.addView(connectButton, matchButton(if (shortHome) NOTE_ATTACH_GAP_DP else CONTROL_GAP_DP,
+            if (shortHome) GlassChrome.MIN_TARGET_DP else CONTROL_HEIGHT_DP))
         disconnectButton = homeButton(brandString(R.string.disconnect), false) {
             disconnectButton?.isEnabled = false
             CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
@@ -1056,7 +1060,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             addView(usb, LinearLayout.LayoutParams(0, -2, 1f))
             addView(space(CONTROL_GAP_DP), LinearLayout.LayoutParams(dp(CONTROL_GAP_DP), 1))
             addView(settings, LinearLayout.LayoutParams(0, -2, 1f))
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(SETTINGS_BLOCK_GAP_DP) })
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(if (shortHome) CONTROL_GAP_DP else SETTINGS_BLOCK_GAP_DP)
+        })
         right.addView(label(brandString(R.string.home_public_preview, VehicleBranding.displayName(this), version()), 12,
             MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(NOTE_ATTACH_GAP_DP), 0, 0) })
         availableUpdate?.let { release ->
@@ -7143,7 +7149,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val CONTROL_HEIGHT_DP = 60
         private const val HOME_RING_DP = 104
         private const val HOME_RING_LOW_DP = 88
-        private const val HOME_RING_SHORT_DP = 72
+        private const val HOME_RING_SHORT_DP = 44
+        private const val HOME_SHORT_HEIGHT_DP = 400
         private const val HOME_CONTROL_SHARE = .54f
         private const val CONTROL_GAP_DP = 12
         private const val GROUP_GAP_DP = 20

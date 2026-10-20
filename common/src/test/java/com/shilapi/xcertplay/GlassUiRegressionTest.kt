@@ -42,6 +42,9 @@ class GlassUiRegressionTest {
     @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
     fun landscapeHomeMatchesTheSelectedComposition() = capture("landscape-zh", 1f)
 
+    @Test @Config(qualifiers = "zh-rCN-w960dp-h360dp-land-xhdpi")
+    fun shortWideHomeKeepsActionsInTheInitialViewport() = capture("short-wide-zh", 1f)
+
     @Test @Config(qualifiers = "en-w1200dp-h720dp-land-mdpi")
     fun expandedControlsWithLargeEnglishText() = capture("expanded-en", 1.3f)
 
@@ -71,7 +74,7 @@ class GlassUiRegressionTest {
                 val action = descendants(screen.window.decorView).filterIsInstance<TextView>()
                     .first { it.text.toString() == screen.getString(id) }
                 assertTrue("Home action must have a usable measured height", action.height >= 40 * screen.resources.displayMetrics.density)
-                if (name == "landscape-zh") {
+                if (name in listOf("landscape-zh", "short-wide-zh")) {
                     val bounds = android.graphics.Rect()
                     assertTrue("Home action must fit the initial viewport", action.getGlobalVisibleRect(bounds))
                     assertTrue("Home action cannot be clipped", bounds.height() >= action.height - 1)
@@ -79,6 +82,9 @@ class GlassUiRegressionTest {
             }
             for (night in listOf(true, false)) {
                 AirPlayPersistence.saveAppAppearance(app, if (night) AppAppearance.DARK else AppAppearance.LIGHT)
+                ReflectionHelpers.setField(screen, "page", "home")
+                call(screen, "render")
+                screenshot(screen, "$name-${if (night) "dark" else "light"}-home")
                 ReflectionHelpers.setField(screen, "page", "settings")
                 for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.DISPLAY, SettingsCategory.ABOUT)) {
                     ReflectionHelpers.setField(screen, "settingsCategory", category)
@@ -139,9 +145,26 @@ class GlassUiRegressionTest {
             val config = screen.resources.configuration
             val width = (config.screenWidthDp * density).toInt()
             val height = (config.screenHeightDp * density).toInt()
-            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-            root.layout(0, 0, width, height)
+            // Insets and the first layout choose compact type/ring sizes, just as on a device.
+            // Settle their requested follow-up layout before taking native rendering evidence.
+            repeat(3) {
+                fun invalidateMeasurement(view: View) {
+                    view.forceLayout()
+                    if (view is ViewGroup) for (i in 0 until view.childCount) invalidateMeasurement(view.getChildAt(i))
+                }
+                invalidateMeasurement(root)
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+                root.layout(0, 0, width, height)
+            }
+            val waiting = ReflectionHelpers.getField<View>(host, "connectionPanel")
+            for (text in descendants(waiting).filterIsInstance<TextView>()) {
+                if (text.text.isNullOrBlank() || text.visibility != View.VISIBLE) continue
+                val layout = text.layout ?: continue
+                val room = text.height - text.compoundPaddingTop - text.compoundPaddingBottom
+                assertTrue("Connection text must fit its measured height: ${text.text}",
+                    layout.lineCount == 0 || layout.getLineBottom(layout.lineCount - 1) <= room + 2)
+            }
             writeScreenshot(root, "$name-connecting")
         } finally {
             ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicBoolean>(host, "shuttingDown").set(true)

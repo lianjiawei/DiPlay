@@ -17,16 +17,16 @@ import org.robolectric.util.ReflectionHelpers
 @Config(sdk = [29])
 class HomeCompactLayoutTest {
     @Config(qualifiers = "en-w900dp-h400dp-land")
-    @Test fun compactLandscapeKeepsWirelessAndUsbInSeparateColumns() {
-        verifyCompactArrangement(landscape = true)
+    @Test fun compactLandscapeKeepsTheFooterBelowWirelessControls() {
+        verifyCompactArrangement()
     }
 
     @Config(qualifiers = "en-w400dp-h900dp-port")
     @Test fun compactPortraitStacksWirelessBeforeUsb() {
-        verifyCompactArrangement(landscape = false)
+        verifyCompactArrangement()
     }
 
-    private fun verifyCompactArrangement(landscape: Boolean) {
+    private fun verifyCompactArrangement() {
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
         val activity = controller.get()
         val root = activity.window.decorView
@@ -43,8 +43,12 @@ class HomeCompactLayoutTest {
         val usb = text(R.string.connect_with_usb)
         val connectPosition = IntArray(2).also(connect::getLocationOnScreen)
         val usbPosition = IntArray(2).also(usb::getLocationOnScreen)
-        if (landscape) assertTrue(usbPosition[0] >= connectPosition[0] + connect.width)
-        else assertTrue(usbPosition[1] >= connectPosition[1] + connect.height)
+        assertTrue(usbPosition[1] >= connectPosition[1] + connect.height)
+        val settings = text(R.string.settings)
+        val settingsPosition = IntArray(2).also(settings::getLocationOnScreen)
+        assertEquals("USB and Settings share the footer row", usbPosition[1], settingsPosition[1])
+        assertEquals("Footer actions have equal height", usb.height, settings.height)
+        assertTrue(settingsPosition[0] >= usbPosition[0] + usb.width)
         assertTrue(text(R.string.car_home).visibility == View.VISIBLE)
         assertFalse(descendants(root).filterIsInstance<TextView>().any {
             it.text == activity.getString(R.string.a_familiar_drive) ||
@@ -72,7 +76,7 @@ class HomeCompactLayoutTest {
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).setup().get()
         shadowOf(activity).setInMultiWindowMode(multiWindow)
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
-        val hero = activity.getString(R.string.a_familiar_drive)
+        val hero = activity.getString(R.string.plug_your_iphone_into_a_usb_data_port_allow_carplay_when_y)
         return descendants(activity.window.decorView).filterIsInstance<TextView>().none { it.text == hero }
     }
 
