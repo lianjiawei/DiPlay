@@ -1,0 +1,83 @@
+{
+  "design_version": "v1",
+  "pdf_pages": 16,
+  "page_titles": [
+    "首页 / 已确认的视觉方向",
+    "设计基础 / 材质、色彩与文字",
+    "共享组件 / 形态与状态",
+    "信息架构 / 十类入口完整保留",
+    "连接中 / 状态与光环",
+    "首帧交接 / 成功层退场",
+    "设置概览 / 共享导航壳",
+    "设置详情 / 可复用列表模板",
+    "单选弹窗 / 保留确认语义",
+    "关于与更新 / 空闲维护入口",
+    "存储管理 / 通用信息弹窗",
+    "窄屏 / 单栏自适应",
+    "交互动效 / 从连接到真实首帧",
+    "状态与功能边界 / 视觉层不接管业务",
+    "自适应与可访问性 / 保留现有策略",
+    "交付与后续 / 设计确认后再实现"
+  ],
+  "screens": 9,
+  "baseline_commit": "c9f7c6f9aaf8386e1bf413085fee6bf0c17644f7",
+  "baseline_tag": "pre-ui-redesign-20261020",
+  "source_tree_clean": true,
+  "files": [
+    {
+      "path": "CorsairPlay-UI-Design-v1.pdf",
+      "bytes": 29445344,
+      "sha256": "a46282aa2dfe948687b55fa1f854e402bf73027b86e277d21c612b9d2097cbb2"
+    },
+    {
+      "path": "design-system.json",
+      "bytes": 11752,
+      "sha256": "5428e20b98cd888c5be3dfcb301a47294631384f332f7d0a8913ca07c4041ea5"
+    },
+    {
+      "path": "screens/01-home.png",
+      "bytes": 2239345,
+      "sha256": "b1707e2e00ee5c32cfd76be395dd9bea27106afdb37fc2da56e42dd8a9f80770"
+    },
+    {
+      "path": "screens/02-connecting.png",
+      "bytes": 2156170,
+      "sha256": "fb5a159885cddcb5b19413f638d3b4c9395911fd700493eb37080bea6592ae98"
+    },
+    {
+      "path": "screens/03-first-frame-handoff.png",
+      "bytes": 1568626,
+      "sha256": "20d3e01e01b724911cbe4530ad6fd64043051bddf36e385b415b7308092861b7"
+    },
+    {
+      "path": "screens/04-settings-overview.png",
+      "bytes": 1686509,
+      "sha256": "b38421312222c9afcc03a21e24564937f2b8df404b4132fb7f14314fcea4fe4e"
+    },
+    {
+      "path": "screens/05-display-settings.png",
+      "bytes": 1626496,
+      "sha256": "0b7afcb6947b13d978e49d2ccea5632ade287a51aeb99741dda2e081afe01d11"
+    },
+    {
+      "path": "screens/06-choice-dialog.png",
+      "bytes": 1562748,
+      "sha256": "7b76cdbcfb06eba42da57823b66db70294cbf847273658976bdf36062a203268"
+    },
+    {
+      "path": "screens/07-about-update.png",
+      "bytes": 1683832,
+      "sha256": "358f4ea59090bb6c28c52ff76df3f00cba635b2ad3fa834377d94d4f2e6da9d6"
+    },
+    {
+      "path": "screens/08-storage-dialog.png",
+      "bytes": 1592818,
+      "sha256": "2073de5bf7cb6c6fbd68858597a4868aaa842a7b2a640d18bf1755b6f25bc2b3"
+    },
+    {
+      "path": "screens/09-compact-display.png",
+      "bytes": 1642722,
+      "sha256": "c87d33ae44c1b731feb59934748a0be6fbc7f71fcd6c46bfc2f7bc699d9e0422"
+    }
+  ]
+}

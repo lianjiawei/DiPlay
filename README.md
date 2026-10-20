@@ -51,6 +51,10 @@
 
 分发修改后的 APK 时，请保留原许可证、版权说明和对应源代码，不要删除原有署名。中文说明见 [LICENSE-NOTICE.zh-CN.md](LICENSE-NOTICE.zh-CN.md)。
 
+## UI 设计与实现资料
+
+[设计与实装资料总览](docs/ui-redesign/README.md)：包含完整设计稿、设计规范、实装截图和回归记录，供后续统一优化对照。
+
 ## 下载与反馈
 
 - 最新版本：https://github.com/lianjiawei/DiPlay/releases/latest

@@ -1,0 +1,324 @@
+{
+  "title": "CorsairPlay 整体 UI 与交互设计规范",
+  "version": "v1",
+  "date": "2026-10-20 Asia/Shanghai",
+  "status": "Design review draft; homepage direction accepted; extension screens and tokens awaiting review",
+  "scope": "Design only. No app source, runtime functionality, APK, settings defaults or release changes.",
+  "baseline": {
+    "commit": "c9f7c6f9aaf8386e1bf413085fee6bf0c17644f7",
+    "tag": "pre-ui-redesign-20261020",
+    "working_tree_clean": true
+  },
+  "vehicle": "Black Lincoln Corsair / 黑色林肯冒险家",
+  "design_canvas": {
+    "landscape_px": [
+      1600,
+      960
+    ],
+    "compact_portrait_px": [
+      960,
+      1600
+    ],
+    "note": "Generated design references vary slightly in output size. Preserve native aspect ratio; actual layout uses dp, not screenshot pixels."
+  },
+  "tokens": {
+    "base_midnight": "#273E55",
+    "base_steel": "#49647E",
+    "reading_backing": "#23394F",
+    "text_primary": "#F4F7FB",
+    "text_secondary": "#C7D7E8",
+    "accent": "#66C8FF",
+    "primary_ink": "#102D4B",
+    "focus": "#A1E8FF",
+    "success": "#66DBA3",
+    "warning": "#F6C36A",
+    "error": "#FFB0AC",
+    "disabled_text": "#A5B8C9",
+    "light_base_draft": "#E7EFF6",
+    "light_text_draft": "#172E43"
+  },
+  "dimensions": {
+    "unit": "dp; typography in sp",
+    "preferred_touch_height": 56,
+    "minimum_touch_target": 48,
+    "button_radius": "height / 2; same height => same radius",
+    "dialog_radius": 28,
+    "content_margin_compact": 20,
+    "content_margin_expanded": 32,
+    "gap_small": 8,
+    "gap_control": 12,
+    "gap_group": 24,
+    "dialog_padding": 24,
+    "body_text": 20,
+    "description_text": 16,
+    "action_text": 22,
+    "page_title": 28,
+    "home_title_range": [
+      28,
+      36
+    ],
+    "switch_track": [
+      60,
+      34
+    ],
+    "switch_thumb": 28,
+    "expanded_min_width": 840,
+    "expanded_min_height": 400,
+    "overview_two_columns_min_width": 1000,
+    "rail_width": 240,
+    "font_scale_policy": "Preserve existing SettingsLayoutPolicy scaling and forced-layout fallback"
+  },
+  "motion": [
+    [
+      "按钮反馈",
+      "按下 / 抬起",
+      "90 ms / 120 ms",
+      "只改变亮度与边缘高光；无布局位移；失焦恢复原状态。"
+    ],
+    [
+      "连接光环",
+      "当前有效会话正在连接",
+      "约 1200 ms / 圈，线性",
+      "仅高光弧旋转，手机图标与车图静止；不表示完成百分比。"
+    ],
+    [
+      "阶段文字",
+      "实际状态发生改变",
+      "120 ms 淡入",
+      "替换局部文字，稳定保留卡片高度；不整页重建、不伪造阶段。"
+    ],
+    [
+      "首帧交接",
+      "当前会话首帧确已渲染",
+      "200 ms 淡出",
+      "停止光环，成功符号收束与淡出并行；没有额外停留或确认按钮。"
+    ],
+    [
+      "页面切换",
+      "用户打开分类 / 返回",
+      "140 ms 内容淡入",
+      "标题与导航壳保持稳定；保留原有返回、滚动及焦点语义。"
+    ],
+    [
+      "玻璃弹窗",
+      "打开 / 关闭",
+      "160 ms / 120 ms",
+      "仅上层透明度与最多 8 dp 位移；不重建底层页面。"
+    ],
+    [
+      "开关与选择",
+      "用户操作现有控件",
+      "140 ms",
+      "按既有保存 / 取消 / 重连时机回调；动效不改变提交行为。"
+    ],
+    [
+      "断开与重连",
+      "收到现有状态通知",
+      "局部 120 ms",
+      "显示原有恢复动作；不新增超时、重试次数或后台启动策略。"
+    ],
+    [
+      "减少动画",
+      "系统动画关闭或不可用",
+      "0 ms",
+      "直接呈现最终状态；无需新增开关；功能入口与可用性不变。"
+    ]
+  ],
+  "categories": [
+    [
+      "概览",
+      "连接状态、四个常用设置、分类入口",
+      "只保留现有快捷项；与完整设置共用同一存储。"
+    ],
+    [
+      "连接",
+      "设置连接、自动连接、USB、车机热点、权限与帮助",
+      "保留手动引导入口；不恢复自动新装引导。"
+    ],
+    [
+      "显示",
+      "应用外观、CarPlay 日夜、画面、尺寸、分辨率、帧率等",
+      "应用外观与手机提供的 CarPlay 外观分别呈现。"
+    ],
+    [
+      "音频",
+      "媒体 / 导航路由、音量与压低等现有选项",
+      "所有音频逻辑及生效时机沿用现有实现。"
+    ],
+    [
+      "导航",
+      "位置报告、Lincoln 仪表、可用车型的导航输出",
+      "保留 Lincoln / BYD 等原有车型条件，不跨车型显示。"
+    ],
+    [
+      "车辆",
+      "驾驶侧、方向盘按键、车辆按钮等现有控制",
+      "学习、授权和按键映射流程保持原样。"
+    ],
+    [
+      "诊断",
+      "保存报告、选择位置、手机查看、FPS 显示",
+      "导出格式、权限、隐私边界和已有路径不改。"
+    ],
+    [
+      "高级",
+      "实验显示、媒体、仪表地图、导航滚轮、氛围灯",
+      "保留实验性标识、条件可见性和风险说明。"
+    ],
+    [
+      "语言",
+      "全部已有语言与 RTL 布局",
+      "保留语言列表、选择与返回行为。"
+    ],
+    [
+      "关于",
+      "更新、历史 APK、后台检查、存储、备份与开源致谢",
+      "现有下载 / 校验 / 安装及清理策略均不变。"
+    ]
+  ],
+  "existing_section_mapping": {
+    "OVERVIEW": [],
+    "ABOUT": [],
+    "LANGUAGE": [
+      "LANGUAGE"
+    ],
+    "CONNECTION": [
+      "CONNECTION_SETUP",
+      "AUTOMATIC_CONNECTION",
+      "USB_CONNECTION",
+      "BYD_ADB",
+      "PERMISSIONS_AND_HELP"
+    ],
+    "DISPLAY": [
+      "DISPLAY_AND_PERFORMANCE"
+    ],
+    "AUDIO": [
+      "AUDIO_ROUTING"
+    ],
+    "NAVIGATION": [
+      "LOCATION",
+      "BYD_NAVIGATION",
+      "LINCOLN_CLUSTER"
+    ],
+    "VEHICLE": [
+      "CARPLAY_CONTROLS",
+      "WHEEL_KEYS",
+      "CAR_BUTTON"
+    ],
+    "DIAGNOSTICS": [
+      "DIAGNOSTICS"
+    ],
+    "ADVANCED": [
+      "CLUSTER_MAP",
+      "EXPERIMENTAL_DISPLAY",
+      "ADVANCED_MEDIA",
+      "NAVIGATION_WHEEL",
+      "AMBIENT_LIGHTING"
+    ]
+  },
+  "screens": [
+    {
+      "file": "screens/01-home.png",
+      "title": "首页 / 已确认的视觉方向",
+      "description": "打开应用后的准备状态；黑色林肯冒险家、蓝灰暮色、玻璃操作层。",
+      "notes": [
+        "当前手机、无线连接、USB、设置、车机主页入口继续可用。",
+        "图片是设计效果；正式实现需按窗口重排，不能将整张图当作可点击 UI。"
+      ],
+      "sha256": "b1707e2e00ee5c32cfd76be395dd9bea27106afdb37fc2da56e42dd8a9f80770"
+    },
+    {
+      "file": "screens/02-connecting.png",
+      "title": "连接中 / 状态与光环",
+      "description": "真实连接状态驱动局部呈现；光环高光弧慢速旋转。",
+      "notes": [
+        "“打开 CarPlay”和“断开连接”沿用已有会话动作，不新增连接策略。",
+        "动画只表现进程，不暗示完成比例；权限或失败时停止旋转并显示现有指引。"
+      ],
+      "sha256": "fb5a159885cddcb5b19413f638d3b4c9395911fd700493eb37080bea6592ae98"
+    },
+    {
+      "file": "screens/03-first-frame-handoff.png",
+      "title": "首帧交接 / 成功层退场",
+      "description": "视频首帧已渲染时显示短暂成功反馈，并立即开始 200 ms 淡出。",
+      "notes": [
+        "底层 CarPlay 图标与模糊仅为过渡示意，非真机采集、非视频渲染方案。",
+        "实际只处理上层遮罩；不模糊、不缩放视频，不新增停留，不拦截已准备好的触控。"
+      ],
+      "sha256": "20d3e01e01b724911cbe4530ad6fd64043051bddf36e385b415b7308092861b7"
+    },
+    {
+      "file": "screens/04-settings-overview.png",
+      "title": "设置概览 / 共享导航壳",
+      "description": "宽窗口模板：侧栏与内容独立滚动；四个快捷项保持同源。",
+      "notes": [
+        "侧栏全部十类均保留；截图以滚动位置表达局部列表，未显示项并未删除。",
+        "双栏示意按约 1200×720 dp 宽窗口理解；窄窗口按现有策略转单栏。"
+      ],
+      "sha256": "b38421312222c9afcc03a21e24564937f2b8df404b4132fb7f14314fcea4fe4e"
+    },
+    {
+      "file": "screens/05-display-settings.png",
+      "title": "设置详情 / 可复用列表模板",
+      "description": "统一图标、行高、值、说明、分隔线和条件重连提示。",
+      "notes": [
+        "应用外观影响应用；CarPlay 日夜控制投屏外观。列表只显示当前视口，剩余选项向下滚动。",
+        "重连条仅在既有待重连状态时出现；为它预留布局空间，不能覆盖列表。"
+      ],
+      "sha256": "0b7afcb6947b13d978e49d2ccea5632ade287a51aeb99741dda2e081afe01d11"
+    },
+    {
+      "file": "screens/06-choice-dialog.png",
+      "title": "单选弹窗 / 保留确认语义",
+      "description": "单选行、待选状态、取消与正向操作组成统一的玻璃弹窗。",
+      "notes": [
+        "单选点击仅改变待选项；确认时才调用既有保存逻辑；取消保持原值。",
+        "有会话且原控件要求重连时，按钮保留“应用并重新连接”；其他场景保留原文案。"
+      ],
+      "sha256": "7b76cdbcfb06eba42da57823b66db70294cbf847273658976bdf36062a203268"
+    },
+    {
+      "file": "screens/07-about-update.png",
+      "title": "关于与更新 / 空闲维护入口",
+      "description": "现有版本信息、友好离线提示、历史下载、后台检查、清理与备份入口。",
+      "notes": [
+        "precision.8 是基线版本示意；本次没有发布新版本，也没有更改更新机制。",
+        "备份、开源和认证说明继续保留；离线提示局部刷新，不弹整页，不影响 CarPlay。"
+      ],
+      "sha256": "358f4ea59090bb6c28c52ff76df3f00cba635b2ad3fa834377d94d4f2e6da9d6"
+    },
+    {
+      "file": "screens/08-storage-dialog.png",
+      "title": "存储管理 / 通用信息弹窗",
+      "description": "更稳定的阅读底色、清楚的容量信息和相同高度的玻璃操作按钮。",
+      "notes": [
+        "容量与文件数量均为示意数据；保留两版、24 小时临时清理及安装文件保护策略不变。",
+        "手动清理沿用原动作，不新增二次确认；正在使用和等待安装的文件继续受保护。"
+      ],
+      "sha256": "2073de5bf7cb6c6fbd68858597a4868aaa842a7b2a640d18bf1755b6f25bc2b3"
+    },
+    {
+      "file": "screens/09-compact-display.png",
+      "title": "窄屏 / 单栏自适应",
+      "description": "窄窗口示意：取消侧栏，保留返回设置、搜索、外观与完整滚动列表。",
+      "notes": [
+        "不能按屏幕物理分辨率决定布局；依照可用 dp、字体缩放和原有布局偏好。",
+        "文字自然换行、行高随内容增长；此图是静态方案，尚非运行回归结果。"
+      ],
+      "sha256": "c87d33ae44c1b731feb59934748a0be6fbc7f71fcd6c46bfc2f7bc699d9e0422"
+    }
+  ],
+  "pending_validation": [
+    "Runtime animation smoothness and SurfaceView composition",
+    "Real head-unit touch and focus behavior",
+    "Every existing locale, conditional vehicle section and screen size after implementation",
+    "Light/automatic appearance final visual review and resource preparation"
+  ],
+  "non_changes": [
+    "Connection, USB, Wi-Fi, Bluetooth and authentication logic",
+    "Decoder, stream content and SurfaceView geometry",
+    "Vehicle/instrument functions and availability gates",
+    "Settings keys, defaults, confirmation and effective timing",
+    "Update verification, installation, history retention and cleanup rules"
+  ]
+}

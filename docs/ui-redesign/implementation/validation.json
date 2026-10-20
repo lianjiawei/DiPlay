@@ -1,0 +1,51 @@
+{
+  "source_commit": "1f297f4b22fbcb4177096ba17c3cb6101abae51b",
+  "unit_tests": {
+    "shared": {
+      "tests": 1609,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "common": {
+      "tests": 1724,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "samples/home": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "unit_test_total": 3339,
+  "lint": {
+    "mobile": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 9,
+      "Information": 0
+    },
+    "samples/home": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 7,
+      "Information": 0
+    },
+    "samples/maphost": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 1,
+      "Information": 0
+    }
+  },
+  "resolution_configurations": 9,
+  "resolution_states": 594,
+  "full_ci_passed": true,
+  "source_snapshot_commit": "7d4a4d66dc31fef58147de1a0547ca6f8b0b4468",
+  "physical_device_verified": false,
+  "screenshot_kind": "Native Android rendering captures; UI preview package version; no real iPhone stream",
+  "reproduce": "./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest :mobile:lintDebug :home:lintDebug :maphost:lintDebug :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug"
+}
