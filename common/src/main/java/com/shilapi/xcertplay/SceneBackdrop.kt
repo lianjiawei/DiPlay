@@ -29,8 +29,9 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
             bounds.exactCenterX() + width / 2, bounds.exactCenterY() + height / 2)
         paint.shader = null
         canvas.drawBitmap(bitmap, null, destination, paint)
-        if (quiet) {
-            canvas.drawColor((color and 0x00FFFFFF) or (0xDA shl 24))
+        if (quiet || bounds.height() > bounds.width()) {
+            val readingVeil = if (night) 0xDA else 0xF0
+            canvas.drawColor((color and 0x00FFFFFF) or (readingVeil shl 24))
         } else {
             if (!night) canvas.drawColor(Color.argb(180, 231, 239, 246))
             paint.shader = LinearGradient(bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,

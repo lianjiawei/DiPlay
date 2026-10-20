@@ -54,7 +54,28 @@ class GlassUiRegressionTest {
     @Test @Config(qualifiers = "ar-ldrtl-w320dp-h600dp-port-mdpi")
     fun compactControlsWithLargeRtlText() = capture("compact-ar-rtl", 1.3f)
 
+    @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-mdpi")
+    fun portraitReadingSurfaceKeepsSecondaryTextLegibleInBothThemes() {
+        for (night in listOf(true, false)) {
+            val palette = DiPlayPalette.of(night)
+            val backdrop = SceneBackdrop(app, night, quiet = false)
+            backdrop.setBounds(0, 0, 320, 600)
+            val bitmap = Bitmap.createBitmap(320, 600, Bitmap.Config.ARGB_8888)
+            try {
+                backdrop.draw(Canvas(bitmap))
+                for (y in 0 until bitmap.height step 20) for (x in 0 until bitmap.width step 20) {
+                    assertTrue("Photo must not wash out secondary text (night=$night, x=$x, y=$y)",
+                        androidx.core.graphics.ColorUtils.calculateContrast(palette.secondaryText, bitmap.getPixel(x, y)) >= 4.5)
+                }
+            } finally { bitmap.recycle() }
+        }
+    }
+
     private fun capture(name: String, scale: Float) {
+        // A native-rendering preview is not a published application version.
+        val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
+        packageInfo.versionName = "UI preview"
+        shadowOf(app.packageManager).installPackage(packageInfo)
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
         DiPlayPreferences.saveAutoConnect(app, false)
