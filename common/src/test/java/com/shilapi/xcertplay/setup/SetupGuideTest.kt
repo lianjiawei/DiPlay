@@ -97,9 +97,9 @@ class SetupGuideTest {
         assertFalse(SetupGuide.hasConflictingClusterRoute(DiLinkGeneration.DILINK_4, true))
     }
 
-    @Test fun guideOpensByItselfOnlyOnAFreshSetup() {
-        assertTrue(SetupGuide.shouldOpenOnLaunch(seen = false, phoneChosen = false))
-        assertFalse(SetupGuide.shouldOpenOnLaunch(seen = false, phoneChosen = true))
-        assertFalse(SetupGuide.shouldOpenOnLaunch(seen = true, phoneChosen = false))
+    @Test fun generationDefaultsAreOnlyAppliedDuringTheFirstSetup() {
+        assertTrue(SetupGuide.isFirstSetup(seen = false, phoneChosen = false))
+        assertFalse(SetupGuide.isFirstSetup(seen = false, phoneChosen = true))
+        assertFalse(SetupGuide.isFirstSetup(seen = true, phoneChosen = false))
     }
 }

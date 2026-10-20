@@ -57,7 +57,7 @@ object SetupGuide {
      * re-runs the guide, or set DiPlay up before the guide existed, keeps the routing left on automatic.
      */
     fun applyFirstSetupDefaults(context: Context, generation: DiLinkGeneration, phoneChosen: Boolean): Boolean =
-        shouldOpenOnLaunch(seen(context), phoneChosen) && applyGenerationDefaults(context, generation)
+        isFirstSetup(seen(context), phoneChosen) && applyGenerationDefaults(context, generation)
 
     private fun prefs(context: Context) = context.getSharedPreferences("diplay", Context.MODE_PRIVATE)
 
@@ -67,6 +67,6 @@ object SetupGuide {
         prefs(context).edit().putBoolean("setup_guide_seen", true).apply()
     }
 
-    /** Only a first launch opens the guide by itself; anyone with a saved iPhone has already set up. */
-    fun shouldOpenOnLaunch(seen: Boolean, phoneChosen: Boolean): Boolean = !seen && !phoneChosen
+    /** Used only when the driver explicitly confirms the car in the guide. */
+    fun isFirstSetup(seen: Boolean, phoneChosen: Boolean): Boolean = !seen && !phoneChosen
 }

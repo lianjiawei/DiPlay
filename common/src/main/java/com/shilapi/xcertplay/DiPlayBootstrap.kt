@@ -70,13 +70,13 @@ internal object DiPlayPreferences {
         prefs(context).edit().putString("phone_address", address).putString("phone_name", name).apply()
     }
     fun defaultConnectionMode(context: Context) =
-        DefaultConnectionMode.fromKey(prefs(context).getString("default_connection_mode", null))
+        DefaultConnectionMode.fromKey(prefs(context).getString("default_connection_mode", DefaultConnectionMode.USB.key))
     fun saveDefaultConnectionMode(context: Context, mode: DefaultConnectionMode) {
         prefs(context).edit().putString("default_connection_mode", mode.key).apply()
     }
     fun autoConnectWireless(context: Context) =
         defaultConnectionMode(context).wireless(AirPlayPersistence.loadWirelessEnabled(context))
-    fun autoConnect(context: Context) = prefs(context).getBoolean("auto_connect", false)
+    fun autoConnect(context: Context) = prefs(context).getBoolean("auto_connect", true)
     fun saveAutoConnect(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean("auto_connect", value).apply()
     }

@@ -77,10 +77,14 @@ class DefaultConnectionModeTest {
         controller.pause().stop().destroy()
     }
 
-    @Test fun existingInstallationsKeepLastUsedBehaviorAndUnknownValuesFallBack() {
+    @Test fun unsetPreferencesEnableBootLaunchAndUsbAutoConnectWhileUnknownModesFallBack() {
+        assertTrue(AirPlayPersistence.loadAutoStartOnBoot(app))
+        assertTrue(DiPlayPreferences.autoConnect(app))
         for (lastWireless in listOf(false, true)) {
+            app.getSharedPreferences("diplay", 0).edit().remove("default_connection_mode").commit()
             AirPlayPersistence.saveWirelessEnabled(app, lastWireless)
-            assertEquals(lastWireless, DiPlayPreferences.autoConnectWireless(app))
+            assertEquals(DefaultConnectionMode.USB, DiPlayPreferences.defaultConnectionMode(app))
+            assertFalse(DiPlayPreferences.autoConnectWireless(app))
             app.getSharedPreferences("diplay", 0).edit()
                 .putString("default_connection_mode", "future_mode").commit()
             assertEquals(DefaultConnectionMode.LAST_USED, DiPlayPreferences.defaultConnectionMode(app))
@@ -89,6 +93,7 @@ class DefaultConnectionModeTest {
     }
 
     @Test fun fixedDefaultSurvivesManualTransportChangesWithoutChangingAutoConnectOrPhone() {
+        DiPlayPreferences.saveAutoConnect(app, false)
         DiPlayPreferences.savePhone(app, "00:11:22:33:44:55", "Test iPhone")
         val expectedModes = mapOf(
             DefaultConnectionMode.LAST_USED to listOf(false, true),
@@ -109,6 +114,7 @@ class DefaultConnectionModeTest {
     }
 
     @Test fun settingsSavePersistsChoiceAndCancelKeepsSavedDefault() {
+        DiPlayPreferences.saveAutoConnect(app, false)
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)
         val controls = LinearLayout(activity)

@@ -440,8 +440,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupStep = savedInstanceState?.getInt("setup_step") ?: SetupGuide.STEP_CAR
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page")
-            ?: if (setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
-                    DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
+            ?: "home"
         render()
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
