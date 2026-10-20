@@ -200,6 +200,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var pendingWireless = false
     private var bluetoothSettingsVisited = false
     private var initialLaunch = true
+    private var launchAutoConnectPending = false
     private var notificationTransport = true
     private var exportInProgress = false
     private var usbPermissionOperation: UsbPermissionSetup.Operation? = null
@@ -569,13 +570,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (initialLaunch) {
             initialLaunch = false
             startCarHotspotOnLaunch()
-            if (setupError == null && !CarPlayBackgroundSession.hasSession() &&
-                DiPlayPreferences.autoConnect(this) && intent.getStringExtra("page") == null && page != "setup") {
-                handler.post { connect(DiPlayPreferences.autoConnectWireless(this)) }
-            }
+            connectAutomaticallyOnLaunch()
         }
         if (updatePromptForDownload) handler.post { refreshUpdatePrompt() }
     }
+
+    private fun canAutoConnectOnLaunch(): Boolean =
+        !isFinishing && !isDestroyed && setupError == null &&
+            !CarPlayBackgroundSession.hasSession() && DiPlayPreferences.autoConnect(this) &&
+            !intent.hasExtra("page") && page == "home"
+
+    private fun connectAutomaticallyOnLaunch() {
+        if (launchAutoConnectPending || !canAutoConnectOnLaunch()) return
+        launchAutoConnectPending = true
+        handler.post {
+            launchAutoConnectPending = false
+            // Permission/setup or another startup entry may have advanced while this was queued.
+            // Never stop an existing session just to prefer the cable.
+            if (!canAutoConnectOnLaunch()) return@post
+            connect(wireless = !PreattachedIphone.isAttached(this) && DiPlayPreferences.autoConnectWireless(this))
+        }
+    }
+
     override fun onPause() {
         updatePromptResumed = false
         handler.removeCallbacks(automaticUpdatePrompt)
