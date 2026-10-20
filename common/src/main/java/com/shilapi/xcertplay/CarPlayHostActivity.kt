@@ -144,6 +144,11 @@ class CarPlayHostActivity : ComponentActivity() {
     )
 
     private var connectionPanel: View? = null
+    private var connectionRing: ConnectionRingView? = null
+    private var framePresentation: FirstFramePresentation? = null
+    private var presentedFrameGeneration = -1
+    private var presentedFrameSession: AirPlaySession? = null
+    private val connectionVisualTick = Runnable { updateDebugOverlays() }
     private var connectionInstructionsView: TextView? = null
     private var connectionHelpView: TextView? = null
     private var connectionTitleView: TextView? = null
@@ -1077,6 +1082,7 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onResume()
         WheelKeyService.restoreIfNeeded(this)
         hostAppearanceResumed = true
+        updateDebugOverlays()
         updateCallPopupGuard()
         val savedNightMode = AirPlayPersistence.loadCarPlayNightMode(this)
         val savedThreshold = AirPlayPersistence.loadAmbientLightThreshold(this)
@@ -1629,6 +1635,9 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        mainHandler.removeCallbacks(connectionVisualTick)
+        framePresentation?.finish()
+        connectionRing?.state(connecting = false)
         hostAppearanceResumed = false
         updateCallPopupGuard()
         AppAppearanceRuntime.clearHost(this)
@@ -1731,6 +1740,8 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(connectionVisualTick)
+        framePresentation?.finish()
         discardLastPicture()
         if (pictureCopyThreadStarted) pictureCopyThread.quitSafely()
         resetSidePanel()
@@ -1821,7 +1832,10 @@ class CarPlayHostActivity : ComponentActivity() {
             override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
                 super.onMeasure(widthMeasureSpec, heightMeasureSpec)
                 getChildAt(0)?.measure(
-                    View.MeasureSpec.makeMeasureSpec((measuredWidth - paddingLeft - paddingRight).coerceAtLeast(0), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(
+                        ((measuredWidth - paddingLeft - paddingRight).coerceAtLeast(0) *
+                            if (measuredWidth > measuredHeight * 1.3f) CONNECTION_CONTENT_SHARE else 1f).toInt(),
+                        View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 )
             }
@@ -1832,12 +1846,15 @@ class CarPlayHostActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
+        val ring = ConnectionRingView(this).apply { appearance(appNight); state(connecting = true) }
+        connectionRing = ring
+        panel.addView(ring, LinearLayout.LayoutParams(dp(88), dp(88)))
         val icon = ImageView(this).apply {
             VehicleBranding.setLogo(this)
             contentDescription = VehicleBranding.displayName(context)
         }
         connectionIconView = icon
-        panel.addView(icon, LinearLayout.LayoutParams(dp(88), dp(88)))
+        panel.addView(icon, LinearLayout.LayoutParams(dp(24), dp(24)))
         val title = TextView(this).apply {
             text = VehicleBranding.displayName(context)
             gravity = Gravity.CENTER
@@ -1897,7 +1914,8 @@ class CarPlayHostActivity : ComponentActivity() {
         paintWaitingScreen = {
             // The connection screen is DiPlay chrome: follow the app theme, not the day/night mode sent to CarPlay.
             val colors = WaitingScreenColors.of(appNight)
-            viewport.setBackgroundColor(colors.background)
+            viewport.background = SceneBackdrop(this, appNight, quiet = false)
+            ring.appearance(appNight)
             title.setTextColor(colors.text)
             stage.setTextColor(colors.text)
             instructions.setTextColor(colors.secondary)
@@ -1909,10 +1927,45 @@ class CarPlayHostActivity : ComponentActivity() {
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
-        viewport.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+        viewport.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.LEFT or Gravity.CENTER_VERTICAL))
         root.addView(viewport, FrameLayout.LayoutParams(-1, -1))
         // Added after the preparation viewport so the existing video/gesture/viewport order stays stable.
         root.addView(cornerMask, FrameLayout.LayoutParams(0, 0))
+        val readyBadge = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            isClickable = false; isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            setPadding(dp(GlassChrome.GROUP_GAP_DP), dp(GlassChrome.CONTROL_GAP_DP),
+                dp(GlassChrome.GROUP_GAP_DP), dp(GlassChrome.CONTROL_GAP_DP))
+            val palette = DiPlayPalette.of(appNight)
+            background = GlassChrome.surface(palette.surface, palette.outline, resources.displayMetrics.density,
+                dp(GlassChrome.DIALOG_RADIUS_DP).toFloat())
+            addView(ConnectionRingView(this@CarPlayHostActivity).apply {
+                appearance(appNight); state(connecting = false, completed = true)
+            }, LinearLayout.LayoutParams(dp(56), dp(56)))
+            addView(TextView(this@CarPlayHostActivity).apply {
+                text = brandString(R.string.carplay_connected); textSize = 22f
+                setTextColor(palette.primaryText); gravity = Gravity.CENTER
+            })
+            addView(TextView(this@CarPlayHostActivity).apply {
+                text = brandString(R.string.ui_glass_video_ready); textSize = 16f
+                setTextColor(palette.secondaryText); gravity = Gravity.CENTER
+            })
+            visibility = View.GONE
+        }
+        root.addView(readyBadge, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        framePresentation = FirstFramePresentation(viewport, readyBadge)
+        val repaintWaiting = paintWaitingScreen
+        paintWaitingScreen = {
+            repaintWaiting()
+            val palette = DiPlayPalette.of(appNight)
+            readyBadge.background = GlassChrome.surface(palette.surface, palette.outline,
+                resources.displayMetrics.density, dp(GlassChrome.DIALOG_RADIUS_DP).toFloat())
+            (readyBadge.getChildAt(0) as ConnectionRingView).appearance(appNight)
+            (readyBadge.getChildAt(1) as TextView).setTextColor(palette.primaryText)
+            (readyBadge.getChildAt(2) as TextView).setTextColor(palette.secondaryText)
+        }
         // Above the video and gesture layer, below the menus.
         sidePanelBlur = ImageView(this).apply {
             visibility = View.GONE
@@ -1928,7 +1981,8 @@ class CarPlayHostActivity : ComponentActivity() {
             val fraction = ((height.toFloat() / resources.displayMetrics.density - 240f) / 240f).coerceIn(0f, 1f)
             fun size(short: Float, regular: Float) = short + (regular - short) * fraction
             fun spacing(short: Float, regular: Float) = dp(size(short, regular).toInt())
-            val availableWidth = viewport.width - viewport.paddingLeft - viewport.paddingRight - dp(48)
+            val contentShare = if (viewport.width > viewport.height * 1.3f) CONNECTION_CONTENT_SHARE else 1f
+            val availableWidth = ((viewport.width - viewport.paddingLeft - viewport.paddingRight) * contentShare).toInt() - dp(48)
             val buttonWidth = minOf(dp(300), availableWidth.coerceAtLeast(dp(48)))
             for (button in listOf(back, recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
@@ -1939,7 +1993,7 @@ class CarPlayHostActivity : ComponentActivity() {
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
             val iconSize = spacing(54f, 88f)
-            icon.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+            ring.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             title.textSize = size(26f, 34f)
             title.setPadding(0, spacing(8f, 18f), 0, spacing(6f, 14f))
             stage.textSize = size(19f, 22f)
@@ -5111,6 +5165,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     activeAirPlaySession = session
                     CarPlayBackgroundSession.active = true
                     showConnectionHelp(null)
+                    stageStatusView?.text = brandString(R.string.ui_glass_video_preparing)
                     callPopupSessionReady = true
                     updateCallPopupGuard()
                     reconnectAttempts = 0
@@ -5130,6 +5185,7 @@ class CarPlayHostActivity : ComponentActivity() {
             override fun onVideoFrameRendered(session: AirPlaySession) {
                 runOnUiThread {
                     if (controllerGeneration != restartGeneration || activeAirPlaySession !== session || shuttingDown.get()) return@runOnUiThread
+                    updateDebugOverlays()
                     if (!startupRetryBudget.firstFrame(session, android.os.SystemClock.elapsedRealtime())) return@runOnUiThread
                     mainHandler.postDelayed({
                         if (controllerGeneration == restartGeneration && activeAirPlaySession === session &&
@@ -5876,6 +5932,7 @@ class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(reason)
         Log.i(TAG, "$reason; rebuilding stack at ${size.width}x${size.height}")
         val generation = ++restartGeneration
+        updateDebugOverlays()
         handshakeResetInProgress = true
         callPopupSessionReady = false
         updateCallPopupGuard()
@@ -6410,7 +6467,27 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun updateDebugOverlays() {
         statusScrollView?.visibility = View.GONE
-        connectionPanel?.visibility = if (activeScreenStreamTypes.isEmpty()) View.VISIBLE else View.GONE
+        mainHandler.removeCallbacks(connectionVisualTick)
+        if (shuttingDown.get() || isDestroyed) return
+        val session = activeAirPlaySession
+        // The controller's first-frame notification can belong to the instrument stream.
+        // Observe main-screen counters only; the media engine and its callbacks remain unchanged.
+        val mainPictureReady = session != null && SCREEN_TYPE_MAIN in activeScreenStreamTypes &&
+            (sink?.liveVideoCounters()?.rendered ?: 0L) > 0L
+        if (mainPictureReady && (presentedFrameGeneration != restartGeneration || presentedFrameSession !== session)) {
+            presentedFrameGeneration = restartGeneration
+            presentedFrameSession = session
+            connectionRing?.state(connecting = false, completed = true)
+            framePresentation?.firstFrame(ConnectionRingView.motionEnabled(this))
+        } else if (session == null || activeScreenStreamTypes.isEmpty() ||
+            presentedFrameGeneration != restartGeneration || presentedFrameSession !== session) {
+            presentedFrameSession = null
+            framePresentation?.waiting()
+            connectionRing?.state(connecting = !startupRetryStopped && !menuOpen && hostAppearanceResumed)
+        }
+        if (connectionPanel?.visibility == View.VISIBLE && hostAppearanceResumed && !startupRetryStopped) {
+            mainHandler.postDelayed(connectionVisualTick, CONNECTION_VISUAL_POLL_MILLIS)
+        }
     }
 
     // The keywords are English; matching the English text keeps the result the same in every UI language.
@@ -6553,6 +6630,8 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private companion object {
+        private const val CONNECTION_CONTENT_SHARE = .54f
+        private const val CONNECTION_VISUAL_POLL_MILLIS = 100L
         const val CLUSTER_SMALL_WINDOW_ON = 1
         const val CLUSTER_SMALL_WINDOW_AUTO = 2
         const val SIDE_PANEL_REFRESH_MILLIS = 5_000L

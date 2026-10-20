@@ -1,0 +1,5 @@
+<resources>
+    <string name="ui_glass_home_title">Ready, set, go</string>
+    <string name="ui_glass_video_preparing">Preparing the CarPlay picture…</string>
+    <string name="ui_glass_video_ready">Showing CarPlay</string>
+</resources>

@@ -1,0 +1,5 @@
+<resources>
+    <string name="ui_glass_home_title">Всё готово, в путь</string>
+    <string name="ui_glass_video_preparing">Подготовка изображения CarPlay…</string>
+    <string name="ui_glass_video_ready">Отображение CarPlay</string>
+</resources>

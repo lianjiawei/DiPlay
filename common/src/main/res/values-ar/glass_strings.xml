@@ -1,0 +1,5 @@
+<resources>
+    <string name="ui_glass_home_title">استعد للانطلاق</string>
+    <string name="ui_glass_video_preparing">جارٍ تجهيز شاشة CarPlay…</string>
+    <string name="ui_glass_video_ready">جارٍ عرض CarPlay</string>
+</resources>
