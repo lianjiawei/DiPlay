@@ -1167,11 +1167,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             contentDescription = brandString(R.string.settings_open_category, title)
             background = android.graphics.drawable.RippleDrawable(
                 ColorStateList.valueOf(RIPPLE),
-                GradientDrawable().apply {
-                    setColor(if (selected) RAIL_SELECTED else Color.TRANSPARENT)
-                    cornerRadius = dp(12).toFloat()
-                    if (selected) setStroke(dp(1), RAIL_SELECTED_BORDER)
-                },
+                if (selected) GlassChrome.surface(RAIL_SELECTED, RAIL_SELECTED_BORDER,
+                    resources.displayMetrics.density, dp(GlassChrome.CONTROL_GAP_DP).toFloat())
+                else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),
                 null,
             )
             setPadding(dp(8), 0, dp(12), 0)

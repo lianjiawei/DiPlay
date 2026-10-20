@@ -23,11 +23,17 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#66C8FF</item>
         <item name="android:windowBackground">@drawable/glass_dialog_dark</item>
+        <item name="android:buttonBarPositiveButtonStyle">@style/Widget.Xcertplay.Glass.Primary.Dark</item>
+        <item name="android:buttonBarNegativeButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Dark</item>
+        <item name="android:buttonBarNeutralButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Dark</item>
     </style>
     <style name="Theme.Xcertplay.Dialog.Light" parent="android:Theme.Material.Light.Dialog.Alert">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#1A609F</item>
         <item name="android:windowBackground">@drawable/glass_dialog_light</item>
+        <item name="android:buttonBarPositiveButtonStyle">@style/Widget.Xcertplay.Glass.Primary.Light</item>
+        <item name="android:buttonBarNegativeButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Light</item>
+        <item name="android:buttonBarNeutralButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Light</item>
     </style>
     <style name="Theme.AdbCluster" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
@@ -35,5 +41,29 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowDisablePreview">true</item>
+    </style>
+    <style name="Widget.Xcertplay.Glass" parent="android:Widget.Material.Button.Borderless">
+        <item name="android:minHeight">@dimen/glass_action_min_height</item>
+        <item name="android:minWidth">@dimen/glass_action_min_width</item>
+        <item name="android:paddingLeft">@dimen/glass_action_padding</item>
+        <item name="android:paddingRight">@dimen/glass_action_padding</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="Widget.Xcertplay.Glass.Primary.Dark" parent="Widget.Xcertplay.Glass">
+        <item name="android:background">@drawable/glass_action_primary_dark</item>
+        <item name="android:textColor">@color/glass_action_primary_dark</item>
+    </style>
+    <style name="Widget.Xcertplay.Glass.Secondary.Dark" parent="Widget.Xcertplay.Glass">
+        <item name="android:background">@drawable/glass_action_secondary_dark</item>
+        <item name="android:textColor">@color/glass_action_secondary_dark</item>
+    </style>
+    <style name="Widget.Xcertplay.Glass.Primary.Light" parent="Widget.Xcertplay.Glass">
+        <item name="android:background">@drawable/glass_action_primary_light</item>
+        <item name="android:textColor">@color/glass_action_primary_light</item>
+    </style>
+    <style name="Widget.Xcertplay.Glass.Secondary.Light" parent="Widget.Xcertplay.Glass">
+        <item name="android:background">@drawable/glass_action_secondary_light</item>
+        <item name="android:textColor">@color/glass_action_secondary_light</item>
     </style>
 </resources>

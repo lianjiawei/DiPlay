@@ -1,4 +1,9 @@
 <resources>
     <dimen name="glass_dialog_radius">28dp</dimen>
     <dimen name="glass_dialog_edge_inset">12dp</dimen>
+    <dimen name="glass_action_inset">4dp</dimen>
+    <dimen name="glass_action_min_height">56dp</dimen>
+    <dimen name="glass_action_min_width">72dp</dimen>
+    <dimen name="glass_action_padding">16dp</dimen>
+    <dimen name="glass_outline_width">1dp</dimen>
 </resources>

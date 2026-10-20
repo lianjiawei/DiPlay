@@ -19,6 +19,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
@@ -83,8 +84,33 @@ class GlassUiRegressionTest {
                     ReflectionHelpers.setField(screen, "settingsCategory", category)
                     call(screen, "render")
                     screenshot(screen, "$name-${if (night) "dark" else "light"}-${category.name.lowercase()}")
+                    if (category == SettingsCategory.DISPLAY) {
+                        val rate = descendants(screen.window.decorView).filterIsInstance<android.widget.Button>()
+                            .first { it.text.startsWith(screen.getString(R.string.frame_rate) + " · ") }
+                        rate.performClick()
+                        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+                        shadowOf(Looper.getMainLooper()).idle()
+                        try {
+                            val root = dialog.window!!.decorView
+                            val density = screen.resources.displayMetrics.density
+                            val config = screen.resources.configuration
+                            val width = ((minOf(config.screenWidthDp, 600) - 32) * density).toInt()
+                            val height = ((config.screenHeightDp - 32) * density).toInt()
+                            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
+                            root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+                            writeScreenshot(root, "$name-${if (night) "dark" else "light"}-choice")
+                            for (id in listOf(android.app.AlertDialog.BUTTON_POSITIVE, android.app.AlertDialog.BUTTON_NEGATIVE)) {
+                                val button = dialog.getButton(id)
+                                assertTrue("Dialog action must retain its touch target", button.height >= 48 * density)
+                                val layout = button.layout
+                                for (line in 0 until layout.lineCount) assertEquals("Dialog action cannot truncate", 0, layout.getEllipsisCount(line))
+                            }
+                        } finally { dialog.dismiss() }
+                    }
                 }
             }
+            captureWaiting(screen, name)
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -100,7 +126,33 @@ class GlassUiRegressionTest {
             root.layout(0, 0, width, height)
             shadowOf(Looper.getMainLooper()).idle()
         }
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        writeScreenshot(root, name)
+    }
+
+    private fun captureWaiting(screen: DiPlayActivity, name: String) {
+        // Build only the presentation: no controller, decoder or transport is started here.
+        val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        try {
+            ReflectionHelpers.setField(host, "appNight", true)
+            val root = ReflectionHelpers.callInstanceMethod<ViewGroup>(host, "buildContentView")
+            val density = screen.resources.displayMetrics.density
+            val config = screen.resources.configuration
+            val width = (config.screenWidthDp * density).toInt()
+            val height = (config.screenHeightDp * density).toInt()
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, width, height)
+            writeScreenshot(root, "$name-connecting")
+        } finally {
+            ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicBoolean>(host, "shuttingDown").set(true)
+            ReflectionHelpers.getField<android.os.Handler>(host, "mainHandler").removeCallbacksAndMessages(null)
+            ReflectionHelpers.getField<java.util.concurrent.ExecutorService>(host, "teardownExecutor").shutdownNow()
+            ReflectionHelpers.getField<java.util.concurrent.ExecutorService>(host, "airPlayCommandExecutor").shutdownNow()
+        }
+    }
+
+    private fun writeScreenshot(root: View, name: String) {
+        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
         try {
             root.draw(Canvas(bitmap))
             val path = Paths.get("build/reports/glass-ui/$name.png")
