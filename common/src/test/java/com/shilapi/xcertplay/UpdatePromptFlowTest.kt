@@ -2,6 +2,9 @@ package com.shilapi.xcertplay
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkInfo
 import android.os.Looper
 import android.view.Surface
 import android.view.View
@@ -21,6 +24,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -29,6 +33,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import org.robolectric.util.ReflectionHelpers
+import org.robolectric.shadows.ShadowNetwork
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [27, 33], qualifiers = "en-w900dp-h600dp-land")
@@ -375,6 +380,12 @@ class UpdatePromptFlowTest {
         assertEquals(published.tagName, latest?.tagName)
         assertEquals("https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30", requests.single())
 
+        val connectivity = shadowOf(app.getSystemService(ConnectivityManager::class.java))
+        val network = ShadowNetwork.newInstance(99)
+        connectivity.addNetwork(network, mock(NetworkInfo::class.java))
+        val capabilities = mock(NetworkCapabilities::class.java)
+        `when`(capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).thenReturn(true)
+        connectivity.setNetworkCapabilities(network, capabilities)
         call(c.get(), "loadHistoryReleases")
         awaitHistory(c.get())
         assertEquals(2, requests.count { it.contains("/repos/lianjiawei/DiPlay/releases") })

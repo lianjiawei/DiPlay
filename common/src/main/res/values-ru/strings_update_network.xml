@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_no_network">Нет подключения к сети. Подключитесь к интернету и повторите попытку.</string>
+    <string name="update_server_unreachable">Не удалось подключиться к серверу обновлений. Проверьте подключение и повторите попытку.</string>
+    <string name="update_connection_timeout">Время ожидания подключения к серверу обновлений истекло. Повторите попытку.</string>
+</resources>

@@ -94,6 +94,7 @@ import com.shilapi.xcertplay.update.InternetNetworkSelector
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
 import com.shilapi.xcertplay.update.UpdateReleaseNotes
+import com.shilapi.xcertplay.update.UpdateNetworkStatus
 import java.io.File
 import java.io.IOException
 import java.net.URL
@@ -251,6 +252,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
+    internal var updateCheckWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-check").start() }
     internal var updateDownloadWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-download").start() }
     internal var updateConnection: (URL) -> URLConnection = ::openUpdateConnection
     internal var updateLookup: () -> UpdateRelease? = {
@@ -269,8 +271,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var updateMessage: String? = null
     private var renderedUpdateStage: UpdateStage? = null
     private var renderedHistoryStage: HistoryStage? = null
+    private var updateRowContainer: LinearLayout? = null
+    private var updateStatusLabel: TextView? = null
+    private var updateCheckButton: TextView? = null
     private var updateProgressButton: TextView? = null
     private var historyProgressLabel: TextView? = null
+    private var historyActionButton: TextView? = null
     @Volatile private var historyStage = HistoryStage.IDLE
     @Volatile private var historyProgress: Int? = null
     @Volatile private var historyGeneration = 0
@@ -738,8 +744,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         adbStatus = null
         renderedUpdateStage = null
         renderedHistoryStage = null
+        updateRowContainer = null
+        updateStatusLabel = null
+        updateCheckButton = null
         updateProgressButton = null
         historyProgressLabel = null
+        historyActionButton = null
         val compact = isCompactLayout && when (page) {
             "settings" -> !SettingsLayoutPreferences.isActive(this)
             else -> true
@@ -2753,14 +2763,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         renderedUpdateStage = updateStage
         renderedHistoryStage = historyStage
         val container = column().apply { setPadding(0, dp(12), 0, 0) }
-        updateMessage?.let { container.addView(label(it, 14, MUTED)) }
+        updateRowContainer = container
+        updateProgressButton = null
+        historyProgressLabel = null
+        historyActionButton = null
+        updateCheckButton = null
+        container.addView(label("", 14, MUTED).apply {
+            setPadding(0, 0, 0, dp(SETTINGS_UPDATE_GAP_DP))
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }.also { updateStatusLabel = it })
         when (updateStage) {
-            UpdateStage.IDLE, UpdateStage.FAILED ->
-                container.addView(button(brandString(R.string.update_check), false) { checkForUpdates() }.apply {
-                    isEnabled = historyStage == HistoryStage.IDLE
-                },
-                    matchButton(if (updateMessage == null) 0 else 10, 60))
-            UpdateStage.CHECKING -> container.addView(label(brandString(R.string.update_checking), 14, MUTED))
+            UpdateStage.IDLE, UpdateStage.FAILED, UpdateStage.CHECKING ->
+                container.addView(button(brandString(R.string.update_check), false) { checkForUpdates() }
+                    .also { updateCheckButton = it }, matchButton(0, 60))
             UpdateStage.AVAILABLE -> container.addView(
                 button(brandString(R.string.update_download), true) { downloadUpdate() }.apply {
                     isEnabled = historyStage == HistoryStage.IDLE
@@ -2786,8 +2801,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         when (historyStage) {
             HistoryStage.IDLE -> container.addView(
                 button(brandString(R.string.update_history_download), false) { loadHistoryReleases() }.apply {
-                    isEnabled = updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING
-                },
+                    isEnabled = updateStage != UpdateStage.CHECKING && updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING
+                }.also { historyActionButton = it },
                 matchButton(10, 56),
             )
             HistoryStage.CHECKING -> container.addView(
@@ -2806,15 +2821,24 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 },
             )
         }
+        refreshUpdateLabels()
         return container
     }
 
     private fun checkForUpdates() {
+        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING ||
+            updateStage == UpdateStage.VERIFYING || historyStage != HistoryStage.IDLE) return
+        if (updateNetworkUnavailable()) {
+            updateMessage = brandString(R.string.update_no_network)
+            updateStage = UpdateStage.FAILED
+            refreshUpdateRow()
+            return
+        }
         updateStage = UpdateStage.CHECKING
         updateMessage = null
         val generation = ++updateGeneration
-        render()
-        Thread({
+        refreshUpdateRow()
+        updateCheckWorker(Runnable {
             val outcome = runCatching { latestRelease() }
             runOnUiThread {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
@@ -2831,20 +2855,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             updateRelease = release
                             updateStage = UpdateStage.AVAILABLE
                         }
-                        render()
+                        refreshUpdateRow()
                         if (release != null && page == "settings" && settingsCategory == SettingsCategory.ABOUT) {
                             showUpdatePrompt(release, automatic = false)
                         }
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update check failed", failure)
-                        updateMessage = failure.message ?: brandString(R.string.update_failed)
+                        updateMessage = updateFailureMessage(failure)
                         updateStage = UpdateStage.FAILED
-                        render()
+                        refreshUpdateRow()
                     },
                 )
             }
-        }, "diplay-update-check").start()
+        })
     }
 
     /** Bind only update requests, leaving the CarPlay process network unchanged. */
@@ -2862,10 +2886,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun loadHistoryReleases() {
         if (historyStage != HistoryStage.IDLE) return
-        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING) return
+        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING) return
+        if (updateNetworkUnavailable()) {
+            historyMessage = brandString(R.string.update_no_network)
+            refreshUpdateRow(rebuild = true)
+            return
+        }
         historyStage = HistoryStage.CHECKING
         historyMessage = null
-        render()
+        refreshUpdateRow(rebuild = true)
         Thread({
             val outcome = runCatching { UpdateReleaseLookup.history(userAgent(), updateConnection) }
             runOnUiThread {
@@ -2875,15 +2904,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     { releases ->
                         if (releases.isEmpty()) {
                             historyMessage = brandString(R.string.update_history_empty)
-                            render()
+                            refreshUpdateRow(rebuild = true)
                         } else {
-                            render()
+                            refreshUpdateRow(rebuild = true)
                             showHistoryReleasePicker(releases)
                         }
                     },
                     { failure ->
-                        historyMessage = failure.message ?: brandString(R.string.update_history_failed)
-                        render()
+                        Log.w("DiPlay-Update", "update history check failed", failure)
+                        historyMessage = updateFailureMessage(failure)
+                        refreshUpdateRow(rebuild = true)
                     },
                 )
             }
@@ -2894,7 +2924,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val downloadable = releases.filter { it.tagName.isNotBlank() }
         if (downloadable.isEmpty()) {
             historyMessage = brandString(R.string.update_history_empty)
-            render()
+            refreshUpdateRow(rebuild = true)
             return
         }
         val labels = downloadable.map { release ->
@@ -3223,17 +3253,53 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    /** Percentages change existing labels; only a new set of actions needs a new view tree. */
-    private fun refreshUpdateRow() {
+    /** Checking and percentages keep their controls; other actions replace only this block. */
+    private fun refreshUpdateRow(rebuild: Boolean = false) {
         if (page != "settings" || settingsCategory != SettingsCategory.ABOUT) return
-        if (renderedUpdateStage != updateStage || renderedHistoryStage != historyStage) {
-            render()
+        val row = updateRowContainer ?: return
+        val sameCheckAction = isUpdateCheckStage(renderedUpdateStage) && isUpdateCheckStage(updateStage)
+        if (rebuild || (renderedUpdateStage != updateStage && !sameCheckAction) ||
+            renderedHistoryStage != historyStage) {
+            val parent = row.parent as? ViewGroup ?: return
+            val index = parent.indexOfChild(row)
+            val params = row.layoutParams
+            parent.removeView(row)
+            parent.addView(updateRow(), index, params)
             return
         }
+        renderedUpdateStage = updateStage
+        refreshUpdateLabels()
+    }
+
+    private fun isUpdateCheckStage(stage: UpdateStage?): Boolean = when (stage) {
+        UpdateStage.IDLE, UpdateStage.CHECKING, UpdateStage.FAILED -> true
+        else -> false
+    }
+
+    private fun refreshUpdateLabels() {
+        updateStatusLabel?.apply {
+            text = updateMessage.orEmpty()
+            visibility = if (updateMessage.isNullOrBlank()) View.GONE else View.VISIBLE
+        }
+        updateCheckButton?.apply {
+            text = brandString(if (updateStage == UpdateStage.CHECKING) R.string.update_checking else R.string.update_check)
+            isEnabled = updateStage != UpdateStage.CHECKING && historyStage == HistoryStage.IDLE
+        }
+        historyActionButton?.isEnabled = updateStage != UpdateStage.CHECKING &&
+            updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING
         updateProgressButton?.text = updateProgress?.let { brandString(R.string.update_downloading, it) }
             ?: brandString(R.string.update_downloading_unknown)
         historyProgressLabel?.text = brandString(R.string.update_history_downloading, historyProgress ?: 0)
     }
+
+    private fun updateNetworkUnavailable(): Boolean = runCatching {
+        getSystemService(ConnectivityManager::class.java)?.let(UpdateNetworkStatus::isOffline) ?: false
+    }.getOrDefault(false)
+
+    private fun updateFailureMessage(failure: Throwable): String = brandString(
+        if (updateNetworkUnavailable()) R.string.update_no_network
+        else UpdateNetworkStatus.failureMessage(failure),
+    )
 
     private fun userAgent() = "Lincoln/${version()}"
 
@@ -6993,6 +7059,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val GROUP_GAP_DP = 20
         private const val NOTE_LINE_GAP_DP = 4
         private const val NOTE_ATTACH_GAP_DP = 6
+        private const val SETTINGS_UPDATE_GAP_DP = 10
         private const val SETTINGS_BLOCK_GAP_DP = 16
     }
 }

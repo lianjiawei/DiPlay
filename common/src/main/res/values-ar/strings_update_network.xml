@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_no_network">لا يوجد اتصال بالشبكة. اتصل بالإنترنت وحاول مجددًا.</string>
+    <string name="update_server_unreachable">تعذر الوصول إلى خادم التحديثات. تحقق من الاتصال وحاول مجددًا.</string>
+    <string name="update_connection_timeout">انتهت مهلة الاتصال بخادم التحديثات. حاول مجددًا.</string>
+</resources>
