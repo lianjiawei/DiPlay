@@ -1,0 +1,60 @@
+{
+  "assets": [
+    {
+      "file": "common/src/main/res/drawable-nodpi/corsair_scene.png",
+      "sha256": "72a9691048249fc86d5ede6da7cdc00e44ac828aa0a5633fc339da16979ea16c",
+      "dimensions": [
+        1620,
+        971
+      ],
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+    },
+    {
+      "file": "common/src/main/res/drawable-nodpi/corsair_scene_soft.png",
+      "sha256": "edc439a326124582eb7cab602525851161b224f06a31c3762dbb43da1b044cc3",
+      "dimensions": [
+        1620,
+        971
+      ],
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+    },
+    {
+      "file": "common/src/main/res/drawable-nodpi/glass_primary_material.png",
+      "sha256": "e4d67a98de5fb9fca1fac9a1ac689d3fb237e41c60700e449f3126af2cabfdde",
+      "dimensions": [
+        1933,
+        814
+      ],
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+    },
+    {
+      "file": "common/src/main/res/drawable-nodpi/glass_secondary_material.png",
+      "sha256": "c4aac77515a1341c21a73301c7177892be7a36fe5e4a1b446557f7cb6965d05f",
+      "dimensions": [
+        1983,
+        793
+      ],
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+    },
+    {
+      "file": "common/src/main/res/drawable-nodpi/connection_ring_material.png",
+      "sha256": "474f20e537042cbdc6fe44a358abcce1cfe498188ac12cbeb4f1cd788e279cd9",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+    },
+    {
+      "file": "common/src/main/res/drawable-nodpi/corsair_about_brand.png",
+      "sha256": "0cbc836a7bda771f24f230e29c03b261ba9ea20ebb082f6ae2dc75e59cef7370",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+    }
+  ],
+  "icons": "Official Google Material Icons outlined; Apache-2.0; see material-icons-provenance.json and common/src/main/assets/licenses/material-icons.txt",
+  "vehicle_identity": "Lincoln artwork is limited to the existing Lincoln preset. Launcher and other vehicle preset icons are unchanged."
+}

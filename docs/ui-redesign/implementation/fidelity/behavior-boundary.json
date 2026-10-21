@@ -1,0 +1,21 @@
+{
+  "baseline": "9caa2b0efdba951fa29dc03836736868031eba88",
+  "byte_identical_activity_methods": {
+    "connectAutomaticallyOnLaunch": true,
+    "connect": true,
+    "openProjection": true,
+    "choosePhone": true,
+    "checkForUpdates": true,
+    "downloadHistoryRelease": true,
+    "downloadUpdate": true,
+    "saveHotspotCredentials": true,
+    "showUpdateStorage": true,
+    "installUpdate": true,
+    "installApk": true,
+    "startInstaller": true,
+    "createUpdatePrompt": true,
+    "buildQuickSettings": true
+  },
+  "video_gesture_layers_unchanged": true,
+  "no_shared_engine_or_build_metadata_changes": true
+}

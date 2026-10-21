@@ -14,7 +14,11 @@
 
 `v1` 是原始设计阶段存档，其中的状态文字保留生成时语境；当前实现状态以下文和源码为准。设计图中的 CarPlay 内容用于示意，应用显示实际 iPhone 画面。
 
-## 原生界面实装截图
+## 最新设计稿还原修正
+
+[本轮还原修正资料](implementation/fidelity/README.md)保存了 8 组设计稿与原生实装的[并排对照 PDF](implementation/fidelity/design-vs-native.pdf)，以及玻璃材质、布局间距、精简文案和大字体 / RTL 的验证记录。可先查看[首页对照](implementation/fidelity/home-comparison.png)和[显示设置对照](implementation/fidelity/display-comparison.png)。原始 v1 设计稿保持不变。
+
+## 上一轮原生界面实装截图
 
 以下 12 张图片由 Android 原生界面渲染生成，不是设计图。截图版本显示 `UI preview`，不代表发布版本号。
 
@@ -28,9 +32,9 @@
 | 单选弹窗 | [浅色](implementation/screenshots/expanded-en-light-choice.png) · [阿拉伯语 RTL](implementation/screenshots/compact-ar-rtl-dark-choice.png) |
 | 关于与更新 | [横屏深色](implementation/screenshots/landscape-zh-dark-about.png) |
 
-## 实现与验证
+## 上一轮归档与回滚基线
 
-- [详细回归记录](../../design-qa.md)：实现范围、适配矩阵、已修正问题和实车检查边界。
+- [当前详细回归记录](../../design-qa.md)：本轮对照审查、适配矩阵、已修正问题和实车检查边界。
 - [验证结果 JSON](implementation/validation.json)：记录对应代码提交、3339 项测试结果、Lint、构建和 594 个页面状态的回归结果。
 - 改版前源码基线：[`pre-ui-redesign-20261020`](https://github.com/lianjiawei/DiPlay/tree/pre-ui-redesign-20261020)。
 - 本轮 UI 实现代码提交：[`1f297f4b`](https://github.com/lianjiawei/DiPlay/commit/1f297f4b22fbcb4177096ba17c3cb6101abae51b)。该提交之后仅补充文档与本目录的归档资料。

@@ -1,0 +1,50 @@
+{
+  "palette": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/image/palette/materialiconsoutlined/24px.svg",
+    "git_blob": "1a702e1d58901d0ee9e9687785eef225104409f6",
+    "bytes": 729
+  },
+  "connection": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/content/link/materialiconsoutlined/24px.svg",
+    "git_blob": "5024c02cd60f1d0cf9541cee8dcfa05034142522",
+    "bytes": 311
+  },
+  "display": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/image/wb_sunny/materialiconsoutlined/24px.svg",
+    "git_blob": "d14741e12557d884399c7f3889f59bed0fd9a48d",
+    "bytes": 487
+  },
+  "audio": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/av/volume_up/materialiconsoutlined/24px.svg",
+    "git_blob": "2e7fe9aafe8033cf71441d0040cc69fdfc96fe83",
+    "bytes": 372
+  },
+  "navigation": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/maps/navigation/materialiconsoutlined/24px.svg",
+    "git_blob": "f6e8d35b1eb73e4c6f33e1cce8ffdd9df841cb70",
+    "bytes": 251
+  },
+  "vehicle": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/maps/directions_car/materialiconsoutlined/24px.svg",
+    "git_blob": "b478e14817983270f47077bac62152ae345e5b4c",
+    "bytes": 428
+  },
+  "settings": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/action/settings/materialiconsoutlined/24px.svg",
+    "git_blob": "ce2dc8da2b387f88954036f06d70cde4103ee619",
+    "bytes": 1443
+  },
+  "size": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/action/open_in_full/materialiconsoutlined/24px.svg",
+    "git_blob": "5c293a0f10271d5356595767f0d46c23d203638c",
+    "bytes": 260
+  },
+  "hd": {
+    "url": "https://api.github.com/repos/google/material-design-icons/contents/src/av/hd/materialiconsoutlined/24px.svg",
+    "git_blob": "8e40d164289ae954f0a0a5a2dfd9ded0f8cd2f12",
+    "bytes": 340
+  },
+  "picture": {
+    "error": "HTTP Error 404: Not Found"
+  }
+}

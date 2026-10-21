@@ -1,0 +1,101 @@
+{
+  "unit_tests": {
+    "shared": {
+      "tests": 1609,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "common": {
+      "tests": 1729,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "samples/home": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "unit_test_total": 3344,
+  "lint": {
+    "mobile": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 9,
+      "Information": 0
+    },
+    "samples/home": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 7,
+      "Information": 0
+    },
+    "samples/maphost": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 1,
+      "Information": 0
+    }
+  },
+  "resolution": {
+    "1920x1080-xhdpi": {
+      "states": 66,
+      "textViews": 1704,
+      "findings": 0
+    },
+    "1280x720-xhdpi": {
+      "states": 66,
+      "textViews": 1262,
+      "findings": 0
+    },
+    "1920x720-xhdpi": {
+      "states": 66,
+      "textViews": 1548,
+      "findings": 0
+    },
+    "1024x600-mdpi": {
+      "states": 66,
+      "textViews": 1704,
+      "findings": 0
+    },
+    "1280x720-ar-rtl": {
+      "states": 66,
+      "textViews": 1262,
+      "findings": 0
+    },
+    "400x300-mdpi": {
+      "states": 66,
+      "textViews": 1262,
+      "findings": 0
+    },
+    "1024x600-xhdpi": {
+      "states": 66,
+      "textViews": 1262,
+      "findings": 0
+    },
+    "320x600-mdpi": {
+      "states": 66,
+      "textViews": 1262,
+      "findings": 0
+    },
+    "800x480-mdpi": {
+      "states": 66,
+      "textViews": 1444,
+      "findings": 0
+    }
+  },
+  "resolution_configurations": 9,
+  "resolution_states": 594,
+  "full_ci_passed": true,
+  "physical_device_verified": false,
+  "screenshot_kind": "Native Android rendering with test-only state; no real iPhone video",
+  "published_apk": false,
+  "command": "./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest :mobile:lintDebug :home:lintDebug :maphost:lintDebug :mobile:assembleDebug :home:assembleDebug :maphost:assembleDebug",
+  "source_commit": "fb871e6ae65681a76134ac92e4ee6adfe9558842",
+  "baseline_commit": "9caa2b0efdba951fa29dc03836736868031eba88",
+  "dialog_action_gap_dp": 16,
+  "responsive_dialog_actions": "Measured labels; equal-height horizontal row when it fits, full-width vertical actions otherwise"
+}

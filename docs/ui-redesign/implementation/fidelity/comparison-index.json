@@ -1,0 +1,132 @@
+[
+  {
+    "page": "home",
+    "reference": "../../v1/screens/01-home.png",
+    "native": "screenshots/reference-home-dark-home.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      1600,
+      960
+    ],
+    "reference_focus": null,
+    "native_sha256": "0120fec3ea33701d23ca45391302c5143a953bd8948f067eab9189fbc72c8517"
+  },
+  {
+    "page": "connecting",
+    "reference": "../../v1/screens/02-connecting.png",
+    "native": "screenshots/reference-home-home-connecting.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      1600,
+      960
+    ],
+    "reference_focus": null,
+    "native_sha256": "e7de3a0eb2857456d7e6425dec79e25b398eed54b5c1307b48ed546e9b4a0671"
+  },
+  {
+    "page": "overview",
+    "reference": "../../v1/screens/04-settings-overview.png",
+    "native": "screenshots/reference-wide-dark-overview.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      1200,
+      720
+    ],
+    "reference_focus": null,
+    "native_sha256": "b4f6d682099a0780a5f27bda4696db4acf6144168e2d622c7c33e4242290e644"
+  },
+  {
+    "page": "display",
+    "reference": "../../v1/screens/05-display-settings.png",
+    "native": "screenshots/reference-wide-dark-display.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      1200,
+      720
+    ],
+    "reference_focus": null,
+    "native_sha256": "ea94a20f617cedfed6adde1dc77ff2ab374ff8a39170bc12218fac7357a3f5c5"
+  },
+  {
+    "page": "choice",
+    "reference": "../../v1/screens/06-choice-dialog.png",
+    "native": "screenshots/reference-wide-dark-choice.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      568,
+      479
+    ],
+    "reference_focus": [
+      427,
+      181,
+      1194,
+      821
+    ],
+    "native_sha256": "fa5bc5195c35d86a7beeae39d52362bb5646724c69b626600554ab61c30890ff"
+  },
+  {
+    "page": "about",
+    "reference": "../../v1/screens/07-about-update.png",
+    "native": "screenshots/reference-wide-dark-about.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      1200,
+      720
+    ],
+    "reference_focus": null,
+    "native_sha256": "5f550241723b9efd8d266ced9baa8552b2554889b2eca2180e11f12c9b757ba0"
+  },
+  {
+    "page": "storage",
+    "reference": "../../v1/screens/08-storage-dialog.png",
+    "native": "screenshots/reference-wide-dark-storage.png",
+    "reference_dimensions": [
+      1619,
+      971
+    ],
+    "native_dimensions": [
+      568,
+      319
+    ],
+    "reference_focus": [
+      408,
+      153,
+      1211,
+      850
+    ],
+    "native_sha256": "2ca0402006833a9e7b99af81b456a66434302d8a688181af73bba65dab543476"
+  },
+  {
+    "page": "portrait",
+    "reference": "../../v1/screens/09-compact-display.png",
+    "native": "screenshots/reference-portrait-dark-display.png",
+    "reference_dimensions": [
+      972,
+      1619
+    ],
+    "native_dimensions": [
+      972,
+      1620
+    ],
+    "reference_focus": null,
+    "native_sha256": "f5425ba6c820437bf818b5f94106ae517a4a66619439fbfaed7045d110b61edb"
+  }
+]
