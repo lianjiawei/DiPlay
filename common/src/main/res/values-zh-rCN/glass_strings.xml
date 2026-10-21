@@ -2,4 +2,14 @@
     <string name="ui_glass_home_title">准备好，出发</string>
     <string name="ui_glass_video_preparing">正在准备 CarPlay 画面…</string>
     <string name="ui_glass_video_ready">正在显示 CarPlay</string>
+    <string name="ui_glass_connect_carplay">连接 CarPlay</string>
+    <string name="ui_glass_paired_waiting">已配对 · 等待连接</string>
+    <string name="ui_glass_back_home">返回首页</string>
+    <string name="ui_glass_reconnect_hint">更改后需重新连接</string>
+    <string name="ui_glass_details">查看说明</string>
+    <string name="ui_glass_background_hint">每天检查一次，点击后才下载。</string>
+    <string name="ui_glass_storage_hint">保留最近两个版本，清理闲置文件。</string>
+    <string name="ui_glass_not_certified">本产品未经 Apple 认证。</string>
+    <string name="ui_glass_connecting_title">正在连接 iPhone</string>
+    <string name="ui_glass_connecting_hint">正在与手机建立连接</string>
 </resources>

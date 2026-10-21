@@ -2,4 +2,14 @@
     <string name="ui_glass_home_title">Ready, set, go</string>
     <string name="ui_glass_video_preparing">Preparing the CarPlay picture…</string>
     <string name="ui_glass_video_ready">Showing CarPlay</string>
+    <string name="ui_glass_connect_carplay">Connect CarPlay</string>
+    <string name="ui_glass_paired_waiting">Paired · waiting to connect</string>
+    <string name="ui_glass_back_home">Back home</string>
+    <string name="ui_glass_reconnect_hint">Changes apply after reconnecting</string>
+    <string name="ui_glass_details">Details</string>
+    <string name="ui_glass_background_hint">Check daily; download only after tapping</string>
+    <string name="ui_glass_storage_hint">Keep two recent versions; clean idle files</string>
+    <string name="ui_glass_not_certified">Not certified by Apple.</string>
+    <string name="ui_glass_connecting_title">Connecting iPhone</string>
+    <string name="ui_glass_connecting_hint">Connecting to your iPhone.</string>
 </resources>

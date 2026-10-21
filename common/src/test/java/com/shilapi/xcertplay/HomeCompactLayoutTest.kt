@@ -38,8 +38,8 @@ class HomeCompactLayoutTest {
             View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, width, height)
         fun text(id: Int) = descendants(root).filterIsInstance<TextView>()
-            .single { it.text == activity.getString(id) }
-        val connect = text(R.string.connect_phone)
+            .single { it.visibility == View.VISIBLE && it.text == activity.getString(id) }
+        val connect = text(R.string.ui_glass_connect_carplay)
         val usb = text(R.string.connect_with_usb)
         val connectPosition = IntArray(2).also(connect::getLocationOnScreen)
         val usbPosition = IntArray(2).also(usb::getLocationOnScreen)

@@ -2,4 +2,14 @@
     <string name="ui_glass_home_title">Всё готово, в путь</string>
     <string name="ui_glass_video_preparing">Подготовка изображения CarPlay…</string>
     <string name="ui_glass_video_ready">Отображение CarPlay</string>
+    <string name="ui_glass_connect_carplay">Подключить CarPlay</string>
+    <string name="ui_glass_paired_waiting">Сопряжено · ожидание подключения</string>
+    <string name="ui_glass_back_home">На главную</string>
+    <string name="ui_glass_reconnect_hint">Применяется после переподключения</string>
+    <string name="ui_glass_details">Подробнее</string>
+    <string name="ui_glass_background_hint">Проверять ежедневно; загружать по нажатию</string>
+    <string name="ui_glass_storage_hint">Хранить две версии; удалять неиспользуемые файлы</string>
+    <string name="ui_glass_not_certified">Не сертифицировано Apple.</string>
+    <string name="ui_glass_connecting_title">Подключение</string>
+    <string name="ui_glass_connecting_hint">Подключение к iPhone.</string>
 </resources>

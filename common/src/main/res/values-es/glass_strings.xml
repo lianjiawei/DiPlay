@@ -2,4 +2,14 @@
     <string name="ui_glass_home_title">Prepárate y sal</string>
     <string name="ui_glass_video_preparing">Preparando la imagen de CarPlay…</string>
     <string name="ui_glass_video_ready">Mostrando CarPlay</string>
+    <string name="ui_glass_connect_carplay">Conectar CarPlay</string>
+    <string name="ui_glass_paired_waiting">Emparejado · esperando conexión</string>
+    <string name="ui_glass_back_home">Volver al inicio</string>
+    <string name="ui_glass_reconnect_hint">Se aplica al volver a conectar</string>
+    <string name="ui_glass_details">Detalles</string>
+    <string name="ui_glass_background_hint">Comprobar a diario; descargar al pulsar</string>
+    <string name="ui_glass_storage_hint">Conservar dos versiones; limpiar archivos inactivos</string>
+    <string name="ui_glass_not_certified">Sin certificación de Apple.</string>
+    <string name="ui_glass_connecting_title">Conectando iPhone</string>
+    <string name="ui_glass_connecting_hint">Conectando con tu iPhone.</string>
 </resources>

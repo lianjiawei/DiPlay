@@ -15,6 +15,7 @@ import com.shilapi.xcertplay.host.R
 /** Decorative app chrome only; never placed on a media surface or an instrument output. */
 internal class SceneBackdrop(context: Context, private val night: Boolean, private val quiet: Boolean) :
     ColorDrawable(DiPlayPalette.of(night).background) {
+    init { FidelityMaterials.install(context) }
     private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) image(context, quiet) else null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val destination = RectF()
@@ -30,12 +31,14 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
         paint.shader = null
         canvas.drawBitmap(bitmap, null, destination, paint)
         if (quiet || bounds.height() > bounds.width()) {
-            val readingVeil = if (night) 0xDA else 0xF0
+            val readingVeil = if (bounds.height() > bounds.width()) {
+                if (night) (if(quiet)0xA0 else 0xD0) else 0xF0
+            } else if (night) 0x38 else 0xE8
             canvas.drawColor((color and 0x00FFFFFF) or (readingVeil shl 24))
         } else {
             if (!night) canvas.drawColor(Color.argb(180, 231, 239, 246))
             paint.shader = LinearGradient(bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,
-                intArrayOf((color and 0x00FFFFFF) or (0x80 shl 24), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+                intArrayOf((color and 0x00FFFFFF) or (0x10 shl 24), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
             canvas.drawRect(bounds, paint)
             paint.shader = null
         }

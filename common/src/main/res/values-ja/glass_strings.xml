@@ -2,4 +2,14 @@
     <string name="ui_glass_home_title">準備ができたら、出発</string>
     <string name="ui_glass_video_preparing">CarPlay の画面を準備中…</string>
     <string name="ui_glass_video_ready">CarPlay を表示中</string>
+    <string name="ui_glass_connect_carplay">CarPlay に接続</string>
+    <string name="ui_glass_paired_waiting">ペアリング済み · 接続待ち</string>
+    <string name="ui_glass_back_home">ホームに戻る</string>
+    <string name="ui_glass_reconnect_hint">再接続後に反映されます</string>
+    <string name="ui_glass_details">詳細</string>
+    <string name="ui_glass_background_hint">毎日確認。タップ後にのみダウンロード</string>
+    <string name="ui_glass_storage_hint">最近の2バージョンを保持し、不要ファイルを整理</string>
+    <string name="ui_glass_not_certified">Apple 未認証製品です。</string>
+    <string name="ui_glass_connecting_title">iPhone に接続中</string>
+    <string name="ui_glass_connecting_hint">iPhone との接続を準備中</string>
 </resources>

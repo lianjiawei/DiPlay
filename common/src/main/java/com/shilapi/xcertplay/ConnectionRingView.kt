@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Rect
 import android.os.Build
 import android.provider.Settings
 import android.view.View
@@ -25,7 +26,7 @@ internal class ConnectionRingView(context: Context) : View(context) {
     private val phone = requireNotNull(ContextCompat.getDrawable(context, R.drawable.ic_connection_phone)).mutate()
     private val check = requireNotNull(ContextCompat.getDrawable(context, R.drawable.ic_connection_done)).mutate()
 
-    init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; isClickable = false; isFocusable = false }
+    init { FidelityMaterials.install(context); importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO; isClickable = false; isFocusable = false }
 
     fun appearance(night: Boolean) { palette = DiPlayPalette.of(night); invalidate() }
 
@@ -57,14 +58,16 @@ internal class ConnectionRingView(context: Context) : View(context) {
         val radius = minOf(width, height) / 2f - 5f * density
         if (radius <= 0) return
         arc.set(width / 2f - radius, height / 2f - radius, width / 2f + radius, height / 2f + radius)
-        paint.strokeWidth = 2f * density
-        paint.color = ColorUtils.setAlphaComponent(palette.accent, if (complete) 255 else 155)
-        canvas.drawOval(arc, paint)
-        paint.color = palette.accent
-        paint.strokeWidth = 3f * density
-        if (!complete) canvas.drawArc(arc, angle, 55f, false, paint)
+        val material = FidelityMaterials.image(R.drawable.connection_ring_material)
+        if (material != null) {
+            paint.alpha = 255
+            val checkpoint = canvas.save()
+            if (busy && !complete) canvas.rotate(angle + 90f, width/2f, height/2f)
+            canvas.drawBitmap(material, Rect(125,122,1125,1122), RectF(0f,0f,width.toFloat(),height.toFloat()),paint)
+            canvas.restoreToCount(checkpoint)
+        }
         val icon = if (complete) check else phone
-        val half = (radius * if (complete) .48f else .43f).toInt()
+        val half = (radius * if (complete) .48f else .52f).toInt()
         icon.setTint(palette.primaryText)
         icon.setBounds(width / 2 - half, height / 2 - half, width / 2 + half, height / 2 + half)
         icon.draw(canvas)

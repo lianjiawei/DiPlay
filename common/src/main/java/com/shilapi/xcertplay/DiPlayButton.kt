@@ -22,6 +22,7 @@ internal class DiPlayButton(context: Context) : Button(context) {
     private var overlay = false
 
     init {
+        FidelityMaterials.install(context)
         isAllCaps = false
         stateListAnimator = null
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)

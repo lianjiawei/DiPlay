@@ -82,7 +82,7 @@ object SettingsWidgets {
             setSize(px(60), px(34))
             setColor(Color.WHITE)
             // Same 30% track as the platform switch, so the colours match the smaller switches.
-            alpha = (0.3f * 255).roundToInt()
+            alpha = (0.80f * 255).roundToInt()
         }
         switch.switchMinWidth = px(60)
         switch.showText = false

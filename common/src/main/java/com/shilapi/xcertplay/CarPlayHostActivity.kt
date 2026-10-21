@@ -1127,7 +1127,7 @@ class CarPlayHostActivity : ComponentActivity() {
             loadConnectionSettings()
             oemLabel = AirPlayPersistence.loadOemLabel(this)
             val displayName = VehicleBranding.displayName(this)
-            connectionIconView?.let(VehicleBranding::setLogo)
+            connectionIconView?.let { if(it is BrandMarkView)it.refreshLogo()else VehicleBranding.setLogo(it) }
             connectionTitleView?.text = displayName
             connectionBackButton?.text = brandString(R.string.back_to_vehicle_name, displayName)
         }
@@ -1846,22 +1846,30 @@ class CarPlayHostActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
+        val headline=TextView(this).apply {
+            text=brandString(R.string.connecting_to_your_iphone);textSize=32f
+            gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif",Typeface.BOLD)
+        }
+        panel.addView(headline)
         val ring = ConnectionRingView(this).apply { appearance(appNight); state(connecting = true) }
         connectionRing = ring
-        panel.addView(ring, LinearLayout.LayoutParams(dp(88), dp(88)))
-        val icon = ImageView(this).apply {
-            VehicleBranding.setLogo(this)
-            contentDescription = VehicleBranding.displayName(context)
-        }
+        panel.addView(ring, LinearLayout.LayoutParams(dp(156),dp(156)))
+        val icon = BrandMarkView(this,appNight)
         connectionIconView = icon
-        panel.addView(icon, LinearLayout.LayoutParams(dp(24), dp(24)))
-        val title = TextView(this).apply {
-            text = VehicleBranding.displayName(context)
-            gravity = Gravity.CENTER
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        val title=TextView(this).apply {
+            text=VehicleBranding.displayName(context);textSize=22f
+            gravity=Gravity.CENTER_VERTICAL;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
         }
-        connectionTitleView = title
-        panel.addView(title)
+        connectionTitleView=title
+        val brandHeader=LinearLayout(this).apply {
+            orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+            addView(icon,LinearLayout.LayoutParams(dp(32),dp(40)).apply { marginEnd=dp(12) })
+            addView(title,LinearLayout.LayoutParams(-2,-1))
+        }
+        val phone=TextView(this).apply {
+            text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=18f;gravity=Gravity.CENTER
+        }
+        panel.addView(phone)
         val stage = TextView(this).apply {
             text = brandString(R.string.getting_carplay_ready)
             gravity = Gravity.CENTER
@@ -1916,18 +1924,24 @@ class CarPlayHostActivity : ComponentActivity() {
             val colors = WaitingScreenColors.of(appNight)
             viewport.background = SceneBackdrop(this, appNight, quiet = false)
             ring.appearance(appNight)
+            icon.appearance(appNight)
             title.setTextColor(colors.text)
+            headline.setTextColor(colors.text)
+            phone.setTextColor(colors.text)
             stage.setTextColor(colors.text)
             instructions.setTextColor(colors.secondary)
             help.setTextColor(colors.secondary)
             gestureHint.setTextColor(colors.secondary)
             val buttonPalette = DiPlayPalette.of(appNight)
-            back.style(DiPlayButtonKind.PRIMARY, buttonPalette, overlay = false)
+            back.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             retry.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
         viewport.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.LEFT or Gravity.CENTER_VERTICAL))
+        viewport.addView(brandHeader,FrameLayout.LayoutParams(-2,dp(44),Gravity.TOP or Gravity.LEFT).apply {
+            leftMargin=dp(24);topMargin=dp(16)
+        })
         root.addView(viewport, FrameLayout.LayoutParams(-1, -1))
         // Added after the preparation viewport so the existing video/gesture/viewport order stays stable.
         root.addView(cornerMask, FrameLayout.LayoutParams(0, 0))
@@ -1992,18 +2006,21 @@ class CarPlayHostActivity : ComponentActivity() {
             if (preparationHeight == height) return
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
-            val iconSize = spacing(54f, 88f)
+            val iconSize = spacing(54f, 156f)
             ring.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
-            title.textSize = size(26f, 34f)
-            title.setPadding(0, spacing(8f, 18f), 0, spacing(6f, 14f))
-            stage.textSize = size(19f, 22f)
-            instructions.textSize = size(15f, 17f)
-            instructions.setPadding(0, spacing(8f, 14f), 0, spacing(12f, 24f))
+            title.textSize=22f
+            headline.textSize=size(24f,32f)
+            headline.setPadding(0,0,0,spacing(4f,12f))
+            stage.textSize=size(14f,16f)
+            instructions.textSize = size(13f,14f)
+            instructions.setPadding(0, spacing(4f,8f),0,spacing(8f,12f))
             help.textSize = size(15f, 17f)
             help.setPadding(0, spacing(8f, 14f), 0, spacing(12f, 24f))
             for (button in listOf(back, recovery, retry)) {
                 button.textSize = size(17f, 18f)
-                button.layoutParams = button.layoutParams.apply { this.height = spacing(50f, 64f) }
+                button.minHeight=dp(48)
+                button.setPadding(dp(20),dp(8),dp(20),dp(8))
+                button.layoutParams = button.layoutParams.apply { this.height=ViewGroup.LayoutParams.WRAP_CONTENT }
             }
             gestureHint.textSize = size(12.5f, 13f)
             gestureHint.setPadding(0, spacing(10f, 20f), 0, 0)
@@ -2012,9 +2029,10 @@ class CarPlayHostActivity : ComponentActivity() {
             val availableHeight = viewport.height - viewport.paddingTop - viewport.paddingBottom
             if (panel.height <= 0 || availableHeight <= 0) return
             val landscape = viewport.width - viewport.paddingLeft - viewport.paddingRight > availableHeight
-            val scale = if (landscape) minOf(1f, availableHeight.toFloat() / panel.height) else 1f
+            val scale = if (landscape) minOf(1f, (availableHeight-dp(64)).coerceAtLeast(dp(100)).toFloat() / panel.height) else 1f
             panel.scaleX = scale
             panel.scaleY = scale
+            panel.translationY=if(landscape)dp(32).toFloat()else 0f
         }
         panel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitPreparationContent() }
         viewport.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -6630,7 +6648,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private companion object {
-        private const val CONNECTION_CONTENT_SHARE = .54f
+        private const val CONNECTION_CONTENT_SHARE = .60f
         private const val CONNECTION_VISUAL_POLL_MILLIS = 100L
         const val CLUSTER_SMALL_WINDOW_ON = 1
         const val CLUSTER_SMALL_WINDOW_AUTO = 2

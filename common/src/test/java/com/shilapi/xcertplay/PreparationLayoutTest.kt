@@ -42,11 +42,11 @@ class PreparationLayoutTest {
             val last = panel.getChildAt(panel.childCount - 1)
             assertTrue("height=$heightDp bottom=${last.bottom} padding=${panel.paddingBottom} panel=${panel.height}", last.bottom + panel.paddingBottom <= panel.height)
             assertEquals(0, viewport.scrollY)
-            val top = panel.top + panel.height * (1f - panel.scaleY) / 2f
+            val top = panel.top + panel.translationY + panel.height * (1f - panel.scaleY) / 2f
             assertTrue("top=$top height=$heightDp", top >= -1f)
             assertTrue("bottom height=$heightDp", top + panel.height * panel.scaleY <= viewport.height + 1f)
         }
         for (height in listOf(200, 240, 320, 400, 479, 480, 720)) layout(height)
-        assertEquals(34f, org.robolectric.util.ReflectionHelpers.getField<TextView>(activity, "connectionTitleView").textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
+        assertEquals(22f, org.robolectric.util.ReflectionHelpers.getField<TextView>(activity, "connectionTitleView").textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
     }
 }
