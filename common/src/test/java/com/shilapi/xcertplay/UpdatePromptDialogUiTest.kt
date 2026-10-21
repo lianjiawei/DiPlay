@@ -125,6 +125,14 @@ class UpdatePromptDialogUiTest {
             root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
             root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+            for (button in listOf(dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE),dialog.dialog.getButton(AlertDialog.BUTTON_NEGATIVE)).filter { it.visibility==View.VISIBLE }) {
+                assertTrue("Dialog action must keep its touch target",button.width>=96*metrics.density && button.height>=48*metrics.density)
+                val bar=button.parent as ViewGroup
+                assertTrue("Dialog action must fit its container",button.left>=0 && button.right<=bar.width && button.top>=0 && button.bottom<=bar.height)
+                val layout=button.layout
+                assertTrue("Dialog action must have room for its text: ${button.text}, width=${button.width}, layout=${layout.width}",
+                    (0 until layout.lineCount).all { layout.getLineMax(it)<=layout.width+2 })
+            }
             for (text in descendants(root).filterIsInstance<TextView>()) {
                 if (text.visibility != View.VISIBLE || text.id == android.R.id.message) continue
                 val layout = text.layout ?: continue

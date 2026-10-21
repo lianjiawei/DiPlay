@@ -41,20 +41,6 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
             dialog.getButton(id)?.apply {
                 val primary=id==AlertDialog.BUTTON_POSITIVE
                 isAllCaps=false;textSize=20f;minHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
-                val parent=parent as? android.widget.LinearLayout
-                if(parent?.orientation==android.widget.LinearLayout.HORIZONTAL) {
-                    (layoutParams as? android.widget.LinearLayout.LayoutParams)?.let { params ->
-                        val halfGap=dp(FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP)/2
-                        params.width=0;params.weight=1f
-                        params.setMargins(halfGap,params.topMargin,halfGap,params.bottomMargin)
-                        params.marginStart=halfGap;params.marginEnd=halfGap
-                        layoutParams=params
-                    }
-                    for(i in 0 until parent.childCount) {
-                        val child=parent.getChildAt(i)
-                        if(child !is TextView)child.visibility=View.GONE
-                    }
-                }
                 setSingleLine(false)
                 minWidth=dp(96);setPadding(dp(20),dp(8),dp(20),dp(8))
                 setTextColor(GlassChrome.textColors(if(primary)palette.onAccent else palette.primaryText,palette.surface))
@@ -72,12 +58,12 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
             }
         }
         val actionParent=dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.parent as? android.widget.LinearLayout
-        actionParent?.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ ->
-            if(actionParent.orientation==android.widget.LinearLayout.HORIZONTAL) {
-                val actions=(0 until actionParent.childCount).map(actionParent::getChildAt).filterIsInstance<android.widget.Button>().filter { it.visibility==View.VISIBLE }
-                val height=actions.maxOfOrNull { it.measuredHeight } ?: 0
-                actions.filter { it.minHeight<height }.forEach { it.minHeight=height }
-            }
+        if(actionParent!=null) {
+            val actions=(0 until actionParent.childCount).map(actionParent::getChildAt).filterIsInstance<android.widget.Button>()
+            actionParent.removeAllViews()
+            actionParent.addView(GlassDialogActions(owner).apply {
+                actions.forEach { action -> addView(action,android.widget.LinearLayout.LayoutParams(-1,-2)) }
+            },android.widget.LinearLayout.LayoutParams(-1,-2))
         }
         dialog.listView?.apply {
             val optionCount=adapter?.count ?: 0

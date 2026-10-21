@@ -209,6 +209,9 @@ class GlassUiRegressionTest {
                             if(actions[0].top==actions[1].top) {
                                 assertEquals("Dialog actions must have equal heights",actions[0].height,actions[1].height)
                                 assertTrue("Dialog actions need a clear gap",actions[1].left-actions[0].right>=FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP*density-1)
+                            } else {
+                                val stacked=actions.sortedBy { it.top }
+                                assertTrue("Stacked dialog actions need a clear gap",stacked[1].top-stacked[0].bottom>=FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP*density-1)
                             }
                             for (id in listOf(android.app.AlertDialog.BUTTON_POSITIVE, android.app.AlertDialog.BUTTON_NEGATIVE)) {
                                 val button = dialog.getButton(id)
