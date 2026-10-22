@@ -1536,7 +1536,8 @@ class CarPlayController(
                 beforeStartSession = { startedHotspot?.validateReady() },
                 onStartSessionSent = {
                     watchdog.startSessionSent(it.sentAtNanos)
-                    bonjourClient.startGatewayDiscovery()
+                    if (activeSession != null) bonjourClient.connectionEstablished()
+                    else bonjourClient.startGatewayDiscovery()
                 },
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
@@ -1688,6 +1689,7 @@ class CarPlayController(
 
             override fun onSessionActive(session: AirPlaySession) {
                 if (isStaleWirelessRun(generation) || !watchdog.sessionEstablished()) return
+                bonjour?.connectionEstablished()
                 wirelessDiagnostics?.let {
                     it.sessionActive()
                     it.close()

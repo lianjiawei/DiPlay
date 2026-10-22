@@ -99,14 +99,17 @@ internal class GatewayCarPlayDiscovery(
         return false
     }
 
+    /** Session callbacks must cancel I/O without waiting for the discovery worker. */
+    fun cancel() = synchronized(lock) {
+        closed = true
+        socket?.close()
+        socket = null
+        worker?.interrupt()
+    }
+
     override fun close() {
-        val thread = synchronized(lock) {
-            closed = true
-            socket?.close()
-            socket = null
-            worker?.interrupt()
-            worker.also { worker = null }
-        }
+        cancel()
+        val thread = synchronized(lock) { worker.also { worker = null } }
         if (thread != null && thread !== Thread.currentThread()) {
             try { thread.join(2000) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
         }

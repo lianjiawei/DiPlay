@@ -118,8 +118,18 @@ class CarPlayBonjourDualStackTest {
             `when`(info.getPropertyString("id")).thenReturn("AA:BB:CC:DD:EE:FF")
             listener.serviceResolved(event)
             assertEquals(1, queue.size)
+            `when`(event.name).thenReturn("TEST-PHONE")
+            listener.serviceResolved(event)
+            assertEquals(1, queue.size) // Unicast DNS and JmDNS may preserve different name casing.
             // No gateway query before the authenticated StartSession callback.
             verifyNoInteractions(network)
+            bonjour.connectionEstablished()
+            assertEquals(0, queue.size)
+            listener.serviceResolved(event)
+            assertEquals(0, queue.size)
+            bonjour.startGatewayDiscovery()
+            verifyNoInteractions(network)
+            assertTrue(bonjour.diagnosticSnapshot().contains("gatewayLookup=session_established"))
         }
     }
 

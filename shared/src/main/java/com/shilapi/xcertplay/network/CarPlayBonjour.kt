@@ -20,11 +20,13 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.jmdns.JmDNS
 import javax.jmdns.ServiceEvent
@@ -169,13 +171,14 @@ class CarPlayBonjour(
     private val successfulProbeCount = AtomicInteger()
     private val lastProbe = AtomicReference("not_started")
     private val lastGatewayDiscovery = AtomicReference("not_started")
+    private val controlEstablished = AtomicBoolean()
     private val gatewayDiscovery = if (useInterfaceMdns && network != null &&
         targetBluetoothAddress != null && gatewayAddresses.isNotEmpty()) {
         advertisedAddresses.filterIsInstance<Inet4Address>().firstOrNull()?.let { local ->
             GatewayCarPlayDiscovery(local, gatewayAddresses, targetBluetoothAddress,
                 bindSocket = { network.bindSocket(it) },
                 onEndpoint = { endpoint, address ->
-                    if (!closed && seenServices.add("${endpoint.serviceName}|true")) {
+                    if (!closed && !controlEstablished.get() && seenServices.add(serviceKey(endpoint.serviceName, address))) {
                         interfaceServices.offer(endpoint to address)
                     }
                 }, log = { summary ->
@@ -208,18 +211,18 @@ class CarPlayBonjour(
 
     private val interfaceListener = object : ServiceListener {
         override fun serviceAdded(event: ServiceEvent) {
-            if (!closed) {
+            if (!closed && !controlEstablished.get()) {
                 discoveryEvents.offer(CarPlayBonjourEvent.Discovery(CarPlayBonjourEvent.Discovery.Stage.ADDED))
                 event.dns.requestServiceInfo(event.type, event.name, true)
             }
         }
 
         override fun serviceRemoved(event: ServiceEvent) {
-            seenServices.remove("${event.name}|${event.dns.inetAddress is Inet4Address}")
+            seenServices.remove(serviceKey(event.name, event.dns.inetAddress))
         }
 
         override fun serviceResolved(event: ServiceEvent) {
-            if (closed) return
+            if (closed || controlEstablished.get()) return
             val info = event.info
             // Use the registry address, not deprecated getInterface(), which can return
             // another address family of the same Android interface.
@@ -243,7 +246,7 @@ class CarPlayBonjour(
             val actual = CarPlayControlDns.bluetoothId(endpoint.bluetoothId)
             if (expected != null && actual != null && expected != actual) return
             // A failed probe on one family must not suppress the other family's endpoint.
-            if (!seenServices.add("${event.name}|${address is Inet4Address}")) return
+            if (!seenServices.add(serviceKey(event.name, address))) return
             interfaceServices.offer(endpoint to address)
         }
     }
@@ -353,8 +356,20 @@ class CarPlayBonjour(
 
     /** Called only after authenticated Bluetooth StartSession has actually been transmitted. */
     fun startGatewayDiscovery() {
-        if (!closed) gatewayDiscovery?.start()
+        if (!closed && !controlEstablished.get()) gatewayDiscovery?.start()
     }
+
+    /** Existing Wi-Fi: leave AirPlay advertisements alive, but stop requesting an active session. */
+    fun connectionEstablished() {
+        if (network == null || !controlEstablished.compareAndSet(false, true)) return
+        gatewayDiscovery?.cancel()
+        lastGatewayDiscovery.set("session_established")
+        interfaceServices.clear()
+        services.clear()
+    }
+
+    private fun serviceKey(name: String, address: InetAddress): String =
+        "${name.lowercase(Locale.ROOT)}|${address is Inet4Address}"
 
     override fun close() {
         val workerToJoin: Thread?
@@ -430,6 +445,7 @@ class CarPlayBonjour(
                     val (endpoint, address) = interfaceServices.poll(
                         WORKER_POLL_MILLIS, TimeUnit.MILLISECONDS,
                     ) ?: continue
+                    if (controlEstablished.get()) continue
                     emit(CarPlayBonjourEvent.Resolved(endpoint))
                     probe(endpoint, address)?.let(::emit)
                 } catch (_: InterruptedException) {
@@ -479,7 +495,7 @@ class CarPlayBonjour(
     @Suppress("DEPRECATION")
     private fun resolveWithRetry(service: NsdServiceInfo): NsdServiceInfo? {
         repeat(RESOLVE_ATTEMPTS) { attempt ->
-            if (closed) return null
+            if (closed || controlEstablished.get()) return null
             val latch = CountDownLatch(1)
             val resolved = AtomicReference<NsdServiceInfo?>()
             val failure = AtomicInteger(FAILURE_NONE)
@@ -561,7 +577,7 @@ class CarPlayBonjour(
         var lastError: IOException? = null
         val maxAttempts = if (network != null) 2 else MAX_PROBE_ATTEMPTS
         repeat(maxAttempts) { attempt ->
-            if (closed) return null
+            if (closed || controlEstablished.get()) return null
             try {
                 val statusLine = probeOnce(address, endpoint.port, attempt + 1)
                 if (network != null && !Regex("^HTTP/\\d(?:\\.\\d)? 2\\d\\d(?: |$)").containsMatchIn(statusLine)) {
@@ -578,7 +594,7 @@ class CarPlayBonjour(
             } catch (error: RuntimeException) {
                 lastError = IOException("AirPlay control probe failed", error)
             }
-            if (closed) return null
+            if (closed || controlEstablished.get()) return null
             if (attempt + 1 < maxAttempts) {
                 Thread.sleep(PROBE_RETRY_DELAY_MILLIS)
             }
@@ -615,6 +631,7 @@ class CarPlayBonjour(
                 deviceId = config.deviceId,
             )
             val output = socket.getOutputStream()
+            if (controlEstablished.get()) throw IOException("CarPlay session is already established")
             output.write(request.toByteArray(StandardCharsets.US_ASCII))
             output.flush()
             stage = CarPlayBonjourEvent.ProbeProgress.Stage.REQUEST_SENT

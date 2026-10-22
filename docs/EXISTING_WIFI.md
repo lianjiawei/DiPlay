@@ -69,6 +69,9 @@ with receiver-local IPv6 scope identifiers removed from the wire. AP/P2P bootstr
 vectors remain unchanged. Existing Wi-Fi control probes use two shorter attempts
 per endpoint, so an unreachable family does not consume the whole first-TCP window;
 non-2xx responses are retried. Ordinary multicast discovery still runs independently.
+Service names are deduplicated case-insensitively across both discovery paths.
+When the AirPlay session becomes active, supplementary queries and further control
+probes stop without waiting on the media callback; AirPlay publication remains active.
 
 Reports include gateway query/result stages and anonymous record/identity-match counts.
 `no_verified_service` means no complete matching service was obtained in the lookup
