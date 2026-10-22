@@ -153,6 +153,10 @@ Set these environment variables locally:
 | `ANDROID_KEY_PASSWORD` | Signing key password |
 
 Keep the keystore and passwords outside Git.
+The personal release switched Android signing keys at `precision.10`.
+Users of `precision.9` and earlier must uninstall the old app before installing that release;
+the uninstall clears app settings. Keep the new key for subsequent in-place updates.
+See [release signing](RELEASE-SIGNING.md) for the public certificate fingerprints.
 Run the release checks and build:
 
 ```sh
@@ -188,7 +192,9 @@ Two properties of the in-app updater shape the release:
   `x.y.z` numbers. A tag outside that shape, or a tag that is not newer, is read as
   "up to date", so `--bump` increments `versionName` and `versionCode` before tagging.
 
-The install keeps every setting because the package name and signing key are unchanged.
+An in-place install keeps settings when the package name and signing certificate match.
+The first move from the old personal signing key to `precision.10` requires a manual
+uninstall and reinstall, rather than the in-app update flow.
 The driver updates from Settings -> About -> Check for updates, or from the home-screen
 prompt after the daily background check.
 
