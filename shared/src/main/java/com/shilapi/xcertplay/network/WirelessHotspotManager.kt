@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.network
 
+import android.net.Network
 import com.shilapi.xcertplay.transport.Iap2WirelessSecurity
 import java.io.Closeable
 import java.net.InetAddress
@@ -29,6 +30,10 @@ class WirelessHotspotInfo(
     val accessPointBssid: ByteArray? = null,
     /** False when both devices already use the system Wi-Fi connection; no credentials are shared. */
     val configureWifi: Boolean = true,
+    /** Existing station network; bind outgoing control sockets without changing process routing. */
+    val network: Network? = null,
+    /** On-link IPv4 default gateways are candidates, never assumed to be the selected iPhone. */
+    val gatewayAddresses: List<InetAddress> = emptyList(),
 ) {
     override fun toString(): String =
         "WirelessHotspotInfo(backend=${backend.label}, ssid='$ssid', " +
@@ -54,6 +59,11 @@ interface WirelessHotspotManager : Closeable {
     /** Counts reported by the framework, when available; never contains station identities. */
     fun connectionDiagnosticSnapshot(): String = "association=not_exposed"
 }
+
+/** Publish only addresses actually served by this receiver. Keep legacy AP/P2P vectors unchanged. */
+internal fun wirelessBootstrapAddresses(info: WirelessHotspotInfo, primary: InetAddress): List<String> =
+    (listOf(primary) + if (info.configureWifi) emptyList() else info.hostAddresses)
+        .distinct().map { requireNotNull(it.hostAddress).substringBefore('%') }.distinct()
 
 /**
  * Converts IEEE 802.11 frequency in MHz to its channel number.

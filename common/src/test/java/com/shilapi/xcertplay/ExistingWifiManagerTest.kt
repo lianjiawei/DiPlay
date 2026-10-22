@@ -7,6 +7,8 @@ import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.IpPrefix
+import android.net.RouteInfo
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -90,6 +92,31 @@ class ExistingWifiManagerTest {
         doReturn(capabilities(NetworkCapabilities.TRANSPORT_CELLULAR)).`when`(connectivity).getNetworkCapabilities(cellular)
         doReturn(capabilities(NetworkCapabilities.TRANSPORT_WIFI, NetworkCapabilities.TRANSPORT_VPN)).`when`(connectivity).getNetworkCapabilities(vpn)
         manager().use { assertEquals("192.0.2.10", start(it).hostAddress!!.hostAddress) }
+    }
+
+    @Test fun passesTheSelectedNetworkAndOnlyItsOnLinkGatewayToDiscovery() {
+        properties.addRoute(RouteInfo(IpPrefix("0.0.0.0/0"), InetAddress.getByName("192.0.2.1"), iface.name))
+        properties.addRoute(RouteInfo(IpPrefix("0.0.0.0/0"), InetAddress.getByName("198.51.100.1"), iface.name))
+        manager().use {
+            val result = start(it)
+            assertSame(network, result.network)
+            assertEquals(listOf("192.0.2.1"), result.gatewayAddresses.map { address -> address.hostAddress })
+            it.validateReady()
+            properties = link("192.0.2.10/24").apply {
+                addRoute(RouteInfo(IpPrefix("0.0.0.0/0"), InetAddress.getByName("192.0.2.2"), iface.name))
+            }
+            callback.onLinkPropertiesChanged(network, properties)
+            assertEquals(1, changes)
+            assertThrows(IOException::class.java) { it.validateReady() }
+        }
+    }
+
+    @Test fun validatesNetworkLossBeforeBootstrapInsteadOfUsingAStaleSnapshot() {
+        manager().use {
+            start(it)
+            `when`(connectivity.getLinkProperties(network)).thenReturn(null)
+            assertThrows(IOException::class.java) { it.validateReady() }
+        }
     }
 
     @Test fun publishesIpv4AndKeepsTheScopedLinkLocalAsSecondary() {
@@ -242,6 +269,7 @@ class ExistingWifiManagerTest {
 
     private fun linkAddress(address: String): LinkAddress = mock(LinkAddress::class.java).also {
         `when`(it.address).thenReturn(InetAddress.getByName(address.substringBefore('/')))
+        `when`(it.prefixLength).thenReturn(address.substringAfter('/').toInt())
     }
 
     private fun capabilities(vararg transports: Int): NetworkCapabilities = mock(NetworkCapabilities::class.java).also {

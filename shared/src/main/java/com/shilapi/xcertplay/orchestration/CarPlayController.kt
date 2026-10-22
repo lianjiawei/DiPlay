@@ -1405,6 +1405,10 @@ class CarPlayController(
                 useInterfaceMdns = true,
                 onEvent = { event -> debugLog("wireless bonjour: ${event.diagnosticSummary()}") },
                 additionalAddresses = hotspotInfo.hostAddresses.filter { it != hostAddress },
+                network = hotspotInfo.network,
+                gatewayAddresses = hotspotInfo.gatewayAddresses,
+                targetBluetoothAddress = if (hotspotInfo.network != null) device.address else null,
+                onGatewayDiagnostic = { message -> debugLog("wireless $message") },
             )
             synchronized(wirelessResourceLock) {
                 if (isStaleWirelessRun(generation)) return
@@ -1498,7 +1502,7 @@ class CarPlayController(
                 passphrase = hotspotInfo.passphrase,
                 channel = hotspotInfo.channel,
                 security = hotspotInfo.security,
-                ipAddresses = listOf(hostAddressText),
+                ipAddresses = com.shilapi.xcertplay.network.wirelessBootstrapAddresses(hotspotInfo, hostAddress),
                 airPlayPort = listenerPort,
                 deviceIdentifier = deviceIdentifier,
                 publicKey = identity.publicKeyHex,
@@ -1530,7 +1534,10 @@ class CarPlayController(
                 timeoutMillis = controlLoopTimeoutMillis(),
                 keepAliveAfterDeadline = { keepBluetoothControlAlive(generation) },
                 beforeStartSession = { startedHotspot?.validateReady() },
-                onStartSessionSent = { watchdog.startSessionSent(it.sentAtNanos) },
+                onStartSessionSent = {
+                    watchdog.startSessionSent(it.sentAtNanos)
+                    bonjourClient.startGatewayDiscovery()
+                },
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
                     diagnostics.controlProgress(message)

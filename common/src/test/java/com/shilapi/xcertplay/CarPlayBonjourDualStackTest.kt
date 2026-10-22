@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
+import android.net.Network
 import android.net.wifi.WifiManager
 import com.shilapi.xcertplay.airplay.AirPlayConfig
 import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
@@ -91,6 +92,34 @@ class CarPlayBonjourDualStackTest {
             val queue = ReflectionHelpers.getField<java.util.concurrent.LinkedBlockingQueue<*>>(bonjour, "interfaceServices")
             assertEquals(1, queue.size)
             verify(dns, never()).getInterface()
+        }
+    }
+
+    @Test fun existingWifiIgnoresAnotherPhoneWithoutSuppressingTheSelectedPhone() {
+        setup()
+        val network = mock(Network::class.java)
+        val dns = mock(JmDNS::class.java)
+        `when`(dns.inetAddress).thenReturn(ipv4)
+        val info = mock(ServiceInfo::class.java)
+        `when`(info.inetAddresses).thenReturn(arrayOf(InetAddress.getByName("192.0.2.1")))
+        `when`(info.port).thenReturn(49153)
+        `when`(info.getPropertyString("id")).thenReturn("11:22:33:44:55:66")
+        val event = mock(javax.jmdns.ServiceEvent::class.java)
+        `when`(event.dns).thenReturn(dns)
+        `when`(event.info).thenReturn(info)
+        `when`(event.name).thenReturn("test-phone")
+        CarPlayBonjour(context, config, identity, ipv4.hostAddress, true,
+            network = network, gatewayAddresses = listOf(InetAddress.getByName("192.0.2.1")),
+            targetBluetoothAddress = "AA:BB:CC:DD:EE:FF").use { bonjour ->
+            val listener = ReflectionHelpers.getField<ServiceListener>(bonjour, "interfaceListener")
+            val queue = ReflectionHelpers.getField<java.util.concurrent.LinkedBlockingQueue<*>>(bonjour, "interfaceServices")
+            listener.serviceResolved(event)
+            assertEquals(0, queue.size)
+            `when`(info.getPropertyString("id")).thenReturn("AA:BB:CC:DD:EE:FF")
+            listener.serviceResolved(event)
+            assertEquals(1, queue.size)
+            // No gateway query before the authenticated StartSession callback.
+            verifyNoInteractions(network)
         }
     }
 

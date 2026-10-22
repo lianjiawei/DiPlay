@@ -42,6 +42,40 @@ Passwords entered here are passed to Android's Wi-Fi configuration, not retained
 as CarPlay credentials or sent to the iPhone. Android does not expose a saved
 network's plaintext password to ordinary apps.
 
+## Target iPhone as the hotspot host — precision.12-rc1 trial
+
+Connect the receiver to the target iPhone's Personal Hotspot in Android settings,
+pair that same iPhone over Bluetooth, and choose Existing Wi-Fi in DiPlay. No
+hotspot password is stored or sent by this backend. This is an experimental
+compatibility trial, not a hardware-validated claim that all iOS versions support it.
+
+After authenticated Bluetooth StartSession, normal multicast discovery is supplemented
+by bounded direct mDNS queries to the selected Wi-Fi's on-link IPv4 default gateway(s).
+The gateway is only a candidate. PTR, SRV, TXT and A records must identify a
+`_carplay-ctrl._tcp.local.` instance whose TXT `id` matches the selected Bluetooth
+iPhone and whose advertised host has the gateway's address. Only then is a connect
+request sent to the advertised port. There is no fixed iPhone IP, guessed control
+port, subnet scan, or assumption that a router is the paired iPhone.
+
+Direct queries use an ephemeral source port and follow RFC 6762 sections 5.5/6.7.
+Split DNS-SD responses trigger bounded SRV/TXT/A follow-up queries; malformed,
+truncated, stale/goodbye, mismatched-transaction and unrelated records are rejected.
+Gateway discovery stops with the connection attempt. Both the direct query socket
+and Existing Wi-Fi control sockets bind to the selected Android Network without
+changing process routing. Gateway/link changes invalidate the old attempt.
+
+Existing Wi-Fi StartSession now carries both actually served address families,
+with receiver-local IPv6 scope identifiers removed from the wire. AP/P2P bootstrap
+vectors remain unchanged. Existing Wi-Fi control probes use two shorter attempts
+per endpoint, so an unreachable family does not consume the whole first-TCP window;
+non-2xx responses are retried. Ordinary multicast discovery still runs independently.
+
+Reports include gateway query/result stages and anonymous record/identity-match counts.
+`no_verified_service` means no complete matching service was obtained in the lookup
+window, not proof of a specific iOS restriction. iOS must expose the service on its
+hotspot interface; Android cannot force that service to start. A successful unit or
+loopback test cannot establish real iPhone hotspot compatibility or sustained playback.
+
 ## Implementation
 
 `ExistingWifiManager` implements the wireless backend contract. It selects the single

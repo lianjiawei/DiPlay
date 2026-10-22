@@ -14,6 +14,7 @@ import com.shilapi.xcertplay.orchestration.ManualHotspotValidation
 import com.shilapi.xcertplay.transport.Iap2WirelessSecurity
 import java.io.IOException
 import java.net.InetAddress
+import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -34,6 +35,7 @@ class ExistingWifiManager(
     @Volatile private var selected: Network? = null
     @Volatile private var host: InetAddress? = null
     @Volatile private var hosts: List<InetAddress> = emptyList()
+    @Volatile private var gateways: List<InetAddress> = emptyList()
     private var interfaceIndex = 0
     @Volatile private var interfaceName: String? = null
     private var callbackRegistered = false
@@ -98,6 +100,7 @@ class ExistingWifiManager(
                     selected = network
                     host = address
                     hosts = addresses
+                    gateways = gatewayCandidates(properties)
                     interfaceIndex = iface.index
                     interfaceName = name
                     connectivity.registerNetworkCallback(requestWithoutDefaultCapabilities()
@@ -121,7 +124,7 @@ class ExistingWifiManager(
                         frequency < 5955 -> "5 GHz"
                         else -> "6 GHz"
                     }, WirelessHotspotBackend.EXISTING_WIFI, hostAddresses = addresses, accessPointBssid = apBssid,
-                    configureWifi = false)
+                    configureWifi = false, network = network, gatewayAddresses = gateways)
             }
             if ((System.nanoTime() - started) / 1_000_000 >= timeoutMillis) {
                 throw IOException("Existing Wi-Fi is not connected or has no usable address. Connect both devices to the same Wi-Fi in system settings")
@@ -134,6 +137,30 @@ class ExistingWifiManager(
     private fun sameLink(properties: LinkProperties): Boolean =
         properties.interfaceName == interfaceName && properties.linkAddresses.any { it.address == host } &&
             existingWifiHostAddresses(properties.linkAddresses.map { it.address }, interfaceIndex).toSet() == hosts.toSet()
+            && gatewayCandidates(properties).toSet() == gateways.toSet()
+
+    private fun gatewayCandidates(properties: LinkProperties): List<InetAddress> =
+        properties.routes.filter { it.isDefaultRoute && it.`interface` == properties.interfaceName }
+            .mapNotNull { it.gateway as? Inet4Address }
+            .filter { gateway ->
+                !gateway.isAnyLocalAddress && !gateway.isLoopbackAddress && !gateway.isMulticastAddress &&
+                    properties.linkAddresses.any { link ->
+                        val local = link.address
+                        local is Inet4Address && local != gateway && link.prefixLength in 1..32 &&
+                            (0 until link.prefixLength).all { bit ->
+                                (local.address[bit / 8].toInt() xor gateway.address[bit / 8].toInt()) and
+                                    (1 shl (7 - bit % 8)) == 0
+                            }
+                    }
+            }.distinct().take(2)
+
+    override fun validateReady() {
+        val network = selected ?: throw IOException("Existing Wi-Fi is not attached")
+        val properties = connectivity.getLinkProperties(network)
+        if (closed || invalidated.get() || properties == null || !sameLink(properties)) {
+            throw IOException("Existing Wi-Fi changed; connect again")
+        }
+    }
 
     private fun readableSsid(info: WifiInfo?): String? = info?.ssid?.removeSurrounding("\"")
         ?.takeUnless { it == WifiManager.UNKNOWN_SSID || it.isEmpty() }
