@@ -34,7 +34,7 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
         if (quiet || bounds.height() > bounds.width()) {
             val readingVeil = if (bounds.height() > bounds.width()) {
                 if (night) (if(quiet)0xA0 else 0xD0) else 0xF0
-            } else if (night) 0x38 else 0xE8
+            } else if (night) 0x68 else 0xE8
             canvas.drawColor((color and 0x00FFFFFF) or (readingVeil shl 24))
         } else {
             if (!night) canvas.drawColor(Color.argb(180, 231, 239, 246))

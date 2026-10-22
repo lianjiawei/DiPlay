@@ -532,7 +532,7 @@ class AdaptiveSettingsUiTest {
         assertFalse(index.any { it.title == screen.getString(R.string.auto_car_hotspot_title) })
     }
 
-    @Test fun cardControlsShareOneMinimumHeightAndGap() {
+    @Test fun cardControlsKeepConsistentRowAndActionHeightsAndGaps() {
         val screen = openSettings()
         descendants(screen.window.decorView)
             .first { it.contentDescription == screen.getString(R.string.settings_open_category,
@@ -550,13 +550,18 @@ class AdaptiveSettingsUiTest {
         layoutRoot(screen)
         buttons.forEach { button ->
             val lp = button.layoutParams as LinearLayout.LayoutParams
+            val row = ReflectionHelpers.getField<Boolean>(button, "rowPresentation")
+            val expectedHeight = dp(if (row) FidelitySettingsMetrics.SETTING_ROW_DP
+                else FidelitySettingsMetrics.ACTION_HEIGHT_DP)
             assertEquals(button.text.toString(), ViewGroup.LayoutParams.WRAP_CONTENT, lp.height)
-            assertEquals(button.text.toString(), dp(60), button.minHeight)
+            assertEquals(button.text.toString(), expectedHeight, button.minHeight)
+            assertTrue("Controls retain their touch target", expectedHeight >= dp(GlassChrome.MIN_TARGET_DP))
             if (generateSequence<View>(button) { it.parent as? View }.all { it.visibility == View.VISIBLE }) {
-                assertTrue(button.text.toString(), button.height >= dp(60))
+                assertTrue(button.text.toString(), button.height >= expectedHeight)
             }
             assertEquals(button.text.toString(), 0, lp.topMargin)
-            assertTrue(button.text.toString(), lp.bottomMargin in setOf(0, dp(6), dp(12)))
+            assertTrue(button.text.toString(), lp.bottomMargin in setOf(0, dp(6),
+                dp(FidelitySettingsMetrics.CONTROL_GAP_DP), dp(GlassChrome.CONTROL_GAP_DP)))
         }
         val page = scroll.getChildAt(0)
         assertFalse(descendants(scroll).any { it.tag == "spacer" && it.parent !== page })

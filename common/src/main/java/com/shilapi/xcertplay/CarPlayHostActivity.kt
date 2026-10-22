@@ -1857,8 +1857,8 @@ class CarPlayHostActivity : ComponentActivity() {
             gravity = Gravity.CENTER
         }
         val headline=TextView(this).apply {
-            text=brandString(R.string.connecting_to_your_iphone);textSize=32f
-            gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif",Typeface.BOLD)
+            text=brandString(R.string.connecting_to_your_iphone);textSize=UiTypography.COMPACT_PAGE_SP.toFloat()
+            gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
         }
         panel.addView(headline)
         val ring = ConnectionRingView(this).apply { appearance(appNight); state(connecting = true) }
@@ -1877,7 +1877,7 @@ class CarPlayHostActivity : ComponentActivity() {
             addView(title,LinearLayout.LayoutParams(-2,-1))
         }
         val phone=TextView(this).apply {
-            text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=18f;gravity=Gravity.CENTER
+            text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=UiTypography.ROW_SP.toFloat();gravity=Gravity.CENTER
         }
         panel.addView(phone)
         val stage = TextView(this).apply {
@@ -1986,11 +1986,11 @@ class CarPlayHostActivity : ComponentActivity() {
                 appearance(appNight); state(connecting = false, completed = true)
             }, LinearLayout.LayoutParams(dp(56), dp(56)))
             addView(TextView(this@CarPlayHostActivity).apply {
-                text = brandString(R.string.carplay_connected); textSize = 22f
+                text = brandString(R.string.carplay_connected); textSize = UiTypography.STATUS_SP.toFloat()
                 setTextColor(palette.primaryText); gravity = Gravity.CENTER
             })
             addView(TextView(this@CarPlayHostActivity).apply {
-                text = brandString(R.string.ui_glass_video_ready); textSize = 16f
+                text = brandString(R.string.ui_glass_video_ready); textSize = UiTypography.BODY_SP.toFloat()
                 setTextColor(palette.secondaryText); gravity = Gravity.CENTER
             })
             visibility = View.GONE
@@ -2015,7 +2015,7 @@ class CarPlayHostActivity : ComponentActivity() {
         sidePanel = buildSidePanel().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         sidePanelTab = buildSidePanelTab().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         var preparationHeight = -1
-        var naturalRingSize = dp(156)
+        var naturalRingSize = dp(120)
         fun updatePreparationLayout() {
             val height = viewport.height - viewport.paddingTop - viewport.paddingBottom
             if (height <= 0) return
@@ -2034,19 +2034,19 @@ class CarPlayHostActivity : ComponentActivity() {
             if (preparationHeight == height) return
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
-            val iconSize = spacing(54f, 156f)
+            val iconSize = spacing(54f, 120f)
             naturalRingSize = iconSize
             ring.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             title.textSize=22f
-            headline.textSize=size(24f,32f)
+            headline.textSize=size(22f,UiTypography.COMPACT_PAGE_SP.toFloat())
             headline.setPadding(0,0,0,spacing(4f,12f))
-            stage.textSize=size(14f,16f)
+            stage.textSize=UiTypography.BODY_SP.toFloat()
             instructions.textSize = size(13f,14f)
             instructions.setPadding(0, spacing(4f,8f),0,spacing(8f,12f))
-            help.textSize = size(15f, 17f)
+            help.textSize = UiTypography.BODY_SP.toFloat()
             help.setPadding(0, spacing(8f, 14f), 0, spacing(12f, 24f))
             for (button in listOf(back, connectionHelp, recovery, retry)) {
-                button.textSize = size(17f, 18f)
+                button.textSize = UiTypography.ACTION_SP.toFloat()
                 button.minHeight=dp(GlassChrome.MIN_TARGET_DP)
                 button.setPadding(dp(20),dp(8),dp(20),dp(8))
                 button.layoutParams = button.layoutParams.apply { this.height=ViewGroup.LayoutParams.WRAP_CONTENT }

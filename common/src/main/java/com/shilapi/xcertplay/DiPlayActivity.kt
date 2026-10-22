@@ -936,12 +936,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun settingsHeader(compact: Boolean): LinearLayout = row().apply {
-        val controlHeight=dp(if (isExpandedSettingsLayout) (FidelitySettingsMetrics.HEADER_DP * resources.configuration.fontScale.coerceAtLeast(1f)).roundToInt() else if(compact)44 else 52)
+        val controlHeight=dp(if (isExpandedSettingsLayout) (FidelitySettingsMetrics.HEADER_DP * resources.configuration.fontScale.coerceAtLeast(1f)).roundToInt() else if(compact)GlassChrome.MIN_TARGET_DP else FidelitySettingsMetrics.HEADER_DP)
         val iconOnlySearch = compact || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         gravity = Gravity.CENTER_VERTICAL
         addView(headerButton(brandString(if(isExpandedSettingsLayout) R.string.ui_glass_back_home else R.string.settings),R.drawable.ic_dp_back,compact,::navigateBack).apply {
             contentDescription=brandString(if(isExpandedSettingsLayout)R.string.ui_glass_back_home else R.string.back)
-            if(isExpandedSettingsLayout) textSize=22f
+            textSize=UiTypography.ACTION_SP.toFloat()
         },LinearLayout.LayoutParams(-2,controlHeight))
         val settingsTitle = label(if(isExpandedSettingsLayout)brandString(R.string.settings)else "", if (compact) 20 else 26, TEXT, true,
             centreGlyphs = true).apply {
@@ -953,8 +953,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         // Reserve the action buttons first; only the title may shrink in a narrow header.
         val titleBlock: View=if(isExpandedSettingsLayout && !settingsSearchExpanded) column().apply {
             setPadding(dp(FidelitySettingsMetrics.CONTENT_PAD_DP),0,0,0)
-            addView(label(brandString(R.string.settings),30,TEXT,true).apply { includeFontPadding=false })
-            addView(label("CorsairPlay",16,MUTED).apply { includeFontPadding=false })
+            addView(label(brandString(R.string.settings),UiTypography.PAGE_SP,TEXT,true).apply { includeFontPadding=false })
+            addView(label("CorsairPlay",UiTypography.CAPTION_SP,MUTED).apply { includeFontPadding=false })
         } else if(!isExpandedSettingsLayout && !settingsSearchExpanded)View(this@DiPlayActivity)else settingsTitle
         addView(titleBlock, LinearLayout.LayoutParams(
             if (settingsSearchExpanded) -2 else 0, controlHeight,
@@ -992,7 +992,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 }
             } else {
                 headerButton(brandString(R.string.settings_search_hint), R.drawable.ic_dp_search, compact, openSearch).apply {
-                    if(isExpandedSettingsLayout) textSize=22f
+                    textSize=UiTypography.ACTION_SP.toFloat()
                 }
             }.apply {
                 tag = SETTINGS_SEARCH_BUTTON_TAG
@@ -1026,7 +1026,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val body = column()
         val hero = column().apply { gravity = Gravity.CENTER_HORIZONTAL; clipChildren = false; clipToPadding = false }
         homeCardTitle = label(brandString(R.string.wireless_carplay), 12, ACCENT, true)
-        hero.addView(label(brandString(R.string.ui_glass_home_title), 32, TEXT, true).apply {
+        hero.addView(label(brandString(R.string.ui_glass_home_title), UiTypography.HERO_SP, TEXT, true).apply {
             homeHeadline=this
             gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif", Typeface.BOLD)
             includeFontPadding = false
@@ -1036,7 +1036,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         hero.addView(homeConnectionRing, LinearLayout.LayoutParams(dp(156),dp(156)).apply { topMargin=dp(8) })
         val phone = actionButton(if (DiPlayPreferences.phoneAddress(this) == null) brandString(R.string.choose_iphone)
             else DiPlayPreferences.phoneName(this), false) { choosePhone() }.apply {
-            SceneText.apply(this, appNight); textSize=18f; includeFontPadding=false
+            SceneText.apply(this, appNight); textSize=UiTypography.ROW_SP.toFloat(); includeFontPadding=false
             background=RippleDrawable(ColorStateList.valueOf(RIPPLE), ColorDrawable(Color.TRANSPARENT),null)
             setPadding(dp(8),0,dp(8),0)
             val arrow=android.graphics.drawable.RotateDrawable().apply {
@@ -1055,7 +1055,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         hero.addView(status,LinearLayout.LayoutParams(-1,-2))
         connectButton=button(brandString(R.string.ui_glass_connect_carplay),true) {
             if (CarPlayBackgroundSession.hasSession()) openProjection() else connect(true)
-        }.apply { textSize=18f;minHeight=dp(48);typeface=Typeface.create("sans-serif",Typeface.BOLD) }
+        }.apply { textSize=UiTypography.PRIMARY_ACTION_SP.toFloat();minHeight=dp(FidelitySettingsMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
         disconnectButton=button(brandString(R.string.disconnect),false) {
             disconnectButton?.isEnabled=false
             CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
@@ -1066,7 +1066,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         hero.addView(connectButton,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(4) })
         val usb=headerButton(brandString(R.string.connect_with_usb),R.drawable.ic_dp_usb,true) { connect(false) }.apply {
-            textSize=18f;minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
+            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
         }
         homeUsbFooter=usb
         val footerStart=android.widget.FrameLayout(this).apply {
@@ -1074,7 +1074,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             addView(disconnectButton,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
         val settings=headerButton(brandString(R.string.settings),R.drawable.ic_glass_settings,true) { page="settings";render() }.apply {
-            textSize=18f;minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
+            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
         }
         val brand=HomeBrandView(this).apply {
             contentDescription=brandString(R.string.home_public_preview,VehicleBranding.displayName(this@DiPlayActivity),version())
@@ -1219,7 +1219,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 imageTintList = ColorStateList.valueOf(if (selected) ACCENT else TEXT)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(dp(FidelitySettingsMetrics.RAIL_ICON_DP),dp(FidelitySettingsMetrics.RAIL_ICON_DP)).apply { marginEnd=dp(FidelitySettingsMetrics.ROW_GAP_DP) })
-            addView(label(title, 22, if (selected) ACCENT else TEXT, true,
+            addView(label(title, UiTypography.ROW_SP, if (selected) ACCENT else TEXT, selected,
                 centreGlyphs = usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)),
                 LinearLayout.LayoutParams(0, -1, 1f))
             setOnClickListener {
@@ -1274,9 +1274,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun settingsOverview(content: LinearLayout) {
         settingsPageTitle(content, brandString(R.string.settings_overview), brandString(R.string.settings_overview_subtitle))
-        val readiness = card().apply {
-            setPadding(dp(20), dp(16), dp(20), dp(16))
-        }
+        val readiness = card()
         readinessCard = readiness
         renderedReadiness = null
         refreshReadiness()
@@ -1342,14 +1340,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             else -> TEXT
         }
         val text=column()
-        text.addView(label(title,if(isExpandedSettingsLayout)24 else 22,if(state==SettingsReadiness.CONNECTED)TEXT else tint,true).apply {
+        text.addView(label(title,UiTypography.STATUS_SP,if(state==SettingsReadiness.CONNECTED)TEXT else tint,true).apply {
             if(state==SettingsReadiness.CONNECTED) {
                 val check=getDrawable(R.drawable.ic_connection_done)?.mutate()?.apply { setTint(READY);setBounds(0,0,dp(24),dp(24)) }
                 setCompoundDrawablesRelative(null,null,check,null);compoundDrawablePadding=dp(FidelitySettingsMetrics.ROW_GAP_DP)
             }
         },LinearLayout.LayoutParams(-2,-2))
         if(state==SettingsReadiness.CONNECTED && DiPlayPreferences.phoneAddress(this)!=null) text.addView(actionButton(DiPlayPreferences.phoneName(this),false) { choosePhone() }.apply {
-            textSize=18f;minHeight=dp(40);setPadding(0,0,0,0);gravity=Gravity.START or Gravity.CENTER_VERTICAL
+            textSize=UiTypography.ROW_SP.toFloat();minHeight=dp(GlassChrome.MIN_TARGET_DP);setPadding(0,0,0,0);gravity=Gravity.START or Gravity.CENTER_VERTICAL
             doOnLayout { background=RippleDrawable(ColorStateList.valueOf(RIPPLE),ColorDrawable(Color.TRANSPARENT),null) }
         },LinearLayout.LayoutParams(-2,-2))
         if (state != SettingsReadiness.CONNECTED) text.addView(label(detail, 15, MUTED).apply { setPadding(0, dp(6), 0, 0) })
@@ -1379,7 +1377,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         (0 until childCount).map(::getChildAt).filter { it.visibility!=View.GONE }.forEachIndexed { index,control ->
             if(control is LinearLayout) {
                 val texts=visualDescendants(control).filterIsInstance<TextView>().filter { it !is Switch && it !is Button }
-                texts.firstOrNull()?.textSize=if(isExpandedSettingsLayout)20f else 18f
+                texts.firstOrNull()?.textSize=UiTypography.ROW_SP.toFloat()
                 texts.getOrNull(1)?.apply {
                     val full=text.toString()
                     val hint=quickHints.getOrNull(index)
@@ -1429,18 +1427,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         render()
     }
 
-    private fun settingsSectionHeading(title: Int) = label(brandString(title), 22, TEXT, true).apply {
-        setPadding(0, 0, 0, dp(10))
+    private fun settingsSectionHeading(title: Int) = label(brandString(title), UiTypography.SECTION_SP, TEXT, true).apply {
+        setPadding(0, 0, 0, dp(FidelitySettingsMetrics.SECTION_GAP_DP))
     }
 
     private fun settingsSummaryCard(category: SettingsCategory, summary: String): LinearLayout = card().apply {
         val warning = category == SettingsCategory.ADVANCED
-        setPadding(dp(24), dp(10), dp(24), dp(10))
+        setPadding(dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.CATEGORY_VERTICAL_DP),
+            dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.CATEGORY_VERTICAL_DP))
         isClickable = true
         isFocusable = true
         foreground = android.graphics.drawable.LayerDrawable(arrayOf(
             android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), null, null),
-            focusRing((layoutCornerRadius() * 1.35f / resources.displayMetrics.density).roundToInt())))
+            focusRing(FidelitySettingsMetrics.CARD_RADIUS_DP)))
         contentDescription = brandString(R.string.settings_open_category, settingsCategoryTitle(category))
         addView(row().apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -1448,20 +1447,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 setImageResource(settingsCategoryIcon(category))
                 imageTintList = ColorStateList.valueOf(if (warning) WARNING else ACCENT)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(20) })
+            }, LinearLayout.LayoutParams(dp(FidelitySettingsMetrics.CATEGORY_ICON_DP), dp(FidelitySettingsMetrics.CATEGORY_ICON_DP)).apply { marginEnd = dp(FidelitySettingsMetrics.CATEGORY_ICON_GAP_DP) })
             addView(column().apply {
-                addView(label(settingsCategoryTitle(category), 17, if (warning) WARNING else TEXT, true))
-                addView(label(summary, 13, MUTED).apply { setPadding(0, dp(3), 0, 0) })
+                addView(label(settingsCategoryTitle(category), UiTypography.ROW_SP, if (warning) WARNING else TEXT, true))
+                addView(label(summary, UiTypography.CAPTION_SP, MUTED).apply { setPadding(0, dp(3), 0, 0) })
             }, LinearLayout.LayoutParams(0, -2, 1f))
         })
         setOnClickListener { openSettingsCategory(category) }
     }
 
     private fun settingsPageTitle(content: LinearLayout, title: String, subtitle: String) {
-        content.addView(label(title, if (isExpandedSettingsLayout) 38 else 26, TEXT, true).apply {
-            includeFontPadding=false;typeface=Typeface.create("sans-serif",Typeface.BOLD)
+        content.addView(label(title, if (isExpandedSettingsLayout) UiTypography.PAGE_SP else UiTypography.COMPACT_PAGE_SP, TEXT, true).apply {
+            includeFontPadding=false;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
         })
-        content.addView(label(subtitle, if(isExpandedSettingsLayout)20 else 16, MUTED).apply {
+        content.addView(label(subtitle, UiTypography.BODY_SP, MUTED).apply {
             includeFontPadding=false
             setPadding(0,dp(FidelitySettingsMetrics.CAPTION_GAP_DP),0,dp(FidelitySettingsMetrics.ROW_GAP_DP))
         })
@@ -1805,7 +1804,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun advancedSettings(content: LinearLayout) {
         settingsPageTitle(content, brandString(R.string.settings_advanced), brandString(R.string.settings_advanced_subtitle))
         val caution = card().apply {
-            addView(label(brandString(R.string.settings_advanced_caution_title), 18, WARNING, true))
+            addView(label(brandString(R.string.settings_advanced_caution_title), UiTypography.ROW_SP, WARNING, true))
             addView(label(brandString(R.string.settings_advanced_caution_description), 14, MUTED).apply {
                 setPadding(0, dp(6), 0, 0)
             })
@@ -2035,7 +2034,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }.apply {
                 rowPresentation=true; rowTitle=brandString(R.string.picture_adjustments)
                 rowSummary="";rowIconResource=R.drawable.ic_dp_display
-                textSize=if(isExpandedSettingsLayout)22f else 16f
+                textSize=UiTypography.ROW_SP.toFloat()
             }, matchButton(0, FidelitySettingsMetrics.SETTING_ROW_DP))
             carPlaySizeControl(card)
             resolutionSettingControl(
@@ -2707,7 +2706,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
             },LinearLayout.LayoutParams(dp(if(isExpandedSettingsLayout)FidelitySettingsMetrics.ABOUT_ICON_DP else FidelitySettingsMetrics.ABOUT_COMPACT_ICON_DP),dp(if(isExpandedSettingsLayout)FidelitySettingsMetrics.ABOUT_ICON_DP else FidelitySettingsMetrics.ABOUT_COMPACT_ICON_DP)).apply { if(isExpandedSettingsLayout)marginEnd=dp(FidelitySettingsMetrics.GRID_GAP_DP) })
             addView(column().apply {
-                addView(label(brandString(R.string.about_diplay),if(isExpandedSettingsLayout)40 else 24,TEXT,true))
+                addView(label(brandString(R.string.about_diplay),UiTypography.PAGE_SP,TEXT,true))
                 addView(label(brandString(R.string.about_public_preview_prefix,version()),18,TEXT))
                 addView(label(brandString(R.string.carplay_at_home_in_your_car),16,MUTED))
                 addView(label(brandString(R.string.ui_glass_not_certified),12,MUTED))
@@ -2738,7 +2737,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         contentDescription="$title. $summary"
         rowHelp={ appDialogBuilder().setTitle(title).setMessage(summary).setPositiveButton(android.R.string.ok,null).show() }
         setOnLongClickListener { rowHelp?.invoke();true }
-        textSize=if(isExpandedSettingsLayout)20f else 18f
+        textSize=UiTypography.ACTION_SP.toFloat()
         minHeight=dp(FidelitySettingsMetrics.SETTING_ROW_DP)
         setPadding(0,0,0,0)
     }
@@ -6276,7 +6275,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             running -> R.string.ui_glass_connecting_title
             else -> R.string.ui_glass_home_title
         })
-        homeHeadline?.textSize=if(running && !CarPlayBackgroundSession.active)28f else 32f
+        homeHeadline?.textSize=if(running && !CarPlayBackgroundSession.active)UiTypography.COMPACT_PAGE_SP.toFloat() else UiTypography.HERO_SP.toFloat()
         homeUsbFooter?.visibility=if(running)View.GONE else View.VISIBLE
         homeUsbConnected?.visibility=if(running)View.VISIBLE else View.GONE
         homeConnectionRing?.state(connecting = running && !CarPlayBackgroundSession.active,
@@ -6599,12 +6598,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun section(parent: LinearLayout, title: String, icon: Int? = null, build: (LinearLayout) -> Unit) {
         searchIndexSink?.add(title)
         val card = card()
-        val heading = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(16)) }
+        val heading = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(FidelitySettingsMetrics.SECTION_GAP_DP)) }
         if (icon != null) heading.addView(ImageView(this).apply {
             setImageResource(icon); imageTintList = ColorStateList.valueOf(ACCENT)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = dp(12) })
-        heading.addView(label(title, 22, TEXT, true,
+        }, LinearLayout.LayoutParams(dp(FidelitySettingsMetrics.SECTION_ICON_DP), dp(FidelitySettingsMetrics.SECTION_ICON_DP)).apply { marginEnd = dp(FidelitySettingsMetrics.ROW_GAP_DP) })
+        heading.addView(label(title, UiTypography.SECTION_SP, TEXT, true,
             centreGlyphs = icon != null && usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)),
             LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(heading)
@@ -6892,7 +6891,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         children.forEachIndexed { index,view ->
             if(view !is SettingButton || view.action || (VALUE_SEPARATOR !in view.text && view.rowTitle==null))return@forEachIndexed
             view.rowPresentation=true
-            view.textSize=if(isExpandedSettingsLayout)22f else 16f
+            view.minHeight=dp(FidelitySettingsMetrics.SETTING_ROW_DP)
+            view.textSize=UiTypography.ROW_SP.toFloat()
             val title=view.rowTitle ?: view.text.toString().substringBefore(VALUE_SEPARATOR)
             if(title==brandString(R.string.resolution))view.rowReconnects=true
             val notes=children.drop(index+1).takeWhile { it is TextView && it !is Button }.filterIsInstance<TextView>()
@@ -6927,7 +6927,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private fun card() = column().apply { background = rounded(SURFACE, BORDER); setPadding(dp(24), dp(24), dp(24), dp(24)) }
+    private fun card() = column().apply {
+        background = GlassChrome.surface(SURFACE, BORDER, resources.displayMetrics.density,
+            dp(FidelitySettingsMetrics.CARD_RADIUS_DP).toFloat(), opacity = if (appNight) 184 else 224)
+        setPadding(dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.CARD_VERTICAL_DP),
+            dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.CARD_VERTICAL_DP))
+    }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
     private fun row() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
     private class SettingsSearchEditText(context: android.content.Context) : EditText(context) {
@@ -7046,10 +7051,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     )
 
     private fun button(title: String, primary: Boolean, click: () -> Unit) = SettingButton(this, MUTED, ACCENT).apply {
-        isAllCaps = false; textSize = 18f; setTextColor(GlassChrome.textColors(if (primary) ON_ACCENT else TEXT, BUTTON))
+        isAllCaps = false; textSize = UiTypography.ACTION_SP.toFloat(); setTextColor(GlassChrome.textColors(if (primary) ON_ACCENT else TEXT, BUTTON))
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), buttonShape(if (primary) ACCENT else BUTTON, if (primary) ACCENT else BORDER), null)
-        setPadding(dp(16), 0, dp(16), 0); minHeight = dp(56); stateListAnimator = null
+        setPadding(dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.ROW_VERTICAL_DP),
+            dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.ROW_VERTICAL_DP)); minHeight = dp(FidelitySettingsMetrics.ACTION_HEIGHT_DP); stateListAnimator = null
         compoundDrawablePadding = dp(12)
         foreground = buttonFocusRing()
         text = title
@@ -7143,17 +7149,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if(split<=0 && rowTitle==null)return
             val rtl=layoutDirection==View.LAYOUT_DIRECTION_RTL
             val narrow=measuredWidth/resources.displayMetrics.density<420
-            val startInset=if(narrow)44 else 52
-            val available=(measuredWidth-px(startInset+28)).coerceAtLeast(px(100))
+            val startInset=FidelitySettingsMetrics.ROW_START_DP
+            val available=(measuredWidth-px(startInset+FidelitySettingsMetrics.ROW_END_DP)).coerceAtLeast(px(100))
             val valueText=if(split>0)text.substring(split+VALUE_SEPARATOR.length)else ""
-            val valueWidth=minOf((paint.measureText(valueText)*.90f).roundToInt()+1,(available*.40f).toInt()).coerceAtLeast(1)
+            val valueSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, UiTypography.BODY_SP.toFloat(), resources.displayMetrics)
+            val valuePaint=android.text.TextPaint(paint).apply { textSize=valueSize }
+            val desiredValueWidth=kotlin.math.ceil(android.text.Layout.getDesiredWidth(valueText,valuePaint).toDouble()).toInt()+px(2)
+            val valueWidth=minOf(desiredValueWidth,(available*.40f).toInt()).coerceAtLeast(1)
             titleWidth=(available-valueWidth-px(if(narrow)8 else 16)).coerceAtLeast(px(48))
             titleX=if(rtl)(measuredWidth-px(startInset)-titleWidth).toFloat() else px(startInset).toFloat()
-            valueX=if(rtl)px(28).toFloat() else (measuredWidth-px(28)-valueWidth).toFloat()
+            valueX=if(rtl)px(FidelitySettingsMetrics.ROW_END_DP).toFloat() else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-valueWidth).toFloat()
             titleLayout=textLayout(rowTitle ?: text.substring(0,split),titleWidth,textSize,currentTextColor)
-            valueLayout=textLayout(if(split>0)text.substring(split+VALUE_SEPARATOR.length)else "",valueWidth,textSize*.90f,muted)
-            summaryLayout=if(rowSummary.isNotBlank())textLayout(rowSummary,available-(if(rowHelp!=null)px(20)else 0),textSize*(if(narrow).75f else .72f),muted)else null
-            val height=maxOf(titleLayout?.height?:0,valueLayout?.height?:0)+(summaryLayout?.height?:0)+(if(summaryLayout!=null)px(4)else 0)+px(24)
+            valueLayout=textLayout(if(split>0)text.substring(split+VALUE_SEPARATOR.length)else "",valueWidth,valueSize,muted)
+            summaryLayout=if(rowSummary.isNotBlank())textLayout(rowSummary,available-(if(rowHelp!=null)px(20)else 0),TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, UiTypography.CAPTION_SP.toFloat(), resources.displayMetrics),muted)else null
+            val height=maxOf(titleLayout?.height?:0,valueLayout?.height?:0)+(summaryLayout?.height?:0)+(if(summaryLayout!=null)px(4)else 0)+px(FidelitySettingsMetrics.ROW_VERTICAL_DP*2)
             setMeasuredDimension(measuredWidth,resolveSize(maxOf(minHeight,height),heightMeasureSpec))
         }
         override fun onTouchEvent(event:android.view.MotionEvent):Boolean {
@@ -7212,8 +7221,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 draw(valueLayout,valueX,y+(firstLineHeight-(valueLayout?.height?:0))/2f)
                 val rtl=layoutDirection==View.LAYOUT_DIRECTION_RTL
                 context.getDrawable(rowIconResource)?.mutate()?.apply {
-                    setTint(accent);val x=if(rtl)width-px(38) else px(8)
-                    setBounds(x,(height-px(28))/2,x+px(28),(height+px(28))/2);draw(canvas)
+                    setTint(accent)
+                    val iconSize=px(FidelitySettingsMetrics.ROW_ICON_DP)
+                    val inset=px(FidelitySettingsMetrics.ROW_ICON_INSET_DP)
+                    val x=if(rtl)width-inset-iconSize else inset
+                    setBounds(x,(height-iconSize)/2,x+iconSize,(height+iconSize)/2);draw(canvas)
                 }
                 context.getDrawable(R.drawable.ic_dp_chevron)?.mutate()?.apply {
                     setTint(currentTextColor);val x=if(rtl)px(4)else width-px(24)
@@ -7283,7 +7295,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private class MinimumButtonLayoutParams(var minimumButtonHeight: Int) :
         LinearLayout.LayoutParams(-1, minimumButtonHeight)
 
-    private fun matchButton(top: Int = 0, height: Int = 68) = MinimumButtonLayoutParams(dp(height)).apply { topMargin = dp(top) }
+    private fun matchButton(top: Int = 0, height: Int = FidelitySettingsMetrics.ACTION_HEIGHT_DP) = MinimumButtonLayoutParams(dp(height)).apply { topMargin = dp(top) }
     private fun space(height: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(height)); tag = SPACER }
 
     /**
@@ -7309,14 +7321,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val lp = child.layoutParams as? LinearLayout.LayoutParams ?: continue
             when {
                 child is Button -> {
-                    lp.height = dp(CONTROL_HEIGHT_DP); lp.topMargin = 0
-                    lp.bottomMargin = dp(if (isNote(next)) NOTE_ATTACH_GAP_DP else CONTROL_GAP_DP)
+                    lp.height = dp(if (page == "settings") FidelitySettingsMetrics.ACTION_HEIGHT_DP else CONTROL_HEIGHT_DP); lp.topMargin = 0
+                    lp.bottomMargin = dp(if (isNote(next)) NOTE_ATTACH_GAP_DP else if (page == "settings") FidelitySettingsMetrics.CONTROL_GAP_DP else CONTROL_GAP_DP)
                 }
                 // Toggle rows carried their own vertical padding, which doubled the gap after a button.
                 isToggleRow(child) -> {
                     child.setPadding(child.paddingLeft, 0, child.paddingRight, 0)
                     lp.topMargin = 0
-                    lp.bottomMargin = dp(if (isNote(next)) NOTE_ATTACH_GAP_DP else CONTROL_GAP_DP)
+                    lp.bottomMargin = dp(if (isNote(next)) NOTE_ATTACH_GAP_DP else if (page == "settings") FidelitySettingsMetrics.CONTROL_GAP_DP else CONTROL_GAP_DP)
                 }
                 child is TextView -> {
                     if (!isNote(previous)) noteFollowsButton = isControl(previous)

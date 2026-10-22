@@ -18,6 +18,8 @@ import android.widget.TextView
 import androidx.core.graphics.ColorUtils
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.UiTypography
+import com.shilapi.xcertplay.FidelitySettingsMetrics
 import kotlin.math.roundToInt
 
 object SettingsWidgets {
@@ -55,7 +57,7 @@ object SettingsWidgets {
         theme: SettingsTheme = SettingsTheme.OVERLAY,
     ): TextView = TextView(context).apply {
         text = title
-        textSize = if (theme.isOverlay) 16f else 22f
+        textSize = if (theme.isOverlay) 16f else UiTypography.SECTION_SP.toFloat()
         setTextColor(if (theme.isOverlay) theme.accent else theme.textPrimary)
         applyTextStyle(context, theme, bold = true)
     }
@@ -107,7 +109,7 @@ object SettingsWidgets {
         theme: SettingsTheme = SettingsTheme.OVERLAY,
         contentDescription: String = label,
         enabled: Boolean = true,
-        labelSizeSp: Float = 18f,
+        labelSizeSp: Float = if (theme.isOverlay) 18f else UiTypography.ROW_SP.toFloat(),
         onChanged: (Boolean) -> Unit,
     ): SwitchRowResult {
         val row = LinearLayout(context).apply {
@@ -119,7 +121,7 @@ object SettingsWidgets {
             this.contentDescription = contentDescription
             isEnabled = enabled
             applyLargeSwitchStyle(this, theme.accent, theme.textSecondary, theme.accentTrack, theme.trackOff)
-            if (!theme.isOverlay) minHeight = theme.dp(context, 56)
+            if (!theme.isOverlay) minHeight = theme.dp(context, FidelitySettingsMetrics.SETTING_ROW_DP)
             setOnCheckedChangeListener { _, isChecked -> onChanged(isChecked) }
         }
 
@@ -145,7 +147,7 @@ object SettingsWidgets {
             }
             val descView = TextView(context).apply {
                 text = description
-                textSize = 14f
+                textSize = UiTypography.BODY_SP.toFloat()
                 setTextColor(theme.textSecondary)
                 setPadding(0, theme.dp(context, 6), theme.dp(context, 16), 0)
                 applyTextStyle(context, theme)
@@ -195,7 +197,7 @@ object SettingsWidgets {
         }
         val labelView = TextView(context).apply {
             text = label
-            textSize = 18f
+            textSize = if (theme.isOverlay) 18f else UiTypography.ROW_SP.toFloat()
             setTextColor(if (theme.isOverlay) theme.textSecondary else theme.textPrimary)
             applyTextStyle(context, theme, bold = !theme.isOverlay)
         }
@@ -215,7 +217,7 @@ object SettingsWidgets {
             val button = RadioButton(context).apply {
                 id = View.generateViewId()
                 this.text = text
-                textSize = 17f
+                textSize = if (theme.isOverlay) 17f else UiTypography.ROW_SP.toFloat()
                 setTextColor(theme.textSecondary)
                 buttonTintList = ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
@@ -274,14 +276,14 @@ object SettingsWidgets {
         }
         val label = TextView(context).apply {
             text = context.getString(R.string.resolution)
-            textSize = 20f
+            textSize = if (theme.isOverlay) 20f else UiTypography.ROW_SP.toFloat()
             setTextColor(if (theme.isOverlay) theme.textSecondary else theme.textPrimary)
             applyTextStyle(context, theme, bold = !theme.isOverlay)
         }
         header.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val valueTextView = TextView(context).apply {
             text = "$initial%"
-            textSize = 28f
+            textSize = if (theme.isOverlay) 28f else UiTypography.STATUS_SP.toFloat()
             setTextColor(theme.accent)
             applyTextStyle(context, theme, bold = true)
         }

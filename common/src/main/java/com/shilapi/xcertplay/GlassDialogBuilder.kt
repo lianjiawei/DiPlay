@@ -34,13 +34,13 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
         val decor=dialog.window?.decorView ?: return
         descendants(decor).filterIsInstance<TextView>().forEach { text ->
             val name=runCatching { owner.resources.getResourceEntryName(text.id) }.getOrNull()
-            if(name=="alertTitle") { text.textSize=32f;text.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);text.setTextColor(palette.primaryText) }
-            if(name=="message") { text.textSize=18f;text.setTextColor(palette.secondaryText) }
+            if(name=="alertTitle") { text.textSize=UiTypography.STATUS_SP.toFloat();text.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);text.setTextColor(palette.primaryText) }
+            if(name=="message") { text.textSize=UiTypography.BODY_SP.toFloat();text.setTextColor(palette.secondaryText) }
         }
         for(id in listOf(AlertDialog.BUTTON_POSITIVE,AlertDialog.BUTTON_NEGATIVE,AlertDialog.BUTTON_NEUTRAL)) {
             dialog.getButton(id)?.apply {
                 val primary=id==AlertDialog.BUTTON_POSITIVE
-                isAllCaps=false;textSize=20f;minHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
+                isAllCaps=false;textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
                 setSingleLine(false)
                 minWidth=dp(96);setPadding(dp(20),dp(8),dp(20),dp(8))
                 setTextColor(GlassChrome.textColors(if(primary)palette.onAccent else palette.primaryText,palette.surface))
@@ -69,7 +69,7 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
             val optionCount=adapter?.count ?: 0
             if(reconnectHint)addFooterView(TextView(context).apply {
                 text=owner.getString(com.shilapi.xcertplay.host.R.string.ui_glass_reconnect_hint)
-                textSize=16f;setTextColor(palette.secondaryText);minHeight=dp(FidelitySettingsMetrics.DIALOG_HINT_DP)
+                textSize=UiTypography.CAPTION_SP.toFloat();setTextColor(palette.secondaryText);minHeight=dp(FidelitySettingsMetrics.DIALOG_HINT_DP)
                 gravity=android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(FidelitySettingsMetrics.CONTENT_PAD_DP),dp(FidelitySettingsMetrics.ROW_GAP_DP),dp(FidelitySettingsMetrics.CONTENT_PAD_DP),dp(FidelitySettingsMetrics.ROW_GAP_DP))
             },null,false)
@@ -86,8 +86,8 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
                 override fun isEnabled(position:Int)=source.isEnabled(position)
                 override fun getView(position:Int,convertView:View?,parent:ViewGroup):View = source.getView(position,convertView,parent).also { view ->
                     if(view is TextView && position<optionCount) {
-                        view.textSize=24f;view.setTextColor(palette.primaryText);view.minHeight=dp(FidelitySettingsMetrics.DIALOG_OPTION_DP)
-                        view.setSingleLine(false);view.setPadding(dp(24),dp(16),dp(24),dp(16))
+                        view.textSize=UiTypography.ROW_SP.toFloat();view.setTextColor(palette.primaryText);view.minHeight=dp(FidelitySettingsMetrics.DIALOG_OPTION_DP)
+                        view.setSingleLine(false);view.setPadding(dp(FidelitySettingsMetrics.CARD_PAD_DP),dp(FidelitySettingsMetrics.ROW_VERTICAL_DP),dp(FidelitySettingsMetrics.CARD_PAD_DP),dp(FidelitySettingsMetrics.ROW_VERTICAL_DP))
                         view.text=view.text.toString().replace(" · ","\n")
                         view.background=android.graphics.drawable.StateListDrawable().apply {
                             addState(intArrayOf(android.R.attr.state_checked),GlassChrome.surface(palette.railSelected,palette.railSelectedOutline,density,dp(16).toFloat(),opacity=200))
