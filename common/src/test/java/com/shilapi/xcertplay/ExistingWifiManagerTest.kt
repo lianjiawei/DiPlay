@@ -30,7 +30,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29], manifest = Config.NONE)
+@Config(sdk = [25, 27, 29], manifest = Config.NONE)
 class ExistingWifiManagerTest {
     private val context = mock(Context::class.java)
     private val connectivity = mock(ConnectivityManager::class.java)
@@ -61,15 +61,16 @@ class ExistingWifiManagerTest {
             .registerNetworkCallback(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
     }
 
-    @Test fun usesStationAddressAndManualCredentialsWithoutChangingWifiOrDefaultRoute() {
+    @Test fun usesSystemStationWithoutCredentialsOrChangingWifiOrDefaultRoute() {
         manager().use { manager ->
             val result = start(manager)
             assertEquals(WirelessHotspotBackend.EXISTING_WIFI, result.backend)
             assertEquals("192.0.2.10", result.hostAddress!!.hostAddress)
             assertEquals(iface.name, result.interfaceName)
             assertEquals(36, result.channel)
-            assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
-            assertEquals("pocket-password", result.passphrase)
+            assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, result.security)
+            assertFalse(result.configureWifi)
+            assertEquals("", result.passphrase)
             assertNull(result.bssid) // Router BSSID must never replace the receiver identity.
             assertArrayEquals(byteArrayOf(0xaa.toByte(), 0xbb.toByte(), 0xcc.toByte(), 0xdd.toByte(), 0xee.toByte(), 0xff.toByte()), result.accessPointBssid)
             assertTrue(diagnostics.none { it.contains("pocket-password") })
@@ -131,7 +132,7 @@ class ExistingWifiManagerTest {
             assertFalse(exported.contains("aa:bb:cc:dd:ee:ff"))
         }
         `when`(info.ssid).thenReturn("\"Different network\"")
-        manager().use { assertThrows(IOException::class.java) { start(it) } }
+        manager().use { assertEquals("Different network", start(it).ssid) }
     }
 
     @Test fun restrictedStationAndCapabilitiesKeepManualFallbackAndOmitPlaceholder() {
@@ -157,33 +158,35 @@ class ExistingWifiManagerTest {
         val caps = capabilities(NetworkCapabilities.TRANSPORT_WIFI)
         `when`(caps.transportInfo).thenReturn(redacted)
         doReturn(caps).`when`(connectivity).getNetworkCapabilities(network)
-        manager().use { assertEquals(Iap2WirelessSecurity.WPA_WPA2, start(it).security) }
+        manager().use { assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, start(it).security) }
     }
 
-    @Test @Config(sdk = [33]) fun rejectsObservedOpenSecuredAndEnterpriseConfigurationMismatch() {
-        `when`(info.currentSecurityType).thenReturn(WifiInfo.SECURITY_TYPE_OPEN)
-        manager().use { assertThrows(IOException::class.java) { start(it) } }
-        manager("").use { assertEquals(Iap2WirelessSecurity.NONE, start(it).security) }
-        `when`(info.currentSecurityType).thenReturn(WifiInfo.SECURITY_TYPE_PSK)
-        manager("").use { assertThrows(IOException::class.java) { start(it) } }
-        `when`(info.currentSecurityType).thenReturn(WifiInfo.SECURITY_TYPE_EAP)
-        manager().use { assertThrows(IOException::class.java) { start(it) } }
+    @Test @Config(sdk = [33]) fun reusesSystemConnectionRegardlessOfProvisioningSecurity() {
+        for (security in listOf(WifiInfo.SECURITY_TYPE_OPEN, WifiInfo.SECURITY_TYPE_PSK, WifiInfo.SECURITY_TYPE_EAP)) {
+            `when`(info.currentSecurityType).thenReturn(security)
+            manager().use {
+                val result = start(it)
+                assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, result.security)
+                assertFalse(result.configureWifi)
+                assertEquals("", result.passphrase)
+            }
+        }
     }
 
     @Test fun redactedSsidAllowsManualConfigurationAndUnknownChannelStaysZero() {
         `when`(info.ssid).thenReturn(WifiManager.UNKNOWN_SSID)
         `when`(info.frequency).thenReturn(-1)
-        manager("").use {
+        manager().use {
             val result = start(it)
             assertEquals("Pocket Wi-Fi", result.ssid)
             assertEquals(0, result.channel)
-            assertEquals(Iap2WirelessSecurity.NONE, result.security)
+            assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, result.security)
         }
     }
 
-    @Test fun rejectsWrongNetworkAndMissingConnection() {
+    @Test fun followsTheCurrentSystemNetworkAndRejectsMissingConnection() {
         `when`(info.ssid).thenReturn("\"Different network\"")
-        manager().use { assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("does not match")) }
+        manager().use { assertEquals("Different network", start(it).ssid) }
         `when`(connectivity.allNetworks).thenReturn(emptyArray())
         manager().use { assertTrue(assertThrows(IOException::class.java) { start(it, 1) }.message!!.contains("not connected")) }
     }
@@ -213,16 +216,24 @@ class ExistingWifiManagerTest {
         assertTrue(diagnostics.any { it.contains("address changed") })
     }
 
-    @Test fun refusesAmbiguousWifiNetworksAndInvalidCredentials() {
+    @Test fun refusesAmbiguousWifiNetworksAndInvalidFallbackNames() {
         val other = mock(Network::class.java)
         `when`(connectivity.allNetworks).thenReturn(arrayOf(network, other))
         doReturn(capabilities(NetworkCapabilities.TRANSPORT_WIFI)).`when`(connectivity).getNetworkCapabilities(other)
         manager().use { assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("Multiple")) }
-        assertThrows(IllegalArgumentException::class.java) { manager("short") }
+        assertThrows(IllegalArgumentException::class.java) { manager("x".repeat(33)) }
     }
 
-    private fun manager(password: String = "pocket-password") = ExistingWifiManager(context,
-        "Pocket Wi-Fi", password, diagnostics::add, { changes++ })
+    @Test fun readsCurrentSsidWithNoSavedDetailsAndExplainsRedaction() {
+        manager("").use { assertEquals("Pocket Wi-Fi", start(it).ssid) }
+        `when`(info.ssid).thenReturn(WifiManager.UNKNOWN_SSID)
+        manager("").use {
+            assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("Allow location"))
+        }
+    }
+
+    private fun manager(ssid: String = "Pocket Wi-Fi") = ExistingWifiManager(context,
+        ssid, diagnostics::add, { changes++ })
 
     private fun link(address: String) = LinkProperties().apply {
         interfaceName = iface.name

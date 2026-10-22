@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.network.ExistingWifiNetworks
+
 import android.app.AlertDialog
 import android.Manifest
 import android.content.ActivityNotFoundException
@@ -219,7 +221,6 @@ class CarPlayHostActivity : ComponentActivity() {
         manualHotspotChannel = manualHotspotChannel,
         manualHotspotSecurity = manualHotspotSecurity,
         existingWifiSsid = existingWifiSsid,
-        existingWifiPassphrase = existingWifiPassphrase,
         locationReportingEnabled = locationReportingEnabled,
         availableCurrentMilliAmps = AirPlayPersistence.loadUsbChargingCurrent(this).milliAmps,
     )
@@ -496,7 +497,9 @@ class CarPlayHostActivity : ComponentActivity() {
     private var wirelessHotspotMode = WirelessHotspotMode.WIFI_P2P
     private var manualHotspotSsid = ""
     private var existingWifiSsid = ""
-    private var existingWifiPassphrase = ""
+    private val systemWifiPicker = SystemWifiPicker(this, { appDialogBuilder() }) {
+        runCatching { startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)) }
+    }
     private var manualHotspotPassphrase = ""
     private var manualHotspotBand = ManualHotspotBand.AUTO
     private var manualHotspotChannel = 0
@@ -869,7 +872,6 @@ class CarPlayHostActivity : ComponentActivity() {
         locationReportingEnabled = AirPlayPersistence.loadLocationReportingEnabled(this)
         wirelessHotspotMode = AirPlayPersistence.loadWirelessHotspotMode(this)
         existingWifiSsid = AirPlayPersistence.loadExistingWifiSsid(this)
-        existingWifiPassphrase = AirPlayPersistence.loadExistingWifiPassphrase(this)
         manualHotspotSsid = AirPlayPersistence.loadManualHotspotSsid(this)
         manualHotspotPassphrase = AirPlayPersistence.loadManualHotspotPassphrase(this)
         manualHotspotBand = AirPlayPersistence.loadManualHotspotBand(this)
@@ -1008,8 +1010,15 @@ class CarPlayHostActivity : ComponentActivity() {
             checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
         }
 
-    private fun requiredWirelessPermissions(): List<String> =
-        WirelessPermissions.required(wirelessHotspotMode, Build.VERSION.SDK_INT)
+    private fun requiredWirelessPermissions(): List<String> {
+        val base = WirelessPermissions.required(wirelessHotspotMode, Build.VERSION.SDK_INT)
+        // A manually supplied fallback name still works without location. Ask only when automatic
+        // SSID detection has no name, independently of optional GPS reporting to the iPhone.
+        return if (wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI && existingWifiSsid.isEmpty() &&
+            ExistingWifiNetworks.read(this).none { it.connected }) {
+            base + listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        } else base
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -3416,7 +3425,7 @@ class CarPlayHostActivity : ComponentActivity() {
         AirPlayPersistence.saveRemoteMfiServer(this, remoteMfiServer)
         AirPlayPersistence.saveRemoteMfiToken(this, remoteMfiToken)
         AirPlayPersistence.saveWirelessHotspotMode(this, wirelessHotspotMode)
-        AirPlayPersistence.saveExistingWifiCredentials(this, existingWifiSsid, existingWifiPassphrase)
+        AirPlayPersistence.saveExistingWifiCredentials(this, existingWifiSsid, "")
         AirPlayPersistence.saveManualHotspotSsid(this, manualHotspotSsid)
         AirPlayPersistence.saveManualHotspotPassphrase(this, manualHotspotPassphrase)
         AirPlayPersistence.saveManualHotspotBand(this, manualHotspotBand)
@@ -3448,7 +3457,7 @@ class CarPlayHostActivity : ComponentActivity() {
     /** Mirrors [persistMenuSettings]: a field staged there belongs here too. */
     private fun menuSettingsSignature(): Int = listOf(
         gestureFingerCount, wirelessEnabled, mfiTarget, mfiI2cPath, remoteMfiServer, remoteMfiToken,
-        wirelessHotspotMode, existingWifiSsid, existingWifiPassphrase, manualHotspotSsid,
+        wirelessHotspotMode, existingWifiSsid, manualHotspotSsid,
         manualHotspotPassphrase, manualHotspotBand, manualHotspotChannel, manualHotspotSecurity,
         locationReportingEnabled, autoStartOnBoot, advancedAudioChannelMapping, displayScaleTenths,
         displayScalePercent, carPlayCornerRadiusDp, fps, widthPhysicalMm, physicalSizeBasis, hevcEnabled,
@@ -4472,18 +4481,34 @@ class CarPlayHostActivity : ComponentActivity() {
         )
         manualHotspotFields = manualFields
         manualHotspotErrorView = error
+        val currentWifi = ExistingWifiNetworks.read(this).firstOrNull { it.connected }
         val existingFields = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(menuText(brandString(R.string.existing_wifi_instructions), 14f, MENU_SECONDARY))
-            addView(settingsInputRow(brandString(R.string.existing_wifi_ssid), existingWifiSsid) {
-                existingWifiSsid = it
-                existingWifiErrorView?.visibility = View.GONE
-            })
-            addView(settingsInputRow(brandString(R.string.existing_wifi_password), existingWifiPassphrase, password = true) {
-                existingWifiPassphrase = it
-                existingWifiErrorView?.visibility = View.GONE
-            })
         }
+        lateinit var nameInput: EditText
+        val chooseWifi = DiPlayButton(this).apply {
+            text = "${brandString(R.string.settings_existing_wifi_select)} · " +
+                (currentWifi?.ssid ?: existingWifiSsid.ifEmpty { brandString(R.string.auto) })
+            minHeight = dp(SWIPE_CATEGORY_ACTION_HEIGHT_DP)
+            style(DiPlayButtonKind.SECONDARY, overlayPalette, overlay = true)
+            setOnClickListener {
+                systemWifiPicker.show({ existingWifiFields === existingFields && existingFields.isShown }) { network ->
+                    existingWifiSsid = network.ssid
+                    nameInput.setText(network.ssid)
+                    text = "${brandString(R.string.settings_existing_wifi_select)} · ${network.ssid}"
+                }
+            }
+        }
+        existingFields.addView(chooseWifi, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(SWIPE_ACTION_GAP_DP)
+        })
+        existingFields.addView(menuText(brandString(R.string.settings_existing_wifi_name_hint), 14f, MENU_SECONDARY))
+        existingFields.addView(settingsInputRow(brandString(R.string.existing_wifi_ssid),
+            currentWifi?.ssid ?: existingWifiSsid, onInputCreated = { nameInput = it }) {
+            existingWifiSsid = it
+            existingWifiErrorView?.visibility = View.GONE
+        })
         existingWifiErrorView = menuText("", 14f, MENU_DANGER).apply { visibility = View.GONE }
         existingFields.addView(existingWifiErrorView)
         section.addView(existingFields)
@@ -4524,7 +4549,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun validateManualHotspotSettings(): Boolean {
         if (wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) {
-            val error = com.shilapi.xcertplay.orchestration.ManualHotspotValidation.error(existingWifiSsid, existingWifiPassphrase)
+            val error = if (existingWifiSsid.isEmpty()) null else
+                com.shilapi.xcertplay.orchestration.ManualHotspotValidation.error(existingWifiSsid, "")
             existingWifiErrorView?.text = error?.let { brandString(it.messageResource()) }.orEmpty()
             existingWifiErrorView?.visibility = if (error == null) View.GONE else View.VISIBLE
             return error == null

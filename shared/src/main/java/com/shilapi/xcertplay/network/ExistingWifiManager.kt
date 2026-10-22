@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ExistingWifiManager(
     context: Context,
     private val ssid: String,
-    private val passphrase: String,
     private val onDiagnostic: (String) -> Unit = {},
     private val onNetworkChanged: () -> Unit = {},
 ) : WirelessHotspotManager {
@@ -50,8 +49,8 @@ class ExistingWifiManager(
     }
 
     init {
-        require(ManualHotspotValidation.error(ssid, passphrase) == null) {
-            "Invalid existing Wi-Fi credentials"
+        require(ssid.isEmpty() || ManualHotspotValidation.error(ssid, "") == null) {
+            "Invalid fallback Wi-Fi name"
         }
     }
 
@@ -89,25 +88,11 @@ class ExistingWifiManager(
                 val info = listOfNotNull(networkInfo, stationInfo).firstOrNull { readableSsid(it) != null }
                     ?: networkInfo ?: stationInfo
                 val liveSsid = readableSsid(info)
-                if (liveSsid != null && liveSsid != ssid) {
-                    throw IOException("Configured Wi-Fi does not match the connected network; check Wi-Fi settings and saved details")
-                }
+                val networkSsid = liveSsid ?: ssid.takeIf { it.isNotBlank() }
+                    ?: throw IOException("Cannot read the connected Wi-Fi name. Allow location access and enable system location, or select its name in Connection setup")
                 val frequency = info?.frequency?.takeIf { it > 0 }
                 val channel = frequency?.let(::wifiFrequencyMhzToChannel) ?: 0
                 val apBssid = accessPointAddress(info?.bssid)
-                val observedSecurity = if (Build.VERSION.SDK_INT >= 31 && info != null) info.currentSecurityType else -1
-                if (Build.VERSION.SDK_INT >= 31) {
-                    when (observedSecurity) {
-                        WifiInfo.SECURITY_TYPE_OPEN -> if (passphrase.isNotEmpty()) {
-                            throw IOException("Connected Wi-Fi is open; clear the saved Wi-Fi password")
-                        }
-                        WifiInfo.SECURITY_TYPE_PSK, WifiInfo.SECURITY_TYPE_SAE -> if (passphrase.isEmpty()) {
-                            throw IOException("Connected Wi-Fi is secured; enter its WPA2 password")
-                        }
-                        WifiInfo.SECURITY_TYPE_UNKNOWN -> Unit
-                        else -> throw IOException("Existing Wi-Fi requires an open or WPA2-Personal network")
-                    }
-                }
                 synchronized(lock) {
                     check(!closed) { "ExistingWifiManager is closed" }
                     selected = network
@@ -126,16 +111,17 @@ class ExistingWifiManager(
                     throw IOException("Existing Wi-Fi changed during startup; connect again")
                 }
                 onDiagnostic("Existing Wi-Fi attached iface=$name host=${address.hostAddress} " +
-                    "networkNameReadable=${liveSsid != null} channel=$channel security=${security()} " +
+                    "networkNameReadable=${liveSsid != null} channel=$channel security=system-managed " +
                     "receiverIdentity=saved")
-                return WirelessHotspotInfo(ssid, passphrase, security(), channel, frequency,
+                return WirelessHotspotInfo(networkSsid, "", Iap2WirelessSecurity.SYSTEM_MANAGED, channel, frequency,
                     // The router's BSSID is not this receiver's AirPlay device identity.
                     null, name, address, when {
                         frequency == null -> "Auto"
                         frequency < 2500 -> "2.4 GHz"
                         frequency < 5955 -> "5 GHz"
                         else -> "6 GHz"
-                    }, WirelessHotspotBackend.EXISTING_WIFI, hostAddresses = addresses, accessPointBssid = apBssid)
+                    }, WirelessHotspotBackend.EXISTING_WIFI, hostAddresses = addresses, accessPointBssid = apBssid,
+                    configureWifi = false)
             }
             if ((System.nanoTime() - started) / 1_000_000 >= timeoutMillis) {
                 throw IOException("Existing Wi-Fi is not connected or has no usable address. Connect both devices to the same Wi-Fi in system settings")
@@ -148,9 +134,6 @@ class ExistingWifiManager(
     private fun sameLink(properties: LinkProperties): Boolean =
         properties.interfaceName == interfaceName && properties.linkAddresses.any { it.address == host } &&
             existingWifiHostAddresses(properties.linkAddresses.map { it.address }, interfaceIndex).toSet() == hosts.toSet()
-
-    private fun security(): Iap2WirelessSecurity =
-        if (passphrase.isEmpty()) Iap2WirelessSecurity.NONE else Iap2WirelessSecurity.WPA_WPA2
 
     private fun readableSsid(info: WifiInfo?): String? = info?.ssid?.removeSurrounding("\"")
         ?.takeUnless { it == WifiManager.UNKNOWN_SSID || it.isEmpty() }

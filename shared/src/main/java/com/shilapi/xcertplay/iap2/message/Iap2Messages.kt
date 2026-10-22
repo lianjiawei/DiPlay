@@ -63,10 +63,14 @@ object Iap2CarPlayMessages {
         sdkVersion: String? = null,
         clusterAsset: Iap2ClusterAsset? = null,
         mutualAuth: Boolean? = null,
+        /** Reuse an existing LAN: publish the endpoint without asking iOS to configure Wi-Fi. */
+        connectedWirelessIpAddresses: List<String> = emptyList(),
     ): Iap2Frame {
         require(airPlayPort in 1..0xffff) { "airPlayPort must be in 1..65535" }
         require(publicKey.isNotEmpty()) { "publicKey must not be empty" }
         require(sourceVersion.isNotEmpty()) { "sourceVersion must not be empty" }
+        require(wireless == null || connectedWirelessIpAddresses.isEmpty()) { "Choose one wireless network setup" }
+        require(connectedWirelessIpAddresses.all { it.isNotBlank() && '\u0000' !in it }) { "Invalid connected Wi-Fi address" }
 
         return Iap2Messages.build(Iap2Endpoints.CARPLAY_START_SESSION) {
             if (wiredIpv6Addresses.isNotEmpty() || wiredReserved != null) {
@@ -83,6 +87,9 @@ object Iap2CarPlayMessages {
                     it.ipAddresses.forEach { address -> string(3, address) }
                     u8(4, it.securityType)
                 }
+            }
+            if (connectedWirelessIpAddresses.isNotEmpty()) {
+                group(1) { connectedWirelessIpAddresses.forEach { address -> string(3, address) } }
             }
             u32(2, airPlayPort)
             optionalString(3, deviceIdentifier)

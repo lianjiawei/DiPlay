@@ -67,6 +67,7 @@ class CarPlayRuntimeConfig(
     val locationReportingEnabled: Boolean = false,
     val wifiP2pPreferredChannel: Int = WifiP2pChannels.AUTO,
     val existingWifiSsid: String = "",
+    /** Legacy configuration input retained for callers; system Wi-Fi reuse never reads or shares it. */
     val existingWifiPassphrase: String = "",
 ) {
     init {
@@ -100,8 +101,8 @@ class CarPlayRuntimeConfig(
         }
         // Only a wireless session starts the hotspot; a USB session must not fail on unused settings.
         if (transport == CarPlayTransport.WIRELESS && wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) {
-            require(ManualHotspotValidation.error(existingWifiSsid, existingWifiPassphrase) == null) {
-                "Existing Wi-Fi requires an SSID of at most 32 UTF-8 bytes and an empty (open) or 8–63 character WPA2 password"
+            require(existingWifiSsid.isEmpty() || ManualHotspotValidation.error(existingWifiSsid, "") == null) {
+                "Existing Wi-Fi requires a system connection or a fallback SSID of at most 32 UTF-8 bytes"
             }
         }
         if (transport == CarPlayTransport.WIRELESS && wirelessHotspotMode == WirelessHotspotMode.WIFI_P2P) {

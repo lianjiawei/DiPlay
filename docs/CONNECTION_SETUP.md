@@ -55,7 +55,9 @@ Test one projection app at a time.
 EXISTING WI-FI / SAME LAN — DIPLAY
 Connect the car and iPhone to the same external router or portable Wi-Fi in
 system settings. In DiPlay Connection setup, select Existing Wi-Fi / Same LAN
-and save that network's exact name and WPA2 password. Keep Bluetooth enabled,
+to reuse the connected system network without entering a password. Choose system
+Wi-Fi discovers network names and retains explicit password entry for connecting
+the head unit to another network. DiPlay does not provision the iPhone. Keep Bluetooth enabled,
 then connect as usual. No car hotspot or Wi-Fi Direct group is created. Disable
 router client isolation. See [Existing Wi-Fi](EXISTING_WIFI.md) for build
 requirements, network limitations and device validation.

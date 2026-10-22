@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="settings_existing_wifi_manual">ネットワークを手動入力</string>
+    <string name="settings_existing_wifi_select">システムの Wi-Fi を選択</string>
+    <string name="settings_existing_wifi_connected">接続中 · %1$s</string>
+    <string name="settings_existing_wifi_saved">保存済み · %1$s</string>
+    <string name="settings_existing_wifi_available">利用可能 · %1$s</string>
+    <string name="settings_existing_wifi_unavailable">Wi-Fi 名を取得できません。Wi-Fi と位置情報を有効にして位置情報へのアクセスを許可するか、システムの Wi-Fi 設定でネットワークを選択してください。</string>
+    <string name="settings_existing_wifi_name_hint">システムが接続中の Wi-Fi を自動的に使用します。Android で名前が表示されない場合のみ入力してください。空欄なら自動取得します。</string>
+    <string name="settings_existing_wifi_switch_note">車載機の Wi-Fi を切り替えるため、CarPlay が中断される場合があります。保存済みネットワークはパスワードを空欄にするとシステムの認証情報を使用します。それ以外の保護されたネットワークには WPA2 パスワードを入力してください。オープンネットワークは不要です。</string>
+    <string name="settings_existing_wifi_connect">Wi-Fi に接続</string>
+    <string name="settings_existing_wifi_connecting">Wi-Fi 接続を要求しました。システムの接続完了後に CarPlay を起動してください。</string>
+    <string name="settings_existing_wifi_connect_failed">接続を要求できませんでした。Wi-Fi が有効でパスワードが正しいこと（8～63 文字）を確認するか、システムの Wi-Fi 設定で接続してください。</string>
     <string name="app_name">CorsairPlay</string>
     <string name="language_section_title">言語</string>
     <string name="language_app_language">アプリの言語</string>
@@ -10,7 +21,7 @@
     <string name="existing_wifi_title">既存のWi-Fi／同一LAN</string>
     <string name="existing_wifi_description">既存のルーターやモバイルWi-Fiを使用します。iPhoneと車載端末を、インターネットに接続できる同じネットワークにつないでください。</string>
     <string name="existing_wifi_hint">既存のWi-Fi · 両端末を同じWi-Fiに接続し、Bluetoothもオンにしてください。車のホットスポットは不要です。</string>
-    <string name="existing_wifi_instructions">車載端末とiPhoneをシステム設定で同じWi-Fiに接続してください。下に正確なネットワーク名とWPA2パスワードを入力します。パスワードを空にできるのはオープンネットワークだけです。ルーターはWPA2またはWPA2/WPA3混在モードを使用し、クライアント分離を無効にしてください。Lincolnは既存のWi-Fiを使い、ホットスポットを作成しません。</string>
+    <string name="existing_wifi_instructions">システムの Wi-Fi 設定で車載機を接続してください。DiPlay はパスワードなしで現在の接続を使用し、iPhone のネットワーク設定は行いません。両方の機器を同じ LAN に接続し、ルーターのクライアント分離を無効にしてください。変更は次回の CarPlay 接続に適用されます。</string>
     <string name="existing_wifi_details">外部Wi-Fiの情報</string>
     <string name="existing_wifi_ssid">外部Wi-Fi名（SSID）</string>
     <string name="existing_wifi_password">外部Wi-Fiのパスワード</string>
@@ -970,7 +981,7 @@
     <string name="connection_help_bluetooth">iPhoneのロックを解除し、BluetoothとWi-Fiをオンにして車載端末とペアリングしてください。iPhoneを近くに置いて再試行してください。</string>
     <string name="connection_help_general">接続を再試行してください。再び失敗する場合はLincolnに戻り、［設定］→［診断］からレポートを保存してください。</string>
     <string name="connection_help_wifi_direct">車載端末のWi-FiとBluetoothをオンにし、iPhoneのロックを解除して近くに置いてから再試行してください。改善しない場合は、iPhoneの［設定］→［一般］→［CarPlay］でこの車の登録を削除してから再接続してください。</string>
-    <string name="connection_help_existing_wifi">車載端末とiPhoneが同じWi-Fiネットワークに接続され、その名前とパスワードがLincolnの設定と一致しているか確認して、再試行してください。</string>
+    <string name="connection_help_existing_wifi">システムの Wi-Fi 設定で車載機を接続してください。DiPlay はパスワードなしで現在の接続を使用し、iPhone のネットワーク設定は行いません。両方の機器を同じ LAN に接続し、ルーターのクライアント分離を無効にしてください。変更は次回の CarPlay 接続に適用されます。</string>
     <string name="settings_report_on_phone">スマートフォンでレポートを取得</string>
     <string name="settings_report_on_phone_hint">スマートフォンのカメラでQRコードを読み取って、ブラウザーでページを開き、「レポートをダウンロード」を選んでください。ダウンロードが終わるまでこの画面を開いたままにしてください。</string>
     <string name="settings_mfi_target_description">USB/CH341 は、CH341 認証アダプターを車載機に接続しているときだけ選択してください。接続していない場合は「ローカル／オフライン」を選択します。次回の接続から適用されます。</string>

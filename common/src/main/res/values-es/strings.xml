@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="settings_existing_wifi_manual">Introducir red manualmente</string>
+    <string name="settings_existing_wifi_select">Elegir Wi-Fi del sistema</string>
+    <string name="settings_existing_wifi_connected">Conectada · %1$s</string>
+    <string name="settings_existing_wifi_saved">Guardada · %1$s</string>
+    <string name="settings_existing_wifi_available">Disponible · %1$s</string>
+    <string name="settings_existing_wifi_unavailable">No hay nombres de Wi-Fi disponibles. Activa Wi-Fi y la ubicación, permite el acceso a la ubicación o elige una red en los ajustes Wi-Fi del sistema.</string>
+    <string name="settings_existing_wifi_name_hint">Se usa automáticamente la Wi-Fi conectada del sistema. Introduce un nombre solo si Android no lo muestra; déjalo vacío para detectarlo.</string>
+    <string name="settings_existing_wifi_switch_note">Esto cambia la Wi-Fi del equipo y puede interrumpir CarPlay. En una red guardada, deja la contraseña vacía para usar las credenciales del sistema. En otras redes protegidas, introduce la contraseña WPA2. Las redes abiertas no necesitan contraseña.</string>
+    <string name="settings_existing_wifi_connect">Conectar Wi-Fi</string>
+    <string name="settings_existing_wifi_connecting">Conexión Wi-Fi solicitada. Espera a que el sistema se conecte antes de iniciar CarPlay.</string>
+    <string name="settings_existing_wifi_connect_failed">No se pudo solicitar la conexión. Comprueba que Wi-Fi esté activado y la contraseña sea correcta (8–63 caracteres), o conecta desde los ajustes Wi-Fi del sistema.</string>
     <string name="existing_wifi_title">Wi-Fi existente / Misma LAN</string>
     <string name="existing_wifi_description">Usa un router o Wi-Fi portátil existente. Mantén el iPhone y el coche en la misma red con acceso a Internet.</string>
     <string name="existing_wifi_hint">Wi-Fi existente · Mantén ambos dispositivos en la misma Wi-Fi y el Bluetooth activado. No necesitas el punto de acceso del coche.</string>
-    <string name="existing_wifi_instructions">Conecta el coche y el iPhone a la misma Wi-Fi externa en los ajustes del sistema. Introduce su nombre exacto y contraseña WPA2; deja la contraseña vacía solo para una red abierta. Usa WPA2 o el modo mixto WPA2/WPA3 y desactiva el aislamiento de clientes del router. Lincoln mantiene esta conexión y no crea un punto de acceso.</string>
+    <string name="existing_wifi_instructions">Conecta el equipo desde los ajustes Wi-Fi del sistema. DiPlay reutiliza esa conexión sin contraseña y no configura el iPhone. Mantén ambos dispositivos en la misma LAN y desactiva el aislamiento de clientes del router. Los cambios se aplican a la próxima conexión CarPlay.</string>
     <string name="existing_wifi_details">Datos de Wi-Fi externa</string>
     <string name="existing_wifi_ssid">Nombre de Wi-Fi externa (SSID)</string>
     <string name="existing_wifi_password">Contraseña de Wi-Fi externa</string>
@@ -853,7 +864,7 @@
     <string name="connection_help_bluetooth">Desbloquea el iPhone, activa Bluetooth y Wi-Fi y enlázalo con la unidad. Mantenlo cerca y reintenta.</string>
     <string name="connection_help_general">Reintenta la conexión. Si vuelve a fallar, regresa a Lincoln y guarda un informe en Ajustes → Diagnóstico.</string>
     <string name="connection_help_wifi_direct">Mantén activados el Wi-Fi y el Bluetooth de la unidad y el iPhone desbloqueado y cerca, y reintenta. Si sigue fallando, olvida el coche en el iPhone en Ajustes → General → CarPlay y vuelve a conectarte.</string>
-    <string name="connection_help_existing_wifi">Comprueba que la unidad y el iPhone estén en la misma red Wi-Fi y que su nombre y contraseña coincidan con Lincoln, y reintenta.</string>
+    <string name="connection_help_existing_wifi">Conecta el equipo desde los ajustes Wi-Fi del sistema. DiPlay reutiliza esa conexión sin contraseña y no configura el iPhone. Mantén ambos dispositivos en la misma LAN y desactiva el aislamiento de clientes del router. Los cambios se aplican a la próxima conexión CarPlay.</string>
     <string name="settings_report_on_phone">Obtener el informe en un teléfono</string>
     <string name="settings_report_on_phone_hint">Escanea el código con la cámara del teléfono para abrir esta página en su navegador y elige Descargar informe. Mantén esta pantalla abierta hasta que termine la descarga.</string>
     <string name="settings_mfi_target_description">Elige USB/CH341 solo si hay un adaptador de autenticación CH341 conectado a la unidad principal. Sin él, elige Local sin conexión. Se aplica en la próxima conexión.</string>

@@ -14,6 +14,22 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class Iap2WirelessControlClientTest {
+    @Test fun systemWifiReusePublishesOnlyTheAddressAndNeverAnOpenNetworkOrPassword() {
+        val connected = Iap2WirelessCarPlayEndpoint("Router", "", 36, Iap2WirelessSecurity.SYSTEM_MANAGED,
+            listOf("192.0.2.10"), 7000, "dev-1", "aabbcc", "1.0", configureWifi = false)
+        val start = parameters(Iap2WirelessControlClient.carPlayStartSession(connected).payload)
+        val wireless = parameters(start.single { it.id == 1 }.payload)
+        assertEquals(listOf(3), wireless.map { it.id })
+        assertEquals("192.0.2.10\u0000", wireless.single().payload.decodeToString())
+        assertThrows(IllegalArgumentException::class.java) {
+            Iap2WirelessControlClient.accessoryWiFiConfiguration(connected)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            Iap2WirelessCarPlayEndpoint("Router", "old-secret", 36, Iap2WirelessSecurity.SYSTEM_MANAGED,
+                listOf("192.0.2.10"), 7000, "dev-1", "aabbcc", "1.0", configureWifi = false)
+        }
+    }
+
     @Test fun startSessionEventRequiresSuccessfulSendAndFollowsTheWrite() {
         var sent = false
         var events = 0

@@ -7,6 +7,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Iap2WirelessLinkRoleTest {
+    @Test fun connectedSystemWifiDoesNotAdvertiseProvisioningOnEitherControlLink() {
+        val connected = Iap2WirelessIdentification("AA:BB:CC:DD:EE:FF", "Router", configureWifi = false)
+        for (role in Iap2WirelessLinkRole.entries) {
+            val parameters = identificationParameters(full.forWirelessLink(role, connected))
+            assertFalse(0x5703 in u16Values(parameters.first(6)!!.payload))
+            assertFalse(0x5702 in u16Values(parameters.first(7)!!.payload))
+            assertTrue(0x4301 in u16Values(parameters.first(6)!!.payload))
+            assertTrue(0x4300 in u16Values(parameters.first(7)!!.payload))
+        }
+    }
+
     private val wireless = Iap2WirelessIdentification("AA:BB:CC:DD:EE:FF", "DiPlay")
     private val full = Iap2IdentificationConfig(
         name = "DiPlay",

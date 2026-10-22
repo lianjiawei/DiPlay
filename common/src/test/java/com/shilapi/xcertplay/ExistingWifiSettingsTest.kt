@@ -50,25 +50,20 @@ class ExistingWifiSettingsTest {
         assertFalse(CarHotspotSettings.shouldEnable(app, true, WirelessHotspotMode.EXISTING_WIFI))
     }
 
-    @Test fun cancellingSetupPreservesModeAndSavingValidCredentialsSelectsLan() {
+    @Test fun selectingLanNeedsNoCredentialsAndDetailsHaveNoPasswordInput() {
         AirPlayPersistence.saveWirelessHotspotMode(app, WirelessHotspotMode.WIFI_P2P)
         controls().filterIsInstance<Button>().first { it.text.contains("Same LAN") }.performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
-        assertEquals(WirelessHotspotMode.WIFI_P2P, AirPlayPersistence.loadWirelessHotspotMode(app))
-        controls().filterIsInstance<Button>().first { it.text.contains("Same LAN") }.performClick()
+        assertEquals(WirelessHotspotMode.EXISTING_WIFI, AirPlayPersistence.loadWirelessHotspotMode(app))
+        assertEquals("", AirPlayPersistence.loadExistingWifiSsid(app))
+        controls().filterIsInstance<Button>().first { it.text.startsWith("Choose system Wi-Fi") }.performClick()
         shadowOf(Looper.getMainLooper()).idle()
         val dialog = ShadowAlertDialog.getLatestAlertDialog()
         val fields = descendants(dialog.window!!.decorView).filterIsInstance<EditText>().toList()
-        fields[0].setText(" Pocket ") // SSID whitespace is meaningful.
-        fields[1].setText("short")
+        assertEquals(1, fields.size) // Optional SSID fallback only; no password is requested.
+        fields.single().setText(" Pocket ")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        assertTrue(dialog.isShowing)
-        assertEquals(WirelessHotspotMode.WIFI_P2P, AirPlayPersistence.loadWirelessHotspotMode(app))
-        fields[1].setText("pocket-password")
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        assertEquals(WirelessHotspotMode.EXISTING_WIFI, AirPlayPersistence.loadWirelessHotspotMode(app))
         assertEquals(" Pocket ", AirPlayPersistence.loadExistingWifiSsid(app))
+        assertEquals("", AirPlayPersistence.loadExistingWifiPassphrase(app))
     }
 
     @Test fun hostRuntimeReceivesLanCredentialsAndValidationIsLimitedToWirelessLan() {
@@ -82,7 +77,7 @@ class ExistingWifiSettingsTest {
         fun runtime() = CarPlayHostActivity::class.java.getDeclaredMethod("createRuntimeConfig")
             .apply { isAccessible = true }.invoke(host) as CarPlayRuntimeConfig
         assertEquals("Pocket", runtime().existingWifiSsid)
-        assertEquals("pocket-password", runtime().existingWifiPassphrase)
+        assertEquals("", runtime().existingWifiPassphrase) // Historical credentials must not enter the runtime.
         assertEquals(CarPlayTransport.WIRELESS, runtime().transport)
         val permissions = CarPlayHostActivity::class.java.getDeclaredMethod("requiredWirelessPermissions")
             .apply { isAccessible = true }.invoke(host) as List<*>

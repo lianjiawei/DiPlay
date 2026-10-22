@@ -126,6 +126,10 @@ class Iap2WirelessControlClient(
                 when (incoming.messageId) {
                     REQUEST_ACCESSORY_WIFI_CONFIGURATION -> {
                         onProgress("iap2 rx=0x5702 request-wifi-configuration")
+                        if (!endpoint.configureWifi) {
+                            onProgress("iap2 system Wi-Fi reuse: credential provisioning disabled")
+                            continue
+                        }
                         val postTransport = transportNotificationSeen
                         val sentCount = if (postTransport) {
                             postTransportWiFiConfigurationsSent
@@ -184,9 +188,12 @@ class Iap2WirelessControlClient(
                         onProgress(
                             "iap2 rx=0x4e0e device-transport-identifier " +
                                 "bluetooth=${identifiers.bluetoothMac ?: "none"} " +
-                                "usb=${identifiers.usbTransportIdentifier ?: "none"}; " +
-                                "resending 0x5703",
+                                "usb=${identifiers.usbTransportIdentifier ?: "none"}",
                         )
+                        if (!endpoint.configureWifi) {
+                            onProgress("iap2 system Wi-Fi reuse: keeping the existing connection")
+                            continue
+                        }
                         if (
                             postTransportWiFiConfigurationsSent >=
                             MAX_POST_TRANSPORT_WIFI_CONFIGURATION_SENDS
@@ -254,25 +261,28 @@ class Iap2WirelessControlClient(
         }
 
         /** Optional AP hint is independent of the AirPlay receiver identity. */
-        fun accessoryWiFiConfiguration(endpoint: Iap2WirelessCarPlayEndpoint): Iap2Frame =
-            Iap2WirelessMessages.accessoryWiFiConfiguration(
+        fun accessoryWiFiConfiguration(endpoint: Iap2WirelessCarPlayEndpoint): Iap2Frame {
+            require(endpoint.configureWifi) { "System Wi-Fi reuse must not send network credentials" }
+            return Iap2WirelessMessages.accessoryWiFiConfiguration(
                 ssid = endpoint.ssid,
                 passphrase = endpoint.passphrase,
                 channel = endpoint.channel,
                 securityType = endpoint.security.wireValue,
                 bssid = endpoint.accessPointBssid,
             )
+        }
 
         /** Wireless 0x4301 reply carrying the receiver address, port and pairing identity. */
         fun carPlayStartSession(endpoint: Iap2WirelessCarPlayEndpoint): Iap2Frame =
             Iap2CarPlayMessages.startSession(
-                wireless = Iap2WirelessSessionParameters(
+                wireless = if (endpoint.configureWifi) Iap2WirelessSessionParameters(
                     ssid = endpoint.ssid,
                     passphrase = endpoint.passphrase,
                     channel = endpoint.channel,
                     ipAddresses = endpoint.ipAddresses,
                     securityType = endpoint.security.wireValue,
-                ),
+                ) else null,
+                connectedWirelessIpAddresses = if (endpoint.configureWifi) emptyList() else endpoint.ipAddresses,
                 airPlayPort = endpoint.airPlayPort,
                 deviceIdentifier = endpoint.deviceIdentifier,
                 publicKey = endpoint.publicKey,
@@ -288,6 +298,8 @@ class Iap2WirelessControlClient(
 
 /** Wireless 0x5703 security values. */
 enum class Iap2WirelessSecurity(val wireValue: Int) {
+    /** Local state only. Never encode this value in an iAP2 Wi-Fi provisioning message. */
+    SYSTEM_MANAGED(-1),
     NONE(0),
     WEP(1),
     WPA_WPA2(2),
@@ -307,6 +319,7 @@ class Iap2WirelessCarPlayEndpoint(
     val publicKey: String,
     val sourceVersion: String,
     accessPointBssid: ByteArray? = null,
+    val configureWifi: Boolean = true,
 ) {
     val ipAddresses: List<String> = ipAddresses.toList()
     val accessPointBssid: ByteArray? = accessPointBssid?.copyOf()
@@ -316,7 +329,11 @@ class Iap2WirelessCarPlayEndpoint(
         require(ssid.isNotBlank()) { "ssid is required and must not be blank" }
         require('\u0000' !in ssid) { "ssid must not contain U+0000" }
         require('\u0000' !in passphrase) { "passphrase must not contain U+0000" }
-        if (security != Iap2WirelessSecurity.NONE) {
+        require(configureWifi == (security != Iap2WirelessSecurity.SYSTEM_MANAGED)) {
+            "System-managed Wi-Fi must disable credential provisioning"
+        }
+        if (!configureWifi) require(passphrase.isEmpty()) { "System Wi-Fi reuse must not retain a password" }
+        if (configureWifi && security != Iap2WirelessSecurity.NONE) {
             require(passphrase.isNotEmpty()) { "passphrase is required for secured Wi-Fi" }
         }
         require(channel in 0..0xff) { "channel must be in 0..255" }

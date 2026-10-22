@@ -1,8 +1,19 @@
 <resources>
+    <string name="settings_existing_wifi_manual">手动连接网络</string>
+    <string name="settings_existing_wifi_select">选择系统 Wi-Fi</string>
+    <string name="settings_existing_wifi_connected">已连接 · %1$s</string>
+    <string name="settings_existing_wifi_saved">已保存 · %1$s</string>
+    <string name="settings_existing_wifi_available">可用网络 · %1$s</string>
+    <string name="settings_existing_wifi_unavailable">未读取到 Wi-Fi 名称。请开启 Wi-Fi 和系统定位、允许定位权限，或到系统 Wi-Fi 设置中选择网络。</string>
+    <string name="settings_existing_wifi_name_hint">默认自动使用系统当前连接的 Wi-Fi。仅在 Android 无法显示名称时手动填写；留空表示自动读取。</string>
+    <string name="settings_existing_wifi_switch_note">此操作会切换车机 Wi-Fi，可能中断 CarPlay。已保存的网络可留空密码以使用系统凭据；其他受保护网络请输入 WPA2 密码，开放网络无需密码。</string>
+    <string name="settings_existing_wifi_connect">连接 Wi-Fi</string>
+    <string name="settings_existing_wifi_connecting">已请求连接 Wi-Fi，请等待系统连接成功后再启动 CarPlay。</string>
+    <string name="settings_existing_wifi_connect_failed">无法请求连接。请确认 Wi-Fi 已开启、密码正确（8–63 个字符），或在系统 Wi-Fi 设置中连接。</string>
     <string name="existing_wifi_title">现有 Wi-Fi / 同一局域网</string>
     <string name="existing_wifi_description">使用已有路由器或随身 Wi-Fi。让 iPhone 和车机保持连接同一网络，并通过它上网。</string>
     <string name="existing_wifi_hint">现有 Wi-Fi · 两台设备保持连接同一 Wi-Fi，蓝牙保持开启，无需开启车机热点。</string>
-    <string name="existing_wifi_instructions">先在系统设置中将车机和 iPhone 连接同一外部 Wi-Fi，再准确填写它的名称和 WPA2 密码；仅开放网络可留空密码。路由器使用 WPA2 或 WPA2/WPA3 混合模式，并关闭客户端隔离。Lincoln 保持此 Wi-Fi 连接，不创建热点。</string>
+    <string name="existing_wifi_instructions">先在系统中连接车机 Wi-Fi。DiPlay 直接复用当前连接，无需填写密码，也不替 iPhone 配网。两台设备应在同一局域网，路由器关闭客户端隔离。更改在下次 CarPlay 连接时生效。</string>
     <string name="existing_wifi_details">外部 Wi-Fi 详情</string>
     <string name="existing_wifi_ssid">外部 Wi-Fi 名称（SSID）</string>
     <string name="existing_wifi_password">外部 Wi-Fi 密码</string>
@@ -928,7 +939,7 @@
     <string name="connection_help_bluetooth">解锁 iPhone，开启蓝牙和 Wi-Fi，并与车机配对。保持 iPhone 在附近后重试。</string>
     <string name="connection_help_general">请重试连接。如仍失败，请返回 Lincoln，在“设置 → 诊断”中保存报告。</string>
     <string name="connection_help_wifi_direct">保持车机的 Wi-Fi 和蓝牙开启，iPhone 解锁并放在附近，然后重试。如果仍然失败，请在 iPhone 的“设置 → 通用 → CarPlay 车载”中忘记这辆车，再重新连接。</string>
-    <string name="connection_help_existing_wifi">请确认车机和 iPhone 连接的是同一个 Wi-Fi 网络，且网络名称和密码与 Lincoln 设置一致，然后重试。</string>
+    <string name="connection_help_existing_wifi">先在系统中连接车机 Wi-Fi。DiPlay 直接复用当前连接，无需填写密码，也不替 iPhone 配网。两台设备应在同一局域网，路由器关闭客户端隔离。更改在下次 CarPlay 连接时生效。</string>
     <string name="settings_report_on_phone">在手机上取得报告</string>
     <string name="settings_report_on_phone_hint">用手机相机扫码，在浏览器中打开此页面，然后选择“下载报告”。下载完成前请保持此画面开启。</string>
     <string name="settings_mfi_target_description">只有车机上插着 CH341 认证适配器时才选择 USB/CH341。没有适配器时请选择「本地离线」。下次连接时生效。</string>

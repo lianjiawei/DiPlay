@@ -1483,7 +1483,8 @@ class CarPlayController(
             if (isStaleWirelessRun(generation)) {
                 return
             }
-            val wirelessIdentification = Iap2WirelessIdentification(hostBluetoothMac, hotspotInfo.ssid)
+            val wirelessIdentification = Iap2WirelessIdentification(hostBluetoothMac, hotspotInfo.ssid,
+                configureWifi = hotspotInfo.configureWifi)
             val bootstrapIdentification = config.identification.forWirelessLink(
                 Iap2WirelessLinkRole.BLUETOOTH_BOOTSTRAP,
                 wirelessIdentification,
@@ -1503,6 +1504,7 @@ class CarPlayController(
                 publicKey = identity.publicKeyHex,
                 sourceVersion = airPlayConfig.sourceVersion,
                 accessPointBssid = hotspotInfo.accessPointBssid,
+                configureWifi = hotspotInfo.configureWifi,
             )
             wirelessRuntimeIdentification = runtimeIdentification
             wirelessAirPlayEndpoint = endpoint
@@ -2469,7 +2471,7 @@ class CarPlayController(
                     "Android ${Build.VERSION.RELEASE} has no local-only hotspot. Choose Car hotspot or Wi-Fi Direct.")
             }
             WirelessHotspotMode.EXISTING_WIFI -> ExistingWifiManager(
-                appContext, config.existingWifiSsid, config.existingWifiPassphrase, ::debugLog,
+                appContext, config.existingWifiSsid, ::debugLog,
                 onNetworkChanged = { if (!isStaleWirelessRun(generation)) restartWireless() },
             )
             WirelessHotspotMode.MANUAL -> ManualHotspotManager(

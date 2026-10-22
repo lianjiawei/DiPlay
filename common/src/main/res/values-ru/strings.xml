@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="settings_existing_wifi_manual">Ввести сеть вручную</string>
+    <string name="settings_existing_wifi_select">Выбрать Wi-Fi системы</string>
+    <string name="settings_existing_wifi_connected">Подключено · %1$s</string>
+    <string name="settings_existing_wifi_saved">Сохранено · %1$s</string>
+    <string name="settings_existing_wifi_available">Доступно · %1$s</string>
+    <string name="settings_existing_wifi_unavailable">Названия Wi-Fi недоступны. Включите Wi-Fi и геолокацию, разрешите доступ к ней или выберите сеть в системных настройках Wi-Fi.</string>
+    <string name="settings_existing_wifi_name_hint">Автоматически используется текущее подключение Wi-Fi системы. Введите название, только если Android не показывает его; пустое поле означает автоопределение.</string>
+    <string name="settings_existing_wifi_switch_note">Это переключит Wi-Fi головного устройства и может прервать CarPlay. Для сохранённой сети оставьте пароль пустым, чтобы использовать системные данные. Для других защищённых сетей введите пароль WPA2. Открытым сетям пароль не нужен.</string>
+    <string name="settings_existing_wifi_connect">Подключить Wi-Fi</string>
+    <string name="settings_existing_wifi_connecting">Подключение Wi-Fi запрошено. Дождитесь подключения системы перед запуском CarPlay.</string>
+    <string name="settings_existing_wifi_connect_failed">Не удалось запросить подключение. Убедитесь, что Wi-Fi включён, а пароль верен (8–63 символа), или подключитесь в системных настройках Wi-Fi.</string>
     <string name="existing_wifi_title">Существующая Wi-Fi / Одна LAN</string>
     <string name="existing_wifi_description">Используйте существующий роутер или мобильную точку Wi-Fi. iPhone и автомобиль остаются в одной сети с доступом в Интернет.</string>
     <string name="existing_wifi_hint">Существующая Wi-Fi · Подключите оба устройства к одной Wi-Fi и включите Bluetooth. Точка доступа автомобиля не нужна.</string>
-    <string name="existing_wifi_instructions">В системных настройках подключите автомобиль и iPhone к одной внешней Wi-Fi. Введите её точное имя и пароль WPA2; оставьте пароль пустым только для открытой сети. Используйте WPA2 или смешанный режим WPA2/WPA3 и отключите изоляцию клиентов на роутере. Lincoln сохраняет это подключение и не создаёт точку доступа.</string>
+    <string name="existing_wifi_instructions">Подключите головное устройство в системных настройках Wi-Fi. DiPlay использует это подключение без пароля и не настраивает iPhone. Оба устройства должны быть в одной LAN; отключите изоляцию клиентов на роутере. Изменения применяются при следующем подключении CarPlay.</string>
     <string name="existing_wifi_details">Данные внешней Wi-Fi</string>
     <string name="existing_wifi_ssid">Имя внешней Wi-Fi (SSID)</string>
     <string name="existing_wifi_password">Пароль внешней Wi-Fi</string>
@@ -853,7 +864,7 @@
     <string name="connection_help_bluetooth">Разблокируйте iPhone, включите Bluetooth и Wi-Fi, выполните сопряжение с устройством. Держите iPhone рядом и повторите попытку.</string>
     <string name="connection_help_general">Повторите подключение. Если ошибка повторится, вернитесь в Lincoln и сохраните отчёт в разделе «Настройки → Диагностика».</string>
     <string name="connection_help_wifi_direct">Не выключайте Wi-Fi и Bluetooth головного устройства, держите iPhone разблокированным рядом и повторите попытку. Если сбой повторяется, забудьте автомобиль на iPhone в разделе «Настройки → Основные → CarPlay» и подключитесь снова.</string>
-    <string name="connection_help_existing_wifi">Убедитесь, что головное устройство и iPhone подключены к одной сети Wi-Fi, а её имя и пароль совпадают с настройками Lincoln, и повторите попытку.</string>
+    <string name="connection_help_existing_wifi">Подключите головное устройство в системных настройках Wi-Fi. DiPlay использует это подключение без пароля и не настраивает iPhone. Оба устройства должны быть в одной LAN; отключите изоляцию клиентов на роутере. Изменения применяются при следующем подключении CarPlay.</string>
     <string name="settings_report_on_phone">Получить отчёт на телефоне</string>
     <string name="settings_report_on_phone_hint">Отсканируйте код камерой телефона, чтобы открыть страницу в его браузере, и выберите «Скачать отчёт». Не закрывайте этот экран, пока загрузка не завершится.</string>
     <string name="settings_mfi_target_description">Выбирайте USB/CH341, только если к головному устройству подключён адаптер аутентификации CH341. Без него выберите «Локальный офлайн». Применяется при следующем подключении.</string>

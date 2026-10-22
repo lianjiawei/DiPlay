@@ -14,6 +14,7 @@ import kotlin.math.min
 class Iap2WirelessIdentification(
     val bluetoothMac: String,
     val ssid: String,
+    val configureWifi: Boolean = true,
 ) {
     private val macBytes: ByteArray
 
@@ -301,6 +302,7 @@ class Iap2IdentificationClient(private val session: Iap2Session) {
         /** Builds the smallest honest LIVI-compatible wired or wireless IdentificationInformation. */
         fun identificationInformation(config: Iap2IdentificationConfig, omitted: Set<Int> = emptySet()): Iap2Frame {
             val wireless = config.wireless
+            val omittedMessages = if (wireless?.configureWifi == false) omitted + setOf(0x5702, 0x5703) else omitted
             var sentMessages = if (config.locationInformationEnabled) {
                 MESSAGES_SENT_BY_ACCESSORY + LOCATION_INFORMATION
             } else {
@@ -332,7 +334,7 @@ class Iap2IdentificationClient(private val session: Iap2Session) {
                     } else {
                         sentMessages.filterNot { it == POWER_SOURCE_UPDATE }.toIntArray().asIterable() +
                             ACCESSORY_WIFI_CONFIGURATION_INFORMATION
-                    }.filterNot { it in omitted },
+                    }.filterNot { it in omittedMessages },
                 )
                 u16List(
                     7,
@@ -340,7 +342,7 @@ class Iap2IdentificationClient(private val session: Iap2Session) {
                         receivedMessages.asIterable()
                     } else {
                         receivedMessages.asIterable() + WIRELESS_PHONE_MESSAGES.asIterable()
-                    }.filterNot { it in omitted },
+                    }.filterNot { it in omittedMessages },
                 )
                 u8(8, if (wireless == null) 2 else 0)
                 u16(9, 20)

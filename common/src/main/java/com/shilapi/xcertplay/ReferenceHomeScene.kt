@@ -36,7 +36,8 @@ internal class ReferenceHomeScene(
         for (view in listOf(usb,settings)) view.measure(MeasureSpec.makeMeasureSpec(footerWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
         val footerHeight = maxOf(usb.measuredHeight,settings.measuredHeight)
         for (view in listOf(usb,settings)) view.measure(MeasureSpec.makeMeasureSpec(footerWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(footerHeight,MeasureSpec.EXACTLY))
-        brand.measure(MeasureSpec.makeMeasureSpec(if (landscape) (w*.25f).toInt() else w,MeasureSpec.AT_MOST),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
+        val brandWidth = if (landscape) (w - footerWidth * 2 - dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP * 2)).coerceAtLeast(0) else w
+        brand.measure(MeasureSpec.makeMeasureSpec(brandWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
         wantedHeight = (viewportHeight() - reservedHeight).coerceAtLeast(dp(240))
         if (landscape) {
             val budget = wantedHeight - footerHeight - dp(ReferenceHomeMetrics.FOOTER_INSET_DP + ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
@@ -72,4 +73,9 @@ internal object ReferenceHomeMetrics {
     const val FOOTER_INSET_DP=12
     const val PORTRAIT_FOOTER_GAP_DP=40
     const val MIN_RING_DP=40
+    const val BRAND_TEXT_SP=12f
+    const val BRAND_ACTION_GAP_DP=12
+    const val BRAND_RULE_GAP_DP=12
+    const val BRAND_RULE_DP=1f
+    const val BRAND_SHADOW_DP=2f
 }

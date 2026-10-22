@@ -77,6 +77,7 @@ import com.shilapi.xcertplay.media.AmbientMusicSettings
 import com.shilapi.xcertplay.media.MtkDecoderTuning
 import com.shilapi.xcertplay.network.CarHotspotSettings
 import com.shilapi.xcertplay.network.CarHotspotTethering
+import com.shilapi.xcertplay.network.ExistingWifiNetworks
 import com.shilapi.xcertplay.network.WifiP2pChannels
 import com.shilapi.xcertplay.orchestration.ManualHotspotSecurity
 import com.shilapi.xcertplay.orchestration.MfiTarget
@@ -330,6 +331,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val snapshotChanged: Boolean = false,
         val savedFieldsReadable: Boolean = false,
     )
+    private val systemWifiPicker = SystemWifiPicker(this, { appDialogBuilder() }, ::openCarClientWifiSettings)
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         connect(notificationTransport)
     }
@@ -1072,8 +1074,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val settings=headerButton(brandString(R.string.settings),R.drawable.ic_glass_settings,true) { page="settings";render() }.apply {
             textSize=18f;minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
         }
-        val brand=label("CorsairPlay",12,MUTED).apply {
-            letterSpacing=.12f;gravity=Gravity.CENTER
+        val brand=HomeBrandView(this).apply {
             contentDescription=brandString(R.string.home_public_preview,VehicleBranding.displayName(this@DiPlayActivity),version())
         }
         val reserved=dp(ReferenceHomeMetrics.TOP_DP+ReferenceHomeMetrics.BOTTOM_DP+ReferenceHomeMetrics.HEADER_DP+ReferenceHomeMetrics.HEADER_GAP_DP)
@@ -4011,11 +4012,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     pendingCarHotspotSetup = true
                     render()
                 } else if (candidate == WirelessHotspotMode.EXISTING_WIFI) {
-                    askHotspotCredentials(existingWifi = true) { ssid, password, _ ->
-                        AirPlayPersistence.saveExistingWifiCredentials(this, ssid, password)
-                        pendingCarHotspotSetup = false
-                        applyWirelessLink(candidate)
-                    }
+                    pendingCarHotspotSetup = false
+                    applyWirelessLink(candidate)
                 } else {
                     pendingCarHotspotSetup = false
                     applyWirelessLink(candidate)
@@ -4045,12 +4043,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         } else if (mode == WirelessHotspotMode.EXISTING_WIFI) {
             parent.addView(label(brandString(R.string.existing_wifi_instructions), 16, MUTED))
             parent.addView(button(brandString(R.string.open_car_wi_fi_settings), false) { openCarClientWifiSettings() }, matchButton(12, 60))
-            parent.addView(button(brandString(R.string.existing_wifi_details), false) {
-                askHotspotCredentials(existingWifi = true) { ssid, password, _ ->
-                    AirPlayPersistence.saveExistingWifiCredentials(this, ssid, password)
-                    toast(brandString(R.string.saved_for_your_next_connection))
-                }
-            }, matchButton(12, 60))
+            val name = ExistingWifiNetworks.read(this).firstOrNull { it.connected }?.ssid
+                ?: AirPlayPersistence.loadExistingWifiSsid(this).ifEmpty { brandString(R.string.auto) }
+            parent.addView(button("${brandString(R.string.settings_existing_wifi_select)} · $name", false) {
+                askExistingWifiNetwork()
+            }, matchButton(SETTINGS_BLOCK_GAP_DP, 60))
         } else {
             parent.addView(label(brandString(R.string.turn_the_car_s_wi_fi_switch_on_allow_location_nearby_devic), 16, MUTED))
             wifiDirectChannelControl(parent)
@@ -4196,18 +4193,67 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         markReconnectNeeded()
     }
 
-    private fun askHotspotCredentials(existingWifi: Boolean = false, done: (String, String, ManualHotspotSecurity) -> Unit) {
+    private fun askExistingWifiNetwork() {
+        var active = true
+        val fields = column().apply { setPadding(dp(FidelitySettingsMetrics.CONTENT_PAD_DP), dp(FidelitySettingsMetrics.ROW_GAP_DP), dp(FidelitySettingsMetrics.CONTENT_PAD_DP), dp(FidelitySettingsMetrics.ROW_GAP_DP)) }
+        fields.addView(label(brandString(R.string.existing_wifi_instructions), 16, MUTED))
+        val current = ExistingWifiNetworks.read(this).firstOrNull { it.connected }
+        val name = EditText(appDialogContext()).apply {
+            hint = brandString(R.string.existing_wifi_ssid)
+            setText(current?.ssid ?: AirPlayPersistence.loadExistingWifiSsid(this@DiPlayActivity))
+            setSingleLine()
+        }
+        lateinit var choose: Button
+        fun updateChoice() {
+            choose.text = "${brandString(R.string.settings_existing_wifi_select)} · " +
+                name.text.toString().ifEmpty { brandString(R.string.auto) }
+        }
+        choose = button("", false) {
+            systemWifiPicker.show({ active }) { network ->
+                name.setText(network.ssid)
+            }
+        }
+        updateChoice()
+        name.doAfterTextChanged { updateChoice() }
+        fields.addView(choose, matchButton(SETTINGS_BLOCK_GAP_DP, 60))
+        fields.addView(label(brandString(R.string.settings_existing_wifi_name_hint), 15, MUTED).apply {
+            setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
+        })
+        fields.addView(name)
+        fields.addView(label(brandString(R.string.saved_for_your_next_connection), 15, MUTED))
+        val error = label("", 14, WARNING).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        fields.addView(error)
+        val dialog = appDialogBuilder().setTitle(R.string.existing_wifi_details)
+            .setView(ScrollView(appDialogContext()).apply { addView(fields) })
+            .setPositiveButton(R.string.save, null).setNegativeButton(R.string.cancel, null)
+            .setOnDismissListener { active = false }.create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val ssid = name.text.toString() // SSID whitespace is meaningful.
+                val problem = if (ssid.isEmpty()) null else hotspotError(ssid, "")
+                if (problem != null) error.text = problem else {
+                    AirPlayPersistence.saveExistingWifiCredentials(this, ssid, "")
+                    markReconnectNeeded()
+                    dialog.dismiss()
+                    render()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun askHotspotCredentials(done: (String, String, ManualHotspotSecurity) -> Unit) {
         val dialogContext = appDialogContext()
         val fields = column().apply { setPadding(dp(24), dp(12), dp(24), dp(12)) }
-        fields.addView(label(brandString(if (existingWifi) R.string.existing_wifi_instructions else R.string.copy_these_from_the_car_s_hotspot_settings_use_5_ghz_if_av), 16, MUTED))
+        fields.addView(label(brandString(R.string.copy_these_from_the_car_s_hotspot_settings_use_5_ghz_if_av), 16, MUTED))
         val ssid = EditText(dialogContext).apply {
-            hint = brandString(if (existingWifi) R.string.existing_wifi_ssid else R.string.hotspot_name)
-            setText(if (existingWifi) AirPlayPersistence.loadExistingWifiSsid(this@DiPlayActivity) else storedSsid())
+            hint = brandString(R.string.hotspot_name)
+            setText(storedSsid())
             setSingleLine()
         }
         val password = EditText(dialogContext).apply {
-            hint = brandString(if (existingWifi) R.string.existing_wifi_password else R.string.hotspot_password)
-            setText(if (existingWifi) AirPlayPersistence.loadExistingWifiPassphrase(this@DiPlayActivity) else storedPassword())
+            hint = brandString(R.string.hotspot_password)
+            setText(storedPassword())
             setSingleLine()
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
@@ -4227,7 +4273,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val nameWarning = label(brandString(R.string.settings_hotspot_name_non_english), 14, WARNING)
         fun updateNameWarning() {
-            nameWarning.visibility = if (!existingWifi &&
+            nameWarning.visibility = if (
                 com.shilapi.xcertplay.orchestration.ManualHotspotValidation.nameMayNotReachIphone(ssid.text.toString())
             ) View.VISIBLE else View.GONE
         }
@@ -4249,7 +4295,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val securityTitles = listOf(brandString(R.string.wpa2), brandString(R.string.wpa3_transition), brandString(R.string.wpa3))
         var protectedSecurity = AirPlayPersistence.loadManualHotspotSecurity(this)
             .takeIf { it in securityModes } ?: ManualHotspotSecurity.WPA2
-        if (!existingWifi) {
+        run {
             lateinit var securityControl: Button
             fun updateSecurityControl() {
                 val hasPassword = password.text.isNotEmpty()
@@ -4280,7 +4326,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val error = label("", 14, WARNING)
         error.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         fields.addView(error)
-        val dialog = appDialogBuilder().setTitle(brandString(if (existingWifi) R.string.existing_wifi_details else R.string.car_hotspot_details))
+        val dialog = appDialogBuilder().setTitle(brandString(R.string.car_hotspot_details))
             .setView(ScrollView(dialogContext).apply { addView(fields) })
             .setPositiveButton(brandString(R.string.save_details), null).setNegativeButton(brandString(R.string.cancel)) { _, _ -> hideKeyboard() }
             .setNeutralButton(brandString(R.string.hide_keyboard), null).create()
@@ -4288,7 +4334,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener { hideKeyboard() }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = if (existingWifi) ssid.text.toString() else ssid.text.toString().trim()
+                val name = ssid.text.toString().trim()
                 val secret = password.text.toString()
                 val problem = hotspotError(name, secret)
                 if (problem != null) error.text = problem

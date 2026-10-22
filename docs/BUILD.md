@@ -73,8 +73,8 @@ Check that this file exists:
 mobile/build/outputs/apk/debug/mobile-debug.apk
 ```
 
-The debug application ID is `com.shihab.diplay.hudtest`.
-The release application ID is `com.shihab.diplay`.
+The debug application ID is `cn.manstep.phonemirrorBox.hudtest`.
+The release application ID is `cn.manstep.phonemirrorBox`.
 
 The source APK contains no accessory identity unless you supply runtime authentication assets.
 Standalone CarPlay needs these assets to connect to an iPhone.

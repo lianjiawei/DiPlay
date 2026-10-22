@@ -27,6 +27,8 @@ class WirelessHotspotInfo(
     val hostAddresses: List<InetAddress> = listOfNotNull(hostAddress),
     /** Wi-Fi AP hint for 0x5703; independent of the receiver's AirPlay identity in [bssid]. */
     val accessPointBssid: ByteArray? = null,
+    /** False when both devices already use the system Wi-Fi connection; no credentials are shared. */
+    val configureWifi: Boolean = true,
 ) {
     override fun toString(): String =
         "WirelessHotspotInfo(backend=${backend.label}, ssid='$ssid', " +

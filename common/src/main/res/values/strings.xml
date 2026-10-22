@@ -1,8 +1,19 @@
 <resources>
+    <string name="settings_existing_wifi_manual">Enter network manually</string>
+    <string name="settings_existing_wifi_select">Choose system Wi-Fi</string>
+    <string name="settings_existing_wifi_connected">Connected · %1$s</string>
+    <string name="settings_existing_wifi_saved">Saved · %1$s</string>
+    <string name="settings_existing_wifi_available">Available · %1$s</string>
+    <string name="settings_existing_wifi_unavailable">No Wi-Fi names are available. Enable Wi-Fi and system location, allow location access, or choose a network in system Wi-Fi settings.</string>
+    <string name="settings_existing_wifi_name_hint">The connected system Wi-Fi is used automatically. Only enter a name here if Android cannot show it; leave blank for automatic detection.</string>
+    <string name="settings_existing_wifi_switch_note">This switches the head unit’s Wi-Fi and may interrupt CarPlay. For a saved network, leave the password blank to use its system credentials. Otherwise enter the WPA2 password. Open networks need no password.</string>
+    <string name="settings_existing_wifi_connect">Connect Wi-Fi</string>
+    <string name="settings_existing_wifi_connecting">Wi-Fi connection requested. Wait for the system to connect before starting CarPlay.</string>
+    <string name="settings_existing_wifi_connect_failed">Could not request the connection. Check Wi-Fi is on and the password is correct (8–63 characters), or connect in system Wi-Fi settings.</string>
     <string name="existing_wifi_title">Existing Wi-Fi / Same LAN</string>
     <string name="existing_wifi_description">Use an existing router or portable Wi-Fi. Keep the iPhone and car on the same network with Internet access.</string>
     <string name="existing_wifi_hint">Existing Wi-Fi · Keep both devices on the same Wi-Fi and Bluetooth on. No car hotspot is needed.</string>
-    <string name="existing_wifi_instructions">Connect the car and iPhone to the same external Wi-Fi in system settings. Enter its exact name and WPA2 password below; leave the password empty only for an open network. Use WPA2 or WPA2/WPA3 mixed mode and disable client isolation on the router. Lincoln keeps this Wi-Fi connection and creates no hotspot.</string>
+    <string name="existing_wifi_instructions">Connect the head unit in system Wi-Fi settings. DiPlay reuses that connection without a password and does not configure the iPhone. Keep both devices on the same LAN and disable router client isolation. Changes apply to the next CarPlay connection.</string>
     <string name="existing_wifi_details">External Wi-Fi details</string>
     <string name="existing_wifi_ssid">External Wi-Fi name (SSID)</string>
     <string name="existing_wifi_password">External Wi-Fi password</string>
@@ -971,7 +982,7 @@
     <string name="connection_help_bluetooth">Unlock the iPhone, enable Bluetooth and Wi-Fi, and pair it with the head unit. Keep it nearby, then retry.</string>
     <string name="connection_help_general">Retry the connection. If it fails again, return to Lincoln and save a report under Settings → Diagnostics.</string>
     <string name="connection_help_wifi_direct">Keep the head unit\'s Wi-Fi and Bluetooth on and the iPhone unlocked nearby, then retry. If it keeps failing, forget the car on the iPhone under Settings → General → CarPlay and connect again.</string>
-    <string name="connection_help_existing_wifi">Make sure the head unit and the iPhone are on the same Wi-Fi network and its name and password match Lincoln settings, then retry.</string>
+    <string name="connection_help_existing_wifi">Connect the head unit in system Wi-Fi settings. DiPlay reuses that connection without a password and does not configure the iPhone. Keep both devices on the same LAN and disable router client isolation. Changes apply to the next CarPlay connection.</string>
     <string name="settings_report_on_phone">Get the report on a phone</string>
     <string name="settings_report_on_phone_hint">Scan the code with the phone camera to open this page in its browser, then choose Download report. Keep this screen open until the download has finished.</string>
     <string name="settings_mfi_target_description">Choose USB/CH341 only while a CH341 authentication adapter is connected to the head unit. Without one, choose Local offline. Applies at the next connection.</string>
