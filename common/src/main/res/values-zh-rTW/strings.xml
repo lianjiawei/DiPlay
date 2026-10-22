@@ -937,7 +937,7 @@
     <string name="connection_help_bluetooth">解鎖 iPhone，開啟藍牙與 Wi-Fi，並與車機配對。讓 iPhone 保持在附近，再重試。</string>
     <string name="connection_help_general">請重新連線。若仍失敗，請返回 Lincoln，在「設定 → 診斷」中儲存報告。</string>
     <string name="connection_help_wifi_direct">保持車機的 Wi-Fi 與藍牙開啟，iPhone 解鎖並放在附近，再重試。若仍失敗，請在 iPhone 的「設定 → 一般 → CarPlay」中忘記這輛車，再重新連線。</string>
-    <string name="connection_help_existing_wifi">先在系統中連線車機 Wi-Fi。DiPlay 直接使用目前連線，無需填寫密碼，也不替 iPhone 設定網路。兩台裝置應在同一區域網路，路由器須關閉用戶端隔離。變更在下次 CarPlay 連線時生效。</string>
+    <string name="connection_help_existing_wifi">請讓車機和 iPhone 連接同一個外部 Wi-Fi，並保持藍牙開啟。路由器需允許多播探索、關閉用戶端隔離。用於 CarPlay 的 iPhone 開啟個人熱點可能影響無線連線，請先關閉熱點再測試。若仍逾時，請嘗試車機熱點或 Wi-Fi Direct，並匯出診斷報告。</string>
     <string name="settings_report_on_phone">在手機上取得報告</string>
     <string name="settings_report_on_phone_hint">用手機相機掃碼，在瀏覽器中開啟此頁面，然後選擇「下載報告」。下載完成前請保持此畫面開啟。</string>
     <string name="settings_mfi_target_description">只有車機上插著 CH341 認證轉接器時才選擇 USB/CH341。沒有轉接器時請選擇「本機離線」。下次連線時生效。</string>

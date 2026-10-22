@@ -14,13 +14,27 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class Iap2WirelessControlClientTest {
-    @Test fun systemWifiReusePublishesOnlyTheAddressAndNeverAnOpenNetworkOrPassword() {
+    @Test fun connectedNetworkKeepsItsUtf8NameAndBothAddressFamiliesWithoutCredentials() {
+        val endpoint = Iap2WirelessCarPlayEndpoint("共享网络", "", 149, Iap2WirelessSecurity.SYSTEM_MANAGED,
+            listOf("192.0.2.10", "fe80::1234%4"), 7000, "dev-1", "aabbcc", "1.0", configureWifi = false)
+        val body = parameters(Iap2WirelessControlClient.carPlayStartSession(endpoint).payload)
+        val network = parameters(body.single { it.id == 1 }.payload)
+        assertEquals(listOf(0, 3, 3), network.map { it.id })
+        assertEquals("共享网络\u0000", network.first().payload.decodeToString())
+        assertEquals(listOf("192.0.2.10\u0000", "fe80::1234%4\u0000"),
+            network.filter { it.id == 3 }.map { it.payload.decodeToString() })
+    }
+
+    @Test fun systemWifiReuseIdentifiesTheNetworkWithoutAnOpenNetworkOrPassword() {
         val connected = Iap2WirelessCarPlayEndpoint("Router", "", 36, Iap2WirelessSecurity.SYSTEM_MANAGED,
             listOf("192.0.2.10"), 7000, "dev-1", "aabbcc", "1.0", configureWifi = false)
         val start = parameters(Iap2WirelessControlClient.carPlayStartSession(connected).payload)
         val wireless = parameters(start.single { it.id == 1 }.payload)
-        assertEquals(listOf(3), wireless.map { it.id })
-        assertEquals("192.0.2.10\u0000", wireless.single().payload.decodeToString())
+        assertEquals(listOf(0, 3), wireless.map { it.id })
+        assertEquals("Router\u0000", wireless.single { it.id == 0 }.payload.decodeToString())
+        assertEquals("192.0.2.10\u0000", wireless.single { it.id == 3 }.payload.decodeToString())
+        // No passphrase, channel or security type: this must not describe secured Wi-Fi as open.
+        assertFalse(wireless.any { it.id in listOf(1, 2, 4) })
         assertThrows(IllegalArgumentException::class.java) {
             Iap2WirelessControlClient.accessoryWiFiConfiguration(connected)
         }

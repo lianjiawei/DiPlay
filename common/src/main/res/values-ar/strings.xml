@@ -913,7 +913,7 @@
     <string name="connection_help_bluetooth">افتح قفل iPhone وشغّل بلوتوث وWi-Fi واقرنه بوحدة السيارة. أبقه قريبًا ثم أعد المحاولة.</string>
     <string name="connection_help_general">أعد محاولة الاتصال. إذا فشل مجددًا، ارجع إلى Lincoln واحفظ تقريرًا من الإعدادات ← التشخيص.</string>
     <string name="connection_help_wifi_direct">أبقِ واي فاي وبلوتوث وحدة السيارة قيد التشغيل وiPhone مفتوح القفل وقريبًا، ثم أعد المحاولة. إذا استمر الفشل، انسَ السيارة على iPhone من الإعدادات ← عام ← CarPlay ثم اتصل مجددًا.</string>
-    <string name="connection_help_existing_wifi">صل وحدة السيارة من إعدادات Wi-Fi للنظام. يستخدم DiPlay هذا الاتصال دون كلمة مرور ولا يضبط شبكة iPhone. أبقِ الجهازين على الشبكة المحلية نفسها وعطّل عزل العملاء في الموجّه. تسري التغييرات عند اتصال CarPlay التالي.</string>
+    <string name="connection_help_existing_wifi">وصّل وحدة السيارة وiPhone بشبكة Wi-Fi خارجية واحدة وأبقِ Bluetooth قيد التشغيل. اسمح بالاكتشاف متعدد البث وأوقف عزل العملاء في الموجّه. قد تؤثر نقطة الاتصال الشخصية في iPhone المطلوب على CarPlay اللاسلكي؛ أوقفها لهذا الاختبار. إذا استمرت المهلة، جرّب نقطة اتصال السيارة أو Wi-Fi Direct وصدّر تقرير التشخيص.</string>
     <string name="settings_report_on_phone">الحصول على التقرير عبر هاتف</string>
     <string name="settings_report_on_phone_hint">امسح الرمز بكاميرا الهاتف لفتح هذه الصفحة في متصفحه، ثم اختر «تنزيل التقرير». أبقِ هذه الشاشة مفتوحة حتى يكتمل التنزيل.</string>
     <string name="settings_mfi_target_description">اختر USB/CH341 فقط عندما يكون محوّل مصادقة CH341 متصلًا بوحدة الوسائط. بدونه، اختر «محلي دون اتصال». يُطبَّق عند الاتصال التالي.</string>

@@ -283,6 +283,7 @@ class Iap2WirelessControlClient(
                     securityType = endpoint.security.wireValue,
                 ) else null,
                 connectedWirelessIpAddresses = if (endpoint.configureWifi) emptyList() else endpoint.ipAddresses,
+                connectedWirelessSsid = if (endpoint.configureWifi) null else endpoint.ssid,
                 airPlayPort = endpoint.airPlayPort,
                 deviceIdentifier = endpoint.deviceIdentifier,
                 publicKey = endpoint.publicKey,

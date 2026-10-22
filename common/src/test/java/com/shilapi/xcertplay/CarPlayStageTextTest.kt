@@ -4,6 +4,7 @@ import android.os.Handler
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.orchestration.CarPlayStatus
+import com.shilapi.xcertplay.network.WirelessStartupFailure
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.After
@@ -56,10 +57,13 @@ class CarPlayStageTextTest {
         assertStage(R.string.allow_the_connection_permission_to_continue, CarPlayStatus.RequestingIphonePermission)
         assertStage(R.string.looking_for_your_paired_iphone, CarPlayStatus.WaitingForPairedIphone)
         assertStage(R.string.connecting_to_your_iphone, CarPlayStatus.ConnectingBluetooth)
+        assertStage(R.string.ui_connection_waiting_network, CarPlayStatus.RunningWireless)
         assertStage(R.string.opening_carplay, CarPlayStatus.RunningControl)
         assertStage(R.string.reconnecting_to_your_iphone, CarPlayStatus.ControlEnded)
         assertStage(R.string.waiting_for_mfi_coprocessor, CarPlayStatus.WaitingForMfi)
         assertStage(R.string.getting_carplay_ready, CarPlayStatus.OpeningDataPaths)
+        assertStage(R.string.ui_connection_network_timeout, CarPlayStatus.Failed(
+            "No AirPlay TCP after CarPlay StartSession", startupFailure = WirelessStartupFailure.FIRST_TCP_TIMEOUT))
     }
 
     private fun assertStage(expected: Int, status: CarPlayStatus) {

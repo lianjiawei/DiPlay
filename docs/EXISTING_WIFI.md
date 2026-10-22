@@ -9,6 +9,15 @@ paired with the receiver, then start wireless CarPlay as usual.
 Both clients must already be connected and able to
 communicate; allow multicast DNS for service discovery. Prefer 5 GHz when supported.
 
+The target iPhone acting as a Personal Hotspot is a different topology from two
+clients on an external router. Internet access through that hotspot does not prove
+wireless CarPlay compatibility. Lincoln's
+[connection troubleshooting](https://www.fordservicecontent.com/Ford_Content/vdirsnet/OwnerManual/Home/Content?ProcUid=G2360145&Uid=G2361335&buildtype=web&countryCode=USA&div=l&languageCode=en&moidRef=G2358278&userMarket=CAN&vFilteringEnabled=False&variantid=11272)
+notes that Personal Hotspot can interfere on some iPhone/iOS combinations. For a
+controlled comparison, turn it off and join both devices to the same external Wi-Fi;
+alternatively test the car hotspot or Wi-Fi Direct. Neither Android Wi-Fi association
+nor successful Bluetooth authentication establishes that the AirPlay session started.
+
 DiPlay attaches to the existing connection without creating an AP, joining another
 network or changing the default route. The router supplies Internet access.
 The connected system SSID takes priority over an old saved name. The manager tries station
@@ -52,8 +61,11 @@ same source as AirPlay `/info`.
 
 The Bluetooth/iAP2 identification and authentication sequence is retained. In this
 mode Wi-Fi credential sharing (0x5702/0x5703) is not advertised or sent. The wireless
-0x4301 group carries the selected endpoint address without SSID, passphrase, channel
-or security provisioning fields. System-managed Wi-Fi is represented explicitly;
+0x4301 group carries the connected SSID and selected endpoint address without a
+passphrase, channel or security provisioning fields. This preserves the network
+identifier omitted by precision.10 while still disabling credential provisioning.
+This is a compatibility candidate, not a confirmed fix for the first-TCP timeout.
+System-managed Wi-Fi is represented explicitly;
 an unknown password is never described as an open network. The P2P and car
 hotspot backends retain their existing single-address defaults and bootstrap behavior.
 
@@ -79,13 +91,45 @@ installed and configured normally, and Same LAN entered CarPlay with no issues n
 during use. This validates that earlier setup; it does not establish compatibility with every
 receiver, iOS version or router. Open and WPA2/WPA3 mixed networks have not been
 separately validated on hardware.
-The current password-free reuse path and the address-only 0x4301 group still need a
+The current password-free reuse path and the SSID/address-only 0x4301 group still need a
 new head-unit/iPhone test. Unit tests can verify emitted messages and Android calls,
 but do not prove that every iOS version accepts this connection sequence.
 For a device check, confirm that both devices keep the existing Wi-Fi connection,
 CarPlay starts, and the iPhone can use online services. For failures, save one diagnostic
 report with the attempt time and the iPhone’s actual Wi-Fi connection. An absence of
 Bonjour control-service events alone does not prove that CarPlay discovery failed.
+
+### Interpreting a first-TCP timeout
+
+A precision.10 report from 2026-10-22 showed successful iAP2 identification and MFi
+authentication, a ready AirPlay listener, and a transmitted `0x4301` StartSession.
+The subsequent snapshots consistently reported `tcpAccepted=0`, `sessionActive=false`,
+and `waitingFor=WiFi_discovery_or_AirPlay_TCP`, ending in
+`No AirPlay TCP after CarPlay StartSession`. Both IPv4 and IPv6 attempts had the same
+outcome. The report was from an Android 12 handset running the receiver, not the
+target Android 7.1/8.1 head unit.
+
+The user confirmed that a separate phone/portable hotspot supplied this network.
+The target iPhone was a Wi-Fi client, so its own Personal Hotspot is not an
+explanation for this report. Client isolation/multicast behavior of the external
+hotspot and the password-free bootstrap remain separate hypotheses to test.
+
+This localizes the failure after Bluetooth authentication and before the first
+AirPlay TCP connection. It does **not** distinguish a Personal Hotspot restriction,
+discovery/reachability failure, or iOS rejection of the password-free bootstrap.
+`wifiConfigs=0` is expected in this mode; it is not evidence that a password is
+missing. No protocol fix or successful hardware connection is claimed from this
+report. Retest on an external router, then compare car-hotspot/Wi-Fi Direct behavior
+and export a fresh report. Never infer a specific cause merely from zero Bonjour
+events or unavailable Android kernel counters.
+
+The next test candidate includes the live SSID alongside the endpoint in `0x4301`.
+It still omits passphrase, security and channel fields and never sends `0x5703`.
+That change tests whether retaining the network identifier helps; this report alone
+does not establish that the omitted SSID caused the timeout or that iOS accepts the
+remaining partial group. If TCP still stays at zero, continue investigating external
+hotspot isolation/discovery and bootstrap compatibility, rather than increasing the
+timeout or describing the attempt as connected.
 
 ## Builds
 

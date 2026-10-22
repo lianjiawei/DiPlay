@@ -1030,13 +1030,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             homeHeadline=this
             gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif", Typeface.BOLD)
             includeFontPadding = false
-            setShadowLayer(dp(2).toFloat(), 0f, dp(1).toFloat(), Color.argb(100,0,20,40))
+            SceneText.apply(this, appNight)
         }, LinearLayout.LayoutParams(-1, -2))
         homeConnectionRing = ConnectionRingView(this).apply { appearance(appNight) }
         hero.addView(homeConnectionRing, LinearLayout.LayoutParams(dp(156),dp(156)).apply { topMargin=dp(8) })
         val phone = actionButton(if (DiPlayPreferences.phoneAddress(this) == null) brandString(R.string.choose_iphone)
             else DiPlayPreferences.phoneName(this), false) { choosePhone() }.apply {
-            setTextColor(TEXT); textSize=18f; includeFontPadding=false
+            SceneText.apply(this, appNight); textSize=18f; includeFontPadding=false
             background=RippleDrawable(ColorStateList.valueOf(RIPPLE), ColorDrawable(Color.TRANSPARENT),null)
             setPadding(dp(8),0,dp(8),0)
             val arrow=android.graphics.drawable.RotateDrawable().apply {
@@ -1049,7 +1049,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         hero.addView(phone,LinearLayout.LayoutParams(-2,-2).apply { topMargin=dp(-8);gravity=Gravity.CENTER_HORIZONTAL })
         phone.minHeight=dp(40)
-        status=label(brandString(R.string.ready_when_you_are),14,MUTED).apply { gravity=Gravity.CENTER;includeFontPadding=false }
+        status=label(brandString(R.string.ready_when_you_are),14,MUTED).apply {
+            gravity=Gravity.CENTER;includeFontPadding=false;SceneText.apply(this, appNight, secondary=true)
+        }
         hero.addView(status,LinearLayout.LayoutParams(-1,-2))
         connectButton=button(brandString(R.string.ui_glass_connect_carplay),true) {
             if (CarPlayBackgroundSession.hasSession()) openProjection() else connect(true)

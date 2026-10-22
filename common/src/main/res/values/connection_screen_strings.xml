@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_connection_help">Connection help</string>
+    <string name="ui_connection_hint_same_wifi">Connect both devices to the same Wi-Fi.</string>
+    <string name="ui_connection_hint_wireless">Unlock your iPhone and turn on Bluetooth and Wi-Fi.</string>
+    <string name="ui_connection_hint_usb">Check the data cable and unlock your iPhone.</string>
+    <string name="ui_connection_hint_permissions">Allow the connection permissions on the head unit.</string>
+    <string name="ui_connection_hint_reset_wifi">Reset CarPlay Wi-Fi, then retry.</string>
+    <string name="ui_connection_hint_usb_fallback">Wireless is unavailable. Try a USB data cable.</string>
+    <string name="ui_connection_hint_network">Check the head unit Wi-Fi, then retry.</string>
+    <string name="ui_connection_hint_retry">Retry, or open Connection help.</string>
+    <string name="ui_connection_waiting_network">Waiting for iPhone to join CarPlay…</string>
+    <string name="ui_connection_network_timeout">iPhone did not join CarPlay in time</string>
+</resources>

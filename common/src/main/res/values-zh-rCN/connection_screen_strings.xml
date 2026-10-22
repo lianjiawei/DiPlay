@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_connection_help">连接帮助</string>
+    <string name="ui_connection_hint_same_wifi">请确认车机和 iPhone 连接同一 Wi-Fi。</string>
+    <string name="ui_connection_hint_wireless">请解锁 iPhone，并开启蓝牙和 Wi-Fi。</string>
+    <string name="ui_connection_hint_usb">请检查数据线，并解锁 iPhone。</string>
+    <string name="ui_connection_hint_permissions">请允许车机弹出的连接权限。</string>
+    <string name="ui_connection_hint_reset_wifi">请重置 CarPlay Wi-Fi 后重试。</string>
+    <string name="ui_connection_hint_usb_fallback">无线连接不可用，请尝试 USB 数据线。</string>
+    <string name="ui_connection_hint_network">请检查车机 Wi-Fi，然后重试。</string>
+    <string name="ui_connection_hint_retry">请重试连接，或查看连接帮助。</string>
+    <string name="ui_connection_waiting_network">正在等待 iPhone 接入 CarPlay…</string>
+    <string name="ui_connection_network_timeout">等待 iPhone 接入 CarPlay 超时</string>
+</resources>

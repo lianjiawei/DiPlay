@@ -981,7 +981,7 @@
     <string name="connection_help_bluetooth">iPhoneのロックを解除し、BluetoothとWi-Fiをオンにして車載端末とペアリングしてください。iPhoneを近くに置いて再試行してください。</string>
     <string name="connection_help_general">接続を再試行してください。再び失敗する場合はLincolnに戻り、［設定］→［診断］からレポートを保存してください。</string>
     <string name="connection_help_wifi_direct">車載端末のWi-FiとBluetoothをオンにし、iPhoneのロックを解除して近くに置いてから再試行してください。改善しない場合は、iPhoneの［設定］→［一般］→［CarPlay］でこの車の登録を削除してから再接続してください。</string>
-    <string name="connection_help_existing_wifi">システムの Wi-Fi 設定で車載機を接続してください。DiPlay はパスワードなしで現在の接続を使用し、iPhone のネットワーク設定は行いません。両方の機器を同じ LAN に接続し、ルーターのクライアント分離を無効にしてください。変更は次回の CarPlay 接続に適用されます。</string>
+    <string name="connection_help_existing_wifi">車載機と iPhone を同じ外部 Wi-Fi に接続し、Bluetooth をオンにしてください。ルーターでマルチキャスト探索を許可し、クライアント分離を無効にしてください。接続先 iPhone のインターネット共有は無線 CarPlay に影響する場合があるため、オフにしてテストしてください。まだタイムアウトする場合は車載機のホットスポットか Wi-Fi Direct を試し、診断レポートを書き出してください。</string>
     <string name="settings_report_on_phone">スマートフォンでレポートを取得</string>
     <string name="settings_report_on_phone_hint">スマートフォンのカメラでQRコードを読み取って、ブラウザーでページを開き、「レポートをダウンロード」を選んでください。ダウンロードが終わるまでこの画面を開いたままにしてください。</string>
     <string name="settings_mfi_target_description">USB/CH341 は、CH341 認証アダプターを車載機に接続しているときだけ選択してください。接続していない場合は「ローカル／オフライン」を選択します。次回の接続から適用されます。</string>

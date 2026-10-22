@@ -9,6 +9,21 @@ import java.util.Locale
 
 /** Suggested user action, never a diagnosis inferred from an arbitrary exception message. */
 internal object ConnectionFailureGuidance {
+    /** A single next step on the waiting screen; the full explanation stays in Connection help. */
+    @StringRes
+    fun summary(failure: CarPlayStatus.Failed, wireless: Boolean, mode: WirelessHotspotMode): Int =
+        when (message(failure, wireless, mode)) {
+            R.string.connection_help_reset_wifi -> R.string.ui_connection_hint_reset_wifi
+            R.string.connection_help_permissions -> R.string.ui_connection_hint_permissions
+            R.string.connection_help_usb -> R.string.ui_connection_hint_usb
+            R.string.connection_help_existing_wifi -> R.string.ui_connection_hint_same_wifi
+            R.string.connection_help_bluetooth -> R.string.ui_connection_hint_wireless
+            R.string.connection_help_bluetooth_unusable -> R.string.ui_connection_hint_usb_fallback
+            R.string.connection_help_hotspot, R.string.connection_help_wifi_direct,
+            R.string.connection_help_iphone_wifi -> R.string.ui_connection_hint_network
+            else -> R.string.ui_connection_hint_retry
+        }
+
     @StringRes
     fun message(
         failure: CarPlayStatus.Failed,

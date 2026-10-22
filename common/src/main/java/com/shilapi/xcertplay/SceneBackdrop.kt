@@ -13,7 +13,8 @@ import android.graphics.drawable.ColorDrawable
 import com.shilapi.xcertplay.host.R
 
 /** Decorative app chrome only; never placed on a media surface or an instrument output. */
-internal class SceneBackdrop(context: Context, private val night: Boolean, private val quiet: Boolean) :
+internal class SceneBackdrop(context: Context, private val night: Boolean, private val quiet: Boolean,
+    private val readingShare: Float = .50f) :
     ColorDrawable(DiPlayPalette.of(night).background) {
     init { FidelityMaterials.install(context) }
     private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) image(context, quiet) else null
@@ -37,8 +38,10 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
             canvas.drawColor((color and 0x00FFFFFF) or (readingVeil shl 24))
         } else {
             if (!night) canvas.drawColor(Color.argb(180, 231, 239, 246))
+            val readingColor = if (night) Color.argb(195, 7, 20, 36) else Color.argb(215, 231, 239, 246)
             paint.shader = LinearGradient(bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,
-                intArrayOf((color and 0x00FFFFFF) or (0x10 shl 24), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+                intArrayOf(readingColor, readingColor, Color.TRANSPARENT),
+                floatArrayOf(0f, readingShare.coerceIn(0f, .8f), 1f), Shader.TileMode.CLAMP)
             canvas.drawRect(bounds, paint)
             paint.shader = null
         }

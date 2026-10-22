@@ -153,6 +153,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private val connectionVisualTick = Runnable { updateDebugOverlays() }
     private var connectionInstructionsView: TextView? = null
     private var connectionHelpView: TextView? = null
+    private var connectionHelpDetail: String? = null
     private var connectionTitleView: TextView? = null
     private var connectionIconView: ImageView? = null
     private var connectionBackButton: Button? = null
@@ -1885,8 +1886,11 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         panel.addView(stage)
         val instructions = TextView(this).apply {
-            text = if (wirelessEnabled) brandString(R.string.keep_your_iphone_nearby_with_bluetooth_and_wi_fi_on_allow)
-                else brandString(R.string.use_a_usb_data_cable_and_unlock_your_iphone_allow_trust_an)
+            text = brandString(when {
+                !wirelessEnabled -> R.string.ui_connection_hint_usb
+                wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI -> R.string.ui_connection_hint_same_wifi
+                else -> R.string.ui_connection_hint_wireless
+            })
             gravity = Gravity.CENTER
         }
         panel.addView(instructions)
@@ -1922,27 +1926,41 @@ class CarPlayHostActivity : ComponentActivity() {
             setOnClickListener { showDiPlayHome() }
         }
         connectionBackButton = back
-        panel.addView(back, LinearLayout.LayoutParams(dp(300), dp(64)))
+        val connectionHelp = DiPlayButton(this).apply {
+            text = brandString(R.string.ui_connection_help)
+            setOnClickListener {
+                val details = connectionHelpDetail ?: brandString(if (wirelessEnabled) {
+                    if (wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) R.string.connection_help_existing_wifi
+                    else R.string.keep_your_iphone_nearby_with_bluetooth_and_wi_fi_on_allow
+                } else R.string.use_a_usb_data_cable_and_unlock_your_iphone_allow_trust_an)
+                appDialogBuilder().setTitle(brandString(R.string.ui_connection_help))
+                    .setMessage(details + "\n\n" + settingsGestureHintText())
+                    .setPositiveButton(android.R.string.ok, null).show()
+            }
+        }
+        val actions = GlassActionRow(this).apply {
+            addView(back, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                marginEnd = dp(GlassChrome.CONTROL_GAP_DP)
+            })
+            addView(connectionHelp, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        panel.addView(actions, LinearLayout.LayoutParams(dp(CONNECTION_ACTION_WIDTH_DP), -2))
         val gestureHint = TextView(this).apply {
             text = settingsGestureHintText()
             gravity = Gravity.CENTER
+            visibility = View.GONE
         }
         panel.addView(gestureHint)
         paintWaitingScreen = {
             // The connection screen is DiPlay chrome: follow the app theme, not the day/night mode sent to CarPlay.
-            val colors = WaitingScreenColors.of(appNight)
-            viewport.background = SceneBackdrop(this, appNight, quiet = false)
+            viewport.background = SceneBackdrop(this, appNight, quiet = false, readingShare = CONNECTION_CONTENT_SHARE)
             ring.appearance(appNight)
             icon.appearance(appNight)
-            title.setTextColor(colors.text)
-            headline.setTextColor(colors.text)
-            phone.setTextColor(colors.text)
-            stage.setTextColor(colors.text)
-            instructions.setTextColor(colors.secondary)
-            help.setTextColor(colors.secondary)
-            gestureHint.setTextColor(colors.secondary)
+            for (text in listOf(title, headline, phone, stage)) SceneText.apply(text, appNight)
+            for (text in listOf(instructions, help, gestureHint)) SceneText.apply(text, appNight, secondary = true)
             val buttonPalette = DiPlayPalette.of(appNight)
             back.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
+            connectionHelp.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             retry.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
@@ -1997,6 +2015,7 @@ class CarPlayHostActivity : ComponentActivity() {
         sidePanel = buildSidePanel().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         sidePanelTab = buildSidePanelTab().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         var preparationHeight = -1
+        var naturalRingSize = dp(156)
         fun updatePreparationLayout() {
             val height = viewport.height - viewport.paddingTop - viewport.paddingBottom
             if (height <= 0) return
@@ -2006,8 +2025,8 @@ class CarPlayHostActivity : ComponentActivity() {
             fun spacing(short: Float, regular: Float) = dp(size(short, regular).toInt())
             val contentShare = if (viewport.width > viewport.height * 1.3f) CONNECTION_CONTENT_SHARE else 1f
             val availableWidth = ((viewport.width - viewport.paddingLeft - viewport.paddingRight) * contentShare).toInt() - dp(48)
-            val buttonWidth = minOf(dp(300), availableWidth.coerceAtLeast(dp(48)))
-            for (button in listOf(back, recovery, retry)) {
+            val buttonWidth = minOf(dp(CONNECTION_ACTION_WIDTH_DP), availableWidth.coerceAtLeast(dp(GlassChrome.MIN_TARGET_DP)))
+            for (button in listOf(actions, recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
                     button.layoutParams = button.layoutParams.apply { width = buttonWidth }
                 }
@@ -2016,6 +2035,7 @@ class CarPlayHostActivity : ComponentActivity() {
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
             val iconSize = spacing(54f, 156f)
+            naturalRingSize = iconSize
             ring.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             title.textSize=22f
             headline.textSize=size(24f,32f)
@@ -2025,9 +2045,9 @@ class CarPlayHostActivity : ComponentActivity() {
             instructions.setPadding(0, spacing(4f,8f),0,spacing(8f,12f))
             help.textSize = size(15f, 17f)
             help.setPadding(0, spacing(8f, 14f), 0, spacing(12f, 24f))
-            for (button in listOf(back, recovery, retry)) {
+            for (button in listOf(back, connectionHelp, recovery, retry)) {
                 button.textSize = size(17f, 18f)
-                button.minHeight=dp(48)
+                button.minHeight=dp(GlassChrome.MIN_TARGET_DP)
                 button.setPadding(dp(20),dp(8),dp(20),dp(8))
                 button.layoutParams = button.layoutParams.apply { this.height=ViewGroup.LayoutParams.WRAP_CONTENT }
             }
@@ -2037,11 +2057,18 @@ class CarPlayHostActivity : ComponentActivity() {
         fun fitPreparationContent() {
             val availableHeight = viewport.height - viewport.paddingTop - viewport.paddingBottom
             if (panel.height <= 0 || availableHeight <= 0) return
-            val landscape = viewport.width - viewport.paddingLeft - viewport.paddingRight > availableHeight
-            val scale = if (landscape) minOf(1f, (availableHeight-dp(64)).coerceAtLeast(dp(100)).toFloat() / panel.height) else 1f
+            // Reserve the brand header in portrait too, including narrow windows with large type.
+            val contentHeight = (availableHeight - dp(CONNECTION_HEADER_RESERVE_DP)).coerceAtLeast(dp(100))
+            val otherHeight = panel.height - ring.height
+            val ringSize = (contentHeight - otherHeight).coerceIn(dp(GlassChrome.MIN_TARGET_DP), naturalRingSize)
+            if (ring.layoutParams.height != ringSize) {
+                ring.layoutParams = ring.layoutParams.apply { width = ringSize; height = ringSize }
+                return
+            }
+            val scale = minOf(1f, contentHeight.toFloat() / panel.height)
             panel.scaleX = scale
             panel.scaleY = scale
-            panel.translationY=if(landscape)dp(32).toFloat()else 0f
+            panel.translationY = dp(CONNECTION_HEADER_RESERVE_DP).toFloat() / 2f
         }
         panel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitPreparationContent() }
         viewport.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -5329,6 +5356,12 @@ class CarPlayHostActivity : ComponentActivity() {
         val description = status.describe()
         val englishDescription = status.describe(englishResources)
         setConnectionStage(description, englishDescription)
+        // A running Bluetooth control loop does not mean that the iPhone has reached AirPlay.
+        if (status == CarPlayStatus.RunningWireless) {
+            stageStatusView?.text = brandString(R.string.ui_connection_waiting_network)
+        } else if (status is CarPlayStatus.Failed && status.startupFailure == WirelessStartupFailure.FIRST_TCP_TIMEOUT) {
+            stageStatusView?.text = brandString(R.string.ui_connection_network_timeout)
+        }
         // Keep the actionable tip readable while automatic retries are in progress.
         // Only a working AirPlay session, or a new failure, replaces it.
         if (status is CarPlayStatus.Failed) showConnectionHelp(status)
@@ -6495,10 +6528,13 @@ class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(brandString(stringId), englishResources.getString(stringId))
 
     private fun showConnectionHelp(failure: CarPlayStatus.Failed?) {
+        connectionHelpDetail = failure?.let {
+            brandString(ConnectionFailureGuidance.message(it, wirelessEnabled, wirelessHotspotMode))
+        }
         connectionInstructionsView?.visibility = if (failure == null) View.VISIBLE else View.GONE
         connectionHelpView?.apply {
             visibility = if (failure == null) View.GONE else View.VISIBLE
-            if (failure != null) text = brandString(ConnectionFailureGuidance.message(failure, wirelessEnabled, wirelessHotspotMode))
+            if (failure != null) text = brandString(ConnectionFailureGuidance.summary(failure, wirelessEnabled, wirelessHotspotMode))
         }
     }
 
@@ -6675,6 +6711,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private companion object {
         private const val CONNECTION_CONTENT_SHARE = .60f
+        private const val CONNECTION_ACTION_WIDTH_DP = 360
+        private const val CONNECTION_HEADER_RESERVE_DP = 64
         private const val CONNECTION_VISUAL_POLL_MILLIS = 100L
         const val CLUSTER_SMALL_WINDOW_ON = 1
         const val CLUSTER_SMALL_WINDOW_AUTO = 2

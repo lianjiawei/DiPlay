@@ -80,7 +80,9 @@ class ConnectionFailureGuidanceTest {
             method.invoke(activity, CarPlayStatus.Failed("USB permission was denied"))
             assertEquals(View.GONE, normal.visibility)
             assertEquals(View.VISIBLE, help.visibility)
-            assertEquals(VehicleBranding.text(activity, R.string.connection_help_permissions), help.text.toString())
+            assertEquals(VehicleBranding.text(activity, R.string.ui_connection_hint_permissions), help.text.toString())
+            assertEquals(VehicleBranding.text(activity, R.string.connection_help_permissions),
+                activity.javaClass.getDeclaredField("connectionHelpDetail").apply { isAccessible = true }.get(activity))
             assertTrue(help.text.isNotEmpty())
 
             method.invoke(activity, null)

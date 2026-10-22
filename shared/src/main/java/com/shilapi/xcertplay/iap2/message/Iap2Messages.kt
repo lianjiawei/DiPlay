@@ -65,12 +65,18 @@ object Iap2CarPlayMessages {
         mutualAuth: Boolean? = null,
         /** Reuse an existing LAN: publish the endpoint without asking iOS to configure Wi-Fi. */
         connectedWirelessIpAddresses: List<String> = emptyList(),
+        connectedWirelessSsid: String? = null,
     ): Iap2Frame {
         require(airPlayPort in 1..0xffff) { "airPlayPort must be in 1..65535" }
         require(publicKey.isNotEmpty()) { "publicKey must not be empty" }
         require(sourceVersion.isNotEmpty()) { "sourceVersion must not be empty" }
         require(wireless == null || connectedWirelessIpAddresses.isEmpty()) { "Choose one wireless network setup" }
         require(connectedWirelessIpAddresses.all { it.isNotBlank() && '\u0000' !in it }) { "Invalid connected Wi-Fi address" }
+        require(connectedWirelessSsid == null ||
+            (connectedWirelessSsid.isNotBlank() && '\u0000' !in connectedWirelessSsid)) { "Invalid connected Wi-Fi name" }
+        require(connectedWirelessIpAddresses.isEmpty() == (connectedWirelessSsid == null)) {
+            "Connected Wi-Fi needs both its network name and endpoint addresses"
+        }
 
         return Iap2Messages.build(Iap2Endpoints.CARPLAY_START_SESSION) {
             if (wiredIpv6Addresses.isNotEmpty() || wiredReserved != null) {
@@ -89,7 +95,11 @@ object Iap2CarPlayMessages {
                 }
             }
             if (connectedWirelessIpAddresses.isNotEmpty()) {
-                group(1) { connectedWirelessIpAddresses.forEach { address -> string(3, address) } }
+                group(1) {
+                    // Identify the network that is already joined, without provisioning credentials.
+                    string(0, requireNotNull(connectedWirelessSsid))
+                    connectedWirelessIpAddresses.forEach { address -> string(3, address) }
+                }
             }
             u32(2, airPlayPort)
             optionalString(3, deviceIdentifier)
