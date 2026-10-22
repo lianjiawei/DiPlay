@@ -7,7 +7,6 @@ import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.net.IpPrefix
 import android.net.RouteInfo
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
@@ -95,16 +94,13 @@ class ExistingWifiManagerTest {
     }
 
     @Test fun passesTheSelectedNetworkAndOnlyItsOnLinkGatewayToDiscovery() {
-        properties.addRoute(RouteInfo(IpPrefix("0.0.0.0/0"), InetAddress.getByName("192.0.2.1"), iface.name))
-        properties.addRoute(RouteInfo(IpPrefix("0.0.0.0/0"), InetAddress.getByName("198.51.100.1"), iface.name))
+        properties = gatewayLink("192.0.2.1", "198.51.100.1")
         manager().use {
             val result = start(it)
             assertSame(network, result.network)
             assertEquals(listOf("192.0.2.1"), result.gatewayAddresses.map { address -> address.hostAddress })
             it.validateReady()
-            properties = link("192.0.2.10/24").apply {
-                addRoute(RouteInfo(IpPrefix("0.0.0.0/0"), InetAddress.getByName("192.0.2.2"), iface.name))
-            }
+            properties = gatewayLink("192.0.2.2")
             callback.onLinkPropertiesChanged(network, properties)
             assertEquals(1, changes)
             assertThrows(IOException::class.java) { it.validateReady() }
@@ -265,6 +261,17 @@ class ExistingWifiManagerTest {
     private fun link(address: String) = LinkProperties().apply {
         interfaceName = iface.name
         setLinkAddresses(listOf(linkAddress(address)))
+    }
+
+    private fun gatewayLink(vararg addresses: String): LinkProperties = spy(link("192.0.2.10/24")).also { props ->
+        val routes = addresses.map { address ->
+            mock(RouteInfo::class.java).also { route ->
+                `when`(route.isDefaultRoute).thenReturn(true)
+                `when`(route.`interface`).thenReturn(iface.name)
+                `when`(route.gateway).thenReturn(InetAddress.getByName(address))
+            }
+        }
+        doReturn(routes).`when`(props).routes
     }
 
     private fun linkAddress(address: String): LinkAddress = mock(LinkAddress::class.java).also {

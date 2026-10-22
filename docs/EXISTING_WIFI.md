@@ -59,7 +59,7 @@ port, subnet scan, or assumption that a router is the paired iPhone.
 
 Direct queries use an ephemeral source port and follow RFC 6762 sections 5.5/6.7.
 Split DNS-SD responses trigger bounded SRV/TXT/A follow-up queries; malformed,
-truncated, stale/goodbye, mismatched-transaction and unrelated records are rejected.
+truncated, zero-TTL goodbye, mismatched-transaction and unrelated records are rejected.
 Gateway discovery stops with the connection attempt. Both the direct query socket
 and Existing Wi-Fi control sockets bind to the selected Android Network without
 changing process routing. Gateway/link changes invalidate the old attempt.
