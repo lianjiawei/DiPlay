@@ -110,7 +110,7 @@ else
 fi
 
 TAG="v$next_version"
-APK_NAME="CorsairPlay-$next_version.apk"
+APK_NAME="CarPlay-$next_version.apk"
 
 if [ "$DRY_RUN" -eq 0 ] && git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   die "tag $TAG already exists locally; bump the version or delete the tag"
