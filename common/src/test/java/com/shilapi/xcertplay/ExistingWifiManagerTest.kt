@@ -84,6 +84,46 @@ class ExistingWifiManagerTest {
         verify(connectivity).unregisterNetworkCallback(callback)
     }
 
+    @Test fun explicitLegacyConnectionRestoresWpa2BootstrapWithoutJoiningOrChangingRoutes() {
+        ExistingWifiManager(context, "Pocket Wi-Fi", diagnostics::add,
+            legacyPassphrase = "pocket-password").use {
+            val result = start(it)
+            assertTrue(result.configureWifi)
+            assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
+            assertEquals("pocket-password", result.passphrase)
+            assertEquals("Pocket Wi-Fi", result.ssid)
+            assertNull(result.bssid)
+            assertSame(network, result.network)
+            verify(connectivity, never()).bindProcessToNetwork(any())
+            verify(connectivity, never()).requestNetwork(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
+            assertTrue(diagnostics.any { line -> line.contains("handshake=legacy-credentials") })
+            assertTrue(diagnostics.none { line -> line.contains("pocket-password") || line.contains("Pocket Wi-Fi") })
+        }
+    }
+
+    @Test fun legacyPasswordCannotBeReusedForAnotherConnectedNetwork() {
+        `when`(info.ssid).thenReturn("\"Another network\"")
+        ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
+            assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("differs"))
+            verify(connectivity, never()).registerNetworkCallback(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ExistingWifiManager(context, "", legacyPassphrase = "pocket-password")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "")
+        }
+    }
+
+    @Test @Config(sdk = [33]) fun legacyWpa2CredentialsAreNotAdvertisedForOpenOrEnterpriseNetworks() {
+        for (security in listOf(WifiInfo.SECURITY_TYPE_OPEN, WifiInfo.SECURITY_TYPE_EAP, WifiInfo.SECURITY_TYPE_SAE)) {
+            `when`(info.currentSecurityType).thenReturn(security)
+            ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
+                assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("WPA2-Personal"))
+            }
+        }
+    }
+
     @Test fun ignoresCellularAndVpnNetworks() {
         val cellular = mock(Network::class.java)
         val vpn = mock(Network::class.java)

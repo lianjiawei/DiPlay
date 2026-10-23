@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="settings_existing_wifi_handshake">طريقة الاتصال</string>
+    <string name="settings_existing_wifi_reuse">استخدام Wi-Fi الحالية (دون كلمة مرور)</string>
+    <string name="settings_existing_wifi_compatibility">اتصال متوافق (بكلمة مرور)</string>
+    <string name="settings_existing_wifi_compatibility_description">يرسل اسم الشبكة وكلمة مرور WPA2 إلى iPhone عبر Bluetooth باستخدام طريقة الاتصال الأصلية. يجب أن يستخدم الجهازان الشبكة نفسها. تسري التغييرات المحفوظة عند الاتصال التالي.</string>
+    <string name="settings_existing_wifi_password_required">أدخل كلمة مرور WPA2 لشبكة Wi-Fi الحالية (8–63 حرفًا).</string>
+    <string name="settings_existing_wifi_compatibility_name_hint">اختر اسم الشبكة المتصل بها جهاز الاستقبال حاليًا أو أدخله. أدخل كلمة المرور مجددًا بعد تغيير الشبكة.</string>
     <string name="settings_existing_wifi_manual">إدخال الشبكة يدويًا</string>
     <string name="settings_existing_wifi_select">اختيار شبكة Wi-Fi للنظام</string>
     <string name="settings_existing_wifi_connected">متصل · %1$s</string>

@@ -6,6 +6,52 @@ Wi-Fi in system settings. In DiPlay → Connection setup → Wireless, select
 system Wi-Fi; no network password is required. Keep Bluetooth enabled and the iPhone
 paired with the receiver, then start wireless CarPlay as usual.
 
+## Two connection methods
+
+**Choose system Wi-Fi → Connection method** provides two explicit choices:
+
+- **Reuse current Wi-Fi (no password)** is the default. It keeps the password-free
+  SSID/address-only bootstrap introduced in precision.10/11. An existing saved
+  password does not enable sharing automatically.
+- **Compatible connection (enter password)** restores the original credential-sharing
+  bootstrap for WPA2-Personal networks. Select the receiver's current SSID or enter
+  it, enter its password, and save. At the next connection the authenticated
+  Bluetooth control session sends the original `0x5703` configuration and complete
+  `0x4301` wireless parameter group to the selected iPhone. This choice therefore
+  supplies Wi-Fi connection information to the iPhone; it is not password-free reuse.
+
+Both methods attach to the receiver's existing system Wi-Fi. Neither changes the
+receiver's default route or joins a different network. Compatibility credentials
+are bound to their saved SSID: editing the network name clears the staged password,
+and a readable different live SSID blocks startup instead of advertising the old
+credentials for a new network. Modern Android rejects compatibility provisioning
+for observed non-WPA2 networks; password-free reuse remains available for those.
+Cancelling either form preserves the existing choice. Saving marks the next
+connection for update and does not interrupt an active session.
+
+The projection quick menu uses the same settings and has the same save/discard
+behavior. Credentials and the explicit legacy-sharing choice are excluded from
+settings backup/import. Diagnostics distinguish `handshake=system-reuse` from
+`handshake=legacy-credentials` without logging SSIDs or passwords.
+
+### Regression evidence from 2026-10-23
+
+The new report from the Huawei Android 12 receiver repeatedly attaches to its
+5 GHz router Wi-Fi and completes Bluetooth identification/MFi authentication.
+Password-free attempts transmit StartSession, then time out with zero AirPlay TCP
+connections. In the same report, two Wi-Fi Direct attempts establish AirPlay in
+about 9.9 and 6.3 seconds after StartSession. One later Direct session ends with a
+control I/O timeout; successful startup does not establish sustained stability.
+The user confirms that this router worked with the earlier password-entry flow.
+
+This identifies the password-free bootstrap change as a strong regression candidate,
+not a demonstrated failure to read the system Wi-Fi list. That change removed
+`0x5703` provisioning and reduced the `0x4301` wireless group. The report does not
+show why iOS declined to open TCP or which omitted message/field matters. The two
+methods enable a controlled same-device/router comparison; restoring the old flow
+is not yet a new hardware success claim. The following password-free details
+describe **Reuse current Wi-Fi**, unless compatibility is explicitly mentioned.
+
 Both clients must already be connected and able to
 communicate; allow multicast DNS for service discovery. Prefer 5 GHz when supported.
 

@@ -24,6 +24,9 @@ class SettingsBackupCodecTest {
             .putInt("display_fps", 60)
             .putString("identity_private", "secret")
             .putString("manual_hotspot_passphrase", "wifi-pass")
+            .putString("existing_wifi_ssid", "router")
+            .putString("existing_wifi_passphrase", "router-password")
+            .putBoolean("existing_wifi_legacy_handshake", true)
             .putStringSet("pairing_ids", setOf("pair-1"))
             .putString("pairing.0F7A", "a1b2")
             .putString("manual_hotspot_ssid", "car-ap")
@@ -47,6 +50,9 @@ class SettingsBackupCodecTest {
         assertFalse(airplay.has("mfi_target"))
         assertFalse(airplay.has("identity_private"))
         assertFalse(airplay.has("manual_hotspot_passphrase"))
+        assertFalse(airplay.has("existing_wifi_ssid"))
+        assertFalse(airplay.has("existing_wifi_passphrase"))
+        assertFalse(airplay.has("existing_wifi_legacy_handshake"))
         assertFalse(airplay.has("pairing_ids"))
         val diplay = document.getJSONObject("settings").getJSONObject("diplay")
         assertTrue(diplay.getBoolean("auto_connect"))
@@ -61,7 +67,8 @@ class SettingsBackupCodecTest {
         val document = """
             {"format": "diplay-settings", "version": 1, "settings": {
               "xcertplay_airplay": {"display_fps": 48, "brand_new_key": 7, "manual_hotspot_passphrase": "x",
-                "pairing.attacker": "00ff"},
+                "pairing.attacker": "00ff", "existing_wifi_ssid": "router",
+                "existing_wifi_passphrase": "router-password", "existing_wifi_legacy_handshake": true},
               "diplay": {"auto_connect": true, "page": "about"},
               "carplay_picture": {"brightness": 66}
             }}
@@ -69,9 +76,11 @@ class SettingsBackupCodecTest {
         val outcome = SettingsBackupCodec.import(context, document.toByteArray())
         assertEquals(false, outcome.invalid)
         assertEquals(3, outcome.applied)
-        assertEquals(4, outcome.skipped)
+        assertEquals(7, outcome.skipped)
         assertEquals(48, prefs("xcertplay_airplay").getInt("display_fps", 0))
         assertFalse(prefs("xcertplay_airplay").contains("manual_hotspot_passphrase"))
+        assertFalse(prefs("xcertplay_airplay").contains("existing_wifi_legacy_handshake"))
+        assertFalse(prefs("xcertplay_airplay").contains("existing_wifi_passphrase"))
         // Only listed settings travel: an imported file cannot add an iPhone pairing key or any unknown key.
         assertFalse(prefs("xcertplay_airplay").contains("pairing.attacker"))
         assertFalse(prefs("xcertplay_airplay").contains("brand_new_key"))

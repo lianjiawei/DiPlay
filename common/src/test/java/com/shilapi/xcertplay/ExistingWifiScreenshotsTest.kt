@@ -2,6 +2,8 @@ package com.shilapi.xcertplay
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.wifi.ScanResult
@@ -12,6 +14,8 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
+import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.update.UpdateAvailability
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
@@ -23,6 +27,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowAlertDialog
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [27], manifest = Config.NONE)
@@ -51,9 +56,11 @@ class ExistingWifiScreenshotsTest {
                 val choose = descendants(parent).filterIsInstance<Button>().single { it.text.contains(" · ") }
                 choose.performClick()
                 val details = ShadowAlertDialog.getLatestAlertDialog()
-                assertEquals(1, descendants(details.window!!.decorView).filterIsInstance<EditText>().count())
+                assertEquals(1, descendants(details.window!!.decorView).filterIsInstance<EditText>().count { it.visibility == View.VISIBLE })
                 capture(details, "$name-details", width, height)
-                descendants(details.window!!.decorView).filterIsInstance<Button>().single { it.text.contains(" · ") }.performClick()
+                descendants(details.window!!.decorView).filterIsInstance<Button>().single {
+                    it.text.startsWith(activity.getString(R.string.settings_existing_wifi_select) + " · ")
+                }.performClick()
                 val list = ShadowAlertDialog.getLatestAlertDialog()
                 capture(list, "$name-networks", width, height)
                 assertTrue("Wi-Fi choices remain visible at $name", list.listView.height > 0)
@@ -68,6 +75,45 @@ class ExistingWifiScreenshotsTest {
         } finally {
             RuntimeEnvironment.setFontScale(1f)
             RuntimeEnvironment.setQualifiers("en")
+        }
+    }
+
+    @Test @Config(sdk = [29]) fun bothHandshakeFormsKeepSaveReachableAcrossOrientationsAndLargeText() {
+        val app = RuntimeEnvironment.getApplication()
+        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
+        try {
+            for ((name, qualifiers, width, height) in listOf(
+                Scenario("compact", "zh-rCN-w600dp-h360dp-land-mdpi", 600, 360),
+                Scenario("portrait", "zh-rCN-w400dp-h840dp-port-mdpi", 400, 840),
+                Scenario("full", "zh-rCN-w1280dp-h720dp-land-mdpi", 1280, 720),
+                Scenario("arabic", "ar-ldrtl-w640dp-h360dp-land-mdpi", 640, 360))) {
+                RuntimeEnvironment.setQualifiers(qualifiers)
+                RuntimeEnvironment.setFontScale(1.3f)
+                DiPlayPreferences.saveAutoConnect(app, false)
+                UpdateAvailability.saveBackgroundChecksEnabled(app, false)
+                for (legacy in listOf(false, true)) {
+                    AirPlayPersistence.saveAppAppearance(app, AppAppearance.DARK)
+                    AirPlayPersistence.saveExistingWifiCredentials(app, "Lian", if (legacy) "test-password" else "", legacy)
+                    AirPlayPersistence.saveWirelessHotspotMode(app, WirelessHotspotMode.EXISTING_WIFI)
+                    val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
+                        Intent(app, DiPlayActivity::class.java).putExtra("page", "connection")).setup().visible()
+                    try {
+                        val screen = controller.get()
+                        ReflectionHelpers.callInstanceMethod<Unit>(screen, "askExistingWifiNetwork")
+                        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+                        val inputs = descendants(dialog.window!!.decorView).filterIsInstance<EditText>().filter { it.visibility == View.VISIBLE }.toList()
+                        assertEquals(if (legacy) 2 else 1, inputs.size)
+                        capture(dialog, "$name-${if (legacy) "compatibility" else "reuse"}", width, height)
+                        dialog.dismiss()
+                    } finally { controller.pause().stop().destroy() }
+                }
+            }
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+            RuntimeEnvironment.setQualifiers("en")
+            app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
+            app.getSharedPreferences("diplay", 0).edit().clear().commit()
+            AppAppearanceRuntime.resetForTest()
         }
     }
 

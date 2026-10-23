@@ -3,6 +3,10 @@ package com.shilapi.xcertplay
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.ScrollView
+import android.view.Surface
+import com.shilapi.xcertplay.media.AndroidMediaSink
+import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.host.R
 import org.junit.Assert.*
 import org.junit.Test
@@ -12,31 +16,35 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
+import org.mockito.Mockito.mock
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
 class HomeCompactLayoutTest {
     @Config(qualifiers = "en-w900dp-h400dp-land")
     @Test fun compactLandscapeKeepsTheFooterBelowWirelessControls() {
-        verifyCompactArrangement()
+        verifyHomeArrangement()
     }
 
     @Config(qualifiers = "en-w400dp-h900dp-port")
     @Test fun compactPortraitStacksWirelessBeforeUsb() {
-        verifyCompactArrangement()
+        verifyHomeArrangement()
     }
 
-    private fun verifyCompactArrangement() {
-        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
+    private fun verifyHomeArrangement() {
+        CarPlayBackgroundSession.clear()
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup().visible()
         val activity = controller.get()
         val root = activity.window.decorView
         val metrics = activity.resources.displayMetrics
         val config = activity.resources.configuration
         val width = (config.screenWidthDp * metrics.density).toInt()
         val height = (config.screenHeightDp * metrics.density).toInt()
-        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-        root.layout(0, 0, width, height)
+        repeat(3) {
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, width, height)
+        }
         fun text(id: Int) = descendants(root).filterIsInstance<TextView>()
             .single { it.visibility == View.VISIBLE && it.text == activity.getString(id) }
         val connect = text(R.string.ui_glass_connect_carplay)
@@ -54,31 +62,41 @@ class HomeCompactLayoutTest {
             it.text == activity.getString(R.string.a_familiar_drive) ||
                 it.text == activity.getString(R.string.plug_your_iphone_into_a_usb_data_port_allow_carplay_when_y)
         })
-        controller.pause().stop().destroy()
+        val scroll = ReflectionHelpers.getField<ScrollView>(activity, "rootScroll")
+        fun verifyNoExtraCard() {
+            repeat(3) {
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+                root.layout(0, 0, width, height)
+            }
+            assertTrue("The home composition fits its viewport", scroll.getChildAt(0).height <= scroll.height)
+            assertFalse("No auxiliary connection/version card", descendants(root).filterIsInstance<TextView>().any {
+                it.text == activity.getString(R.string.wireless_carplay) ||
+                    it.text == activity.getString(R.string.home_usb_carplay)
+            })
+            val footerPosition = IntArray(2).also(settings::getLocationOnScreen)
+            assertTrue("Session changes keep the footer anchored within pixel rounding",
+                kotlin.math.abs(settingsPosition[1] - footerPosition[1]) <= 1)
+        }
+        try {
+            verifyNoExtraCard()
+            CarPlayBackgroundSession.store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java),
+                width, height, Any(), CarPlaySessionDisplay(width, height, Surface.ROTATION_0, false, false, width, height)) {}
+            for (active in listOf(false, true)) {
+                CarPlayBackgroundSession.active = active
+                ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
+                verifyNoExtraCard()
+                assertEquals(View.GONE, usb.visibility)
+                assertTrue(text(R.string.disconnect).isShown)
+            }
+        } finally {
+            CarPlayBackgroundSession.clear()
+            controller.pause().stop().destroy()
+        }
     }
 
     @Config(qualifiers = "en-w2667dp-h1333dp")
-    @Test fun fullSizeMultiWindowKeepsTheFullHome() {
-        assertFalse(homeIsCompact(multiWindow = true))
-    }
-
-    @Config(qualifiers = "en-w1333dp-h400dp")
-    @Test fun shortWindowUsesTheCompactHome() {
-        assertTrue(homeIsCompact(multiWindow = true))
-    }
-
-    @Config(qualifiers = "en-w500dp-h800dp")
-    @Test fun narrowWindowUsesTheCompactHome() {
-        assertTrue(homeIsCompact(multiWindow = false))
-    }
-
-    private fun homeIsCompact(multiWindow: Boolean): Boolean {
-        val activity = Robolectric.buildActivity(DiPlayActivity::class.java).setup().get()
-        shadowOf(activity).setInMultiWindowMode(multiWindow)
-        ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
-        val hero = activity.getString(R.string.plug_your_iphone_into_a_usb_data_port_allow_carplay_when_y)
-        return descendants(activity.window.decorView).filterIsInstance<TextView>().none { it.text == hero }
-    }
+    @Test fun fullSizeHomeKeepsTheSameCleanComposition() = verifyHomeArrangement()
 
     private fun descendants(view: View): Sequence<View> = sequence {
         yield(view)

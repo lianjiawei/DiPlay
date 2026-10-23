@@ -33,8 +33,8 @@ import org.robolectric.annotation.Implements
 import org.robolectric.util.ReflectionHelpers
 
 /**
- * What Home says when DiPlay could not turn the car hotspot on at start-up for lack of the
- * "Modify system settings" access, and what happens once the driver allows it.
+ * Startup hotspot authorization remains available from Connection settings after removing
+ * the auxiliary Home card, and granting access still retries startup on return.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp-land",
@@ -96,11 +96,14 @@ class HomeHotspotAccessTest {
     private fun tap(screen: DiPlayActivity, text: Int) = descendants(screen.window.decorView)
         .filterIsInstance<TextView>().single { it.text == screen.getString(text) }.performClick()
 
-    @Test fun offBydUnitsHomeAsksForTheSystemAccessAndOpensItsScreen() {
+    @Test fun offBydUnitsKeepSystemAccessInConnectionSettingsInsteadOfAnExtraHomeCard() {
         val home = openHome().get()
         awaitResult(home, CarHotspotTethering.Result.PERMISSION_REQUIRED)
+        assertFalse(home.getString(R.string.settings_write_settings_allow) in texts(home))
+        ReflectionHelpers.setField(home, "page", "settings")
+        ReflectionHelpers.setField(home, "settingsCategory", SettingsCategory.CONNECTION)
+        ReflectionHelpers.callInstanceMethod<Unit>(home, "render")
         val shown = texts(home)
-        assertTrue(shown.toString(), VehicleBranding.text(home, R.string.settings_write_settings_missing) in shown)
         assertTrue(shown.toString(), home.getString(R.string.settings_write_settings_allow) in shown)
         // The ADB sentence and the car settings button belong to BYD units.
         assertFalse(shown.toString(), home.getString(R.string.hotspot_control_missing) in shown)
@@ -112,7 +115,7 @@ class HomeHotspotAccessTest {
         assertEquals("package:${home.packageName}", opened.dataString)
     }
 
-    @Test fun onABydUnitHomeKeepsTheAdbRoute() {
+    @Test fun onABydUnitStartupDoesNotAddAnotherHomeCard() {
         shadowOf(context.packageManager).installPackage(PackageInfo().apply {
             packageName = "com.byd.carsettings"
             applicationInfo = ApplicationInfo().apply {
@@ -123,8 +126,8 @@ class HomeHotspotAccessTest {
         val home = openHome().get()
         awaitResult(home, CarHotspotTethering.Result.PERMISSION_REQUIRED)
         val shown = texts(home)
-        assertTrue(shown.toString(), home.getString(R.string.hotspot_control_missing) in shown)
-        assertTrue(shown.toString(), home.getString(R.string.open_car_hotspot_settings) in shown)
+        assertFalse(shown.toString(), home.getString(R.string.hotspot_control_missing) in shown)
+        assertFalse(shown.toString(), home.getString(R.string.open_car_hotspot_settings) in shown)
         assertFalse(shown.toString(), home.getString(R.string.settings_write_settings_allow) in shown)
     }
 
@@ -146,14 +149,14 @@ class HomeHotspotAccessTest {
         assertFalse(shown.toString(), home.getString(R.string.settings_write_settings_allow) in shown)
     }
 
-    @Test fun returningWithoutTheAccessKeepsAskingForIt() {
+    @Test fun returningWithoutAccessKeepsTheFailureAndTheHomeComposition() {
         val controller = openHome()
         val home = controller.get()
         awaitResult(home, CarHotspotTethering.Result.PERMISSION_REQUIRED)
         controller.pause().stop().restart().start().resume()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(CarHotspotTethering.Result.PERMISSION_REQUIRED, result(home))
-        assertTrue(
+        assertFalse(
             texts(home).toString(),
             VehicleBranding.text(home, R.string.settings_write_settings_missing) in texts(home),
         )

@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="settings_existing_wifi_handshake">接続方法</string>
+    <string name="settings_existing_wifi_reuse">現在の Wi-Fi を使用（パスワード不要）</string>
+    <string name="settings_existing_wifi_compatibility">互換接続（パスワードを入力）</string>
+    <string name="settings_existing_wifi_compatibility_description">ネットワーク名と WPA2 パスワードを Bluetooth で iPhone に送り、従来の手順で接続します。両方の端末を同じネットワークに接続してください。保存した変更は次回接続時に適用されます。</string>
+    <string name="settings_existing_wifi_password_required">現在の Wi-Fi の WPA2 パスワードを入力してください（8～63 文字）。</string>
+    <string name="settings_existing_wifi_compatibility_name_hint">車載機が現在接続しているネットワーク名を選択または入力します。ネットワークを変更したらパスワードを再入力してください。</string>
     <string name="settings_existing_wifi_manual">ネットワークを手動入力</string>
     <string name="settings_existing_wifi_select">システムの Wi-Fi を選択</string>
     <string name="settings_existing_wifi_connected">接続中 · %1$s</string>

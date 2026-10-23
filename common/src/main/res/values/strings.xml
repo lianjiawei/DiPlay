@@ -1,4 +1,10 @@
 <resources>
+    <string name="settings_existing_wifi_handshake">Connection method</string>
+    <string name="settings_existing_wifi_reuse">Reuse current Wi-Fi (no password)</string>
+    <string name="settings_existing_wifi_compatibility">Compatible connection (enter password)</string>
+    <string name="settings_existing_wifi_compatibility_description">Send this network name and WPA2 password to the iPhone over Bluetooth using the original connection flow. Both devices must use the same network. Saved changes apply at the next connection.</string>
+    <string name="settings_existing_wifi_password_required">Enter the current Wi-Fi WPA2 password (8–63 characters).</string>
+    <string name="settings_existing_wifi_compatibility_name_hint">Choose or enter the network currently connected on the receiver. Enter its password again after changing networks.</string>
     <string name="settings_existing_wifi_manual">Enter network manually</string>
     <string name="settings_existing_wifi_select">Choose system Wi-Fi</string>
     <string name="settings_existing_wifi_connected">Connected · %1$s</string>
