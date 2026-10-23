@@ -266,6 +266,11 @@ class GlassUiRegressionTest {
             val header = carHome.parent as ViewGroup
             assertTrue("The complete car-home button fits the header",carHome.left >= 0 && carHome.right <= header.width)
             for (line in 0 until carHome.layout.lineCount) assertEquals("Header actions must not ellipsize",0,carHome.layout.getEllipsisCount(line))
+            val brandLabel=header.getChildAt(1) as TextView
+            assertEquals("Header actions must leave the brand on one complete line",1,brandLabel.layout.lineCount)
+            assertEquals(brandLabel.text.length,brandLabel.layout.getLineEnd(0))
+            assertTrue("Brand text must fit its reserved width",brandLabel.layout.getLineMax(0)<=
+                brandLabel.width-brandLabel.compoundPaddingLeft-brandLabel.compoundPaddingRight+1)
             val hero = scene.getChildAt(0)
             val firstAction = scene.getChildAt(1)
             val settings = scene.getChildAt(2)

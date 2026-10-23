@@ -914,13 +914,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         addView(if (home) BrandMarkView(this@DiPlayActivity,appNight) else ImageView(this@DiPlayActivity).apply {
             VehicleBranding.setLogo(this);contentDescription=VehicleBranding.displayName(context)
         },LinearLayout.LayoutParams(logoSize,if(home) dp(40) else logoSize))
-        addView(label(VehicleBranding.displayName(this@DiPlayActivity), if (home) 20 else if (compact) 20 else 26, TEXT, true,
+        val brandTextSize = if (home || compact) 20 else 26
+        val brandLabel = label(VehicleBranding.displayName(this@DiPlayActivity), brandTextSize, TEXT, true,
             centreGlyphs = resources.configuration.locales[0].language != "zh").apply {
             setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
             maxLines = 1
             TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12,
                 if (home) 20 else if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)
-        }, LinearLayout.LayoutParams(0, dp(control), 1f))
+        }
+        addView(brandLabel, LinearLayout.LayoutParams(0, dp(control), 1f))
         addView(appearanceButton(), LinearLayout.LayoutParams(dp(control), dp(control)).apply {
             marginEnd = dp(if (compact) 8 else 12)
         })
@@ -931,7 +933,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }.apply {
             // Leave room for the brand and theme control even with a long translated label.
             val available=dp(resources.configuration.screenWidthDp-ReferenceHomeMetrics.SIDE_DP*2)
-            maxWidth=minOf(available/2,available-logoSize-dp(control+8+52)).coerceAtLeast(dp(control))
+            val brandPaint=android.text.TextPaint(brandLabel.paint).apply {
+                textSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,brandTextSize.toFloat(),resources.displayMetrics)
+            }
+            val brandWidth=kotlin.math.ceil(brandPaint.measureText(brandLabel.text.toString())).toInt()+
+                brandLabel.compoundPaddingLeft+brandLabel.compoundPaddingRight+dp(2)
+            maxWidth=minOf(available/2,available-logoSize-brandWidth-dp(control+if(compact)8 else 12))
+                .coerceAtLeast(dp(control))
             val label=text.toString()
             contentDescription=label
             val textRoom=(maxWidth-compoundPaddingLeft-compoundPaddingRight-dp(2)).coerceAtLeast(1)
