@@ -571,6 +571,14 @@ class CarPlayHostActivity : ComponentActivity() {
     private var gestureTracking = false
     private var gestureStartX = 0f
     private var gestureStartY = 0f
+    // With the settings swipe on, a new touch reaches the iPhone only after SETTINGS_SWIPE_HOLD_MILLIS,
+    // a lift or a move past the touch slop. The swipe's other fingers land inside that time; a first
+    // finger already pressed on the iPhone was released by the swipe and became a tap on what lay under it.
+    private var heldTouch: MotionEvent? = null
+    private var heldTouchContent: CarPlayVideoLayout? = null
+    private var heldTouchX = 0f
+    private var heldTouchY = 0f
+    private val sendHeldTouch = Runnable { flushHeldTouch() }
     private var recoveryPendingAfterMenu = false
     private var failurePendingAfterMenu: CarPlayStatus.Failed? = null
     private val shuttingDown = AtomicBoolean(false)
@@ -1645,6 +1653,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        dropHeldTouch()
         mainHandler.removeCallbacks(connectionVisualTick)
         framePresentation?.finish()
         connectionRing?.state(connecting = false)
@@ -1750,6 +1759,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        dropHeldTouch()
         mainHandler.removeCallbacks(connectionVisualTick)
         framePresentation?.finish()
         discardLastPicture()
@@ -5924,6 +5934,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (!CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress) return
         val size = activeDisplaySize ?: return
+        dropHeldTouch()
         startupRetryBudget.disconnected()
         startupRetryButton?.visibility = View.GONE
         appendLog(reason)
@@ -5969,7 +5980,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun showDiPlayHome(page: String = "home") {
-        controller?.sendTouch(emptyList())
+        releaseCarPlayTouches()
         startActivity(Intent(this, DiPlayActivity::class.java)
             .putExtra("page", page).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
@@ -5985,8 +5996,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun openSettingsMenu() {
         if (menuOpen) return
-        controller?.sendTouch(emptyList())
         loadPersistedSettings()
+        releaseCarPlayTouches()
         settingsBaseline = captureSettingsBaseline()
         menuSettingsSignature = menuSettingsSignature()
         // Rebuild controls from saved values so a cancelled edit cannot reappear on reopening.
@@ -6011,7 +6022,7 @@ class CarPlayHostActivity : ComponentActivity() {
         closePicturePanel()
         val generation = picturePanelGeneration
         val root = videoView?.parent as? FrameLayout ?: return
-        controller?.sendTouch(emptyList())
+        releaseCarPlayTouches()
         root.post {
             if (generation != picturePanelGeneration || isFinishing || isDestroyed) return@post
             val panel = CarPlayPicturePanel(
@@ -6328,7 +6339,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     gestureTracking = true
                     gestureStartX = pointerCentroid(event, horizontal = true)
                     gestureStartY = pointerCentroid(event, horizontal = false)
-                    controller?.sendTouch(emptyList())
+                    releaseCarPlayTouches()
                     appendLog("Settings swipe tracking started; fingers=$gestureFingerCount")
                     return true
                 }
@@ -6377,6 +6388,8 @@ class CarPlayHostActivity : ComponentActivity() {
             }
             return true
         }
+        if (gestureFingerCount > 0 && holdTouch(event, content)) return true
+        flushHeldTouch()
         val contacts = CarPlayTouchMapper.contacts(event, content)
         val queued = controller?.sendTouch(contacts) ?: false
         when (event.actionMasked) {
@@ -6384,13 +6397,69 @@ class CarPlayHostActivity : ComponentActivity() {
             MotionEvent.ACTION_POINTER_DOWN,
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_POINTER_UP,
+            // The unmasked action keeps the pointer index: ACTION_POINTER_UP(1), not always (0).
             MotionEvent.ACTION_CANCEL -> Log.i(
                 TAG,
-                "touch action=${MotionEvent.actionToString(event.actionMasked)} " +
-                    "pointers=${event.pointerCount} queued=$queued",
+                "touch action=${MotionEvent.actionToString(event.action)} " +
+                    "pointer=${event.getPointerId(event.actionIndex)} pointers=${event.pointerCount} queued=$queued",
             )
         }
         return true
+    }
+
+    /** Releases every finger on the iPhone, and drops a touch that has not reached it yet. */
+    private fun releaseCarPlayTouches() {
+        dropHeldTouch()
+        controller?.sendTouch(emptyList())
+    }
+
+    /** True while [event] is kept back from the iPhone (see [heldTouch]). */
+    private fun holdTouch(event: MotionEvent, content: CarPlayVideoLayout): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                dropHeldTouch()
+                heldTouch = MotionEvent.obtain(event)
+                heldTouchContent = content
+                heldTouchX = event.x
+                heldTouchY = event.y
+                mainHandler.postDelayed(sendHeldTouch, SETTINGS_SWIPE_HOLD_MILLIS)
+                return true
+            }
+            // Nothing reached the iPhone yet, so there is nothing to release.
+            MotionEvent.ACTION_CANCEL -> if (heldTouch != null) {
+                dropHeldTouch()
+                return true
+            }
+            MotionEvent.ACTION_MOVE, MotionEvent.ACTION_POINTER_DOWN -> {
+                val held = heldTouch ?: return false
+                val moved = Math.hypot((event.getX(0) - heldTouchX).toDouble(), (event.getY(0) - heldTouchY).toDouble())
+                if (moved > ViewConfiguration.get(this).scaledTouchSlop) return false
+                held.recycle()
+                heldTouch = MotionEvent.obtain(event)
+                return true
+            }
+        }
+        return false
+    }
+
+    /** Sends a held touch as it stands, every finger down. */
+    private fun flushHeldTouch() {
+        mainHandler.removeCallbacks(sendHeldTouch)
+        val held = heldTouch ?: return
+        val content = heldTouchContent
+        heldTouch = null
+        heldTouchContent = null
+        val queued = content != null && controller?.sendTouch(CarPlayTouchMapper.contacts(held, content)) == true
+        Log.i(TAG, "touch action=ACTION_DOWN pointers=${held.pointerCount} queued=$queued " +
+            "heldMs=${SystemClock.uptimeMillis() - held.downTime}")
+        held.recycle()
+    }
+
+    private fun dropHeldTouch() {
+        mainHandler.removeCallbacks(sendHeldTouch)
+        heldTouch?.recycle()
+        heldTouch = null
+        heldTouchContent = null
     }
 
     private fun pointerCentroid(event: MotionEvent, horizontal: Boolean): Float {
@@ -6667,6 +6736,8 @@ class CarPlayHostActivity : ComponentActivity() {
         const val PROTOCOL_TRACE_PREFIX = "TRACE "
         const val SETTINGS_SWIPE_DISTANCE_DP = 72
         const val SETTINGS_SWIPE_DIRECTION_RATIO = 1.15f
+        /** A Galaxy Note20 reported the third finger of a swipe 42 ms after the first. */
+        const val SETTINGS_SWIPE_HOLD_MILLIS = 80L
         const val MAX_SETTINGS_MENU_WIDTH_DP = 720
         const val SWIPE_PANEL_MARGIN_DP = 16
         const val SWIPE_PANEL_RADIUS_DP = 28

@@ -816,7 +816,99 @@ class CarPlayHostSettingsTest {
         touch(MotionEvent.ACTION_UP, 1, y, x)
     }
 
-    private fun touch(action: Int, count: Int, y: Float, x: Float = 400f) {
+    // Galaxy Note20: a three-finger swipe begun with a finger on an app icon opened that app behind
+    // the menu. The first finger had reached the iPhone 42 ms before the third, and the swipe released it.
+    @Config(sdk = [25, 27, 29])
+    @Test fun aSettingsSwipeSendsNoFingerToTheIPhone() {
+        for ((width, height) in listOf(1920 to 990, 1080 to 2316)) {
+            val controller = mock(CarPlayController::class.java)
+            setField("controller", controller)
+            val view = View(activity).apply { layout(0, 0, width, height) }
+            touch(MotionEvent.ACTION_DOWN, 1, 300f, view = view)
+            touch(MotionEvent.ACTION_POINTER_DOWN, 2, 300f, view = view)
+            touch(MotionEvent.ACTION_POINTER_DOWN, 3, 300f, view = view)
+            touch(MotionEvent.ACTION_MOVE, 3, 700f, view = view)
+            touch(MotionEvent.ACTION_UP, 1, 700f, view = view)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
+            assertTrue(field("menuOpen") as Boolean)
+            assertTrue(sentTouches(controller).all { it.isEmpty() })
+            invoke("cancelSettingsEdits")
+        }
+    }
+
+    @Test fun aTapReachesTheIPhoneWhenTheFingerLifts() {
+        val controller = mock(CarPlayController::class.java)
+        setField("controller", controller)
+        val view = carPlayView()
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = view)
+        assertTrue(sentTouches(controller).isEmpty())
+        touch(MotionEvent.ACTION_UP, 1, 300f, view = view)
+        assertEquals(listOf(listOf(true), listOf(false)), sentTouches(controller).map { touches -> touches.map { it.down } })
+    }
+
+    @Test fun aHeldPressGoesOnAfterTheHoldOrOnceItMoves() {
+        val controller = mock(CarPlayController::class.java)
+        setField("controller", controller)
+        val view = carPlayView()
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = view)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
+        assertEquals(listOf(listOf(true)), sentTouches(controller).map { touches -> touches.map { it.down } })
+        touch(MotionEvent.ACTION_UP, 1, 300f, view = view)
+
+        val dragging = mock(CarPlayController::class.java)
+        setField("controller", dragging)
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = view)
+        touch(MotionEvent.ACTION_MOVE, 1, 302f, view = view)
+        assertTrue(sentTouches(dragging).isEmpty())
+        touch(MotionEvent.ACTION_MOVE, 1, 500f, view = view)
+        assertEquals(2, sentTouches(dragging).size)
+        assertTrue(sentTouches(dragging).all { touches -> touches.single().down })
+    }
+
+    @Test fun openingTheMenuDropsAPressTheIPhoneHasNotSeen() {
+        val controller = mock(CarPlayController::class.java)
+        setField("controller", controller)
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = carPlayView())
+        invoke("openSettingsMenu")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
+        assertTrue(sentTouches(controller).all { it.isEmpty() })
+    }
+
+    @Test fun withTheSwipeOffAPressGoesStraightThrough() {
+        val controller = mock(CarPlayController::class.java)
+        setField("controller", controller)
+        setField("gestureFingerCount", 0)
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = carPlayView())
+        assertEquals(listOf(listOf(true)), sentTouches(controller).map { touches -> touches.map { it.down } })
+    }
+
+    private fun carPlayView() = View(activity).apply { layout(0, 0, 1920, 990) }
+
+    @Test fun cancellingAPendingPressDoesNotProduceALateTap() {
+        val controller = mock(CarPlayController::class.java)
+        setField("controller", controller)
+        val view = carPlayView()
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = view)
+        touch(MotionEvent.ACTION_CANCEL, 1, 300f, view = view)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
+        assertTrue(sentTouches(controller).isEmpty())
+    }
+
+    @Test fun leavingTheHostDropsAPendingPressBeforeItCanReachCarPlay() {
+        val controller = mock(CarPlayController::class.java)
+        setField("controller", controller)
+        touch(MotionEvent.ACTION_DOWN, 1, 300f, view = carPlayView())
+        invoke("onPause")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
+        assertTrue(sentTouches(controller).isEmpty())
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun sentTouches(controller: CarPlayController): List<List<AirPlayContact>> =
+        org.mockito.Mockito.mockingDetails(controller).invocations
+            .filter { it.method.name == "sendTouch" }.map { it.arguments[0] as List<AirPlayContact> }
+
+    private fun touch(action: Int, count: Int, y: Float, x: Float = 400f, view: View? = null) {
         val pointers = Array(count) { i -> MotionEvent.PointerProperties().apply { id = i; toolType = MotionEvent.TOOL_TYPE_FINGER } }
         val positions = Array(count) { i -> MotionEvent.PointerCoords().apply { this.x = x + i * 50f; this.y = y; pressure = 1f; size = 1f } }
         val indexedAction = if (action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP)
@@ -824,7 +916,7 @@ class CarPlayHostSettingsTest {
         val event = MotionEvent.obtain(0, 10, indexedAction, count, pointers, positions, 0, 0, 1f, 1f, 0, 0, 0, 0)
         try {
             activity.javaClass.getDeclaredMethod("onHostTouch", View::class.java, MotionEvent::class.java)
-                .apply { isAccessible = true }.invoke(activity, field("gestureOverlay"), event)
+                .apply { isAccessible = true }.invoke(activity, view ?: field("gestureOverlay"), event)
         } finally { event.recycle() }
     }
 

@@ -276,6 +276,8 @@ class CarPlayController(
     @Volatile private var instantBluetoothLink: InstantBluetoothLink? = null
     @Volatile private var firstTcpWatchdog: FirstTcpWatchdog? = null
     @Volatile private var wiredStartWatchdog: WiredStartWatchdog? = null
+    @Volatile private var wiredSessionActive = false
+    @Volatile private var wiredStartSentAtNanos: Long? = null
     @Volatile private var wirelessPublishedAddress: InetAddress? = null
     @Volatile private var wirelessAlternateAddress: InetAddress? = null
     @Volatile private var wirelessAddressRecovery: HotspotAddressRecovery? = null
@@ -320,6 +322,7 @@ class CarPlayController(
     private val sessionListener = object : AirPlaySessionListener {
         override val protocolTraceEnabled: Boolean get() = uiListener?.protocolTraceEnabled == true
         override fun onSessionActive(session: AirPlaySession) {
+            wiredSessionActive = true
             wiredStartWatchdog?.sessionActive()
             val replacement = activeSession !== session
             if (replacement) {
@@ -2351,6 +2354,8 @@ class CarPlayController(
                 deviceIdentifier = ncmHostMac.macString(),
             )
             onStatus(CarPlayStatus.RunningControl)
+            wiredSessionActive = activeSession != null
+            wiredStartSentAtNanos = null
             lateinit var startWatchdog: WiredStartWatchdog
             startWatchdog = WiredStartWatchdog(
                 schedule = { delay, action ->
@@ -2367,7 +2372,8 @@ class CarPlayController(
                     if (!closed && wiredStartWatchdog === startWatchdog) {
                         connectionDiagnostic(
                             "wired start: no AirPlay session " +
-                                "${WiredStartWatchdog.TIMEOUT_MILLIS / 1000} s after carplay-start-session",
+                                "${WiredStartWatchdog.TIMEOUT_MILLIS / 1000} s after carplay-start-session; " +
+                                "NCM ${ncm.trafficSummary(endpoint.airPlayPort)}",
                         )
                         fail(IphoneUsbException.TimedOut(
                             "The iPhone did not open CarPlay over USB in time",
@@ -2390,11 +2396,25 @@ class CarPlayController(
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
-                    if (message.startsWith(START_SESSION_PROGRESS)) {
+                    if (message == Iap2WiredControlClient.START_SESSION_AGAIN_PROGRESS) {
+                        startWatchdog.startSessionSentAgain()
+                    } else if (message.startsWith(START_SESSION_PROGRESS)) {
+                        if (wiredStartSentAtNanos == null) wiredStartSentAtNanos = System.nanoTime()
                         wiredDeviceName?.let(WiredSessionMemory::started)
                         startWatchdog.startSessionSent()
                     }
                     debugLog("wired $message")
+                },
+                startSessionAgain = {
+                    val opened = ncm.linkOpenedAtNanos
+                    WiredStartAgain.decide(
+                        nowNanos = System.nanoTime(),
+                        startSentAtNanos = wiredStartSentAtNanos ?: System.nanoTime(),
+                        linkOpenedAtNanos = opened,
+                        sessionActive = closed || wiredSessionActive,
+                        connectionAttemptSinceLinkOpened =
+                            opened != null && ncm.connectionAttemptSince(endpoint.airPlayPort, opened),
+                    )
                 },
             )
             onStatus(
