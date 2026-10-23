@@ -13,6 +13,7 @@ import android.os.Looper
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -778,8 +779,7 @@ class AdaptiveSettingsUiTest {
             PendingReconnect.clear()
             ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
             ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
-            // The audio page also has the navigation-duck tuning sliders; this one runs 0..20 dB.
-            val slider = descendants(screen.window.decorView).filterIsInstance<SeekBar>().single { it.max == 20 }
+            val slider = openSlider(screen, R.string.settings_navigation_attenuation)
             assertEquals(20, slider.max)
             assertEquals(20, slider.progress)
             val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
@@ -828,7 +828,7 @@ class AdaptiveSettingsUiTest {
             ReflectionHelpers.setField(screen, "settingsCategory", category)
             ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
             layoutRoot(screen)
-            val title = texts(screen).single { it.text == screen.getString(titleId) }
+            val title = texts(screen).single { if (prefix == "corner") it is Button && it.text.startsWith(screen.getString(titleId) + " · ") else it.text == screen.getString(titleId) }
             val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
             val content = scroll.getChildAt(0)
             val layout = requireNotNull(title.layout)
@@ -836,7 +836,8 @@ class AdaptiveSettingsUiTest {
                 (0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 })
             // Capture the entire scroll content: Robolectric's scroll shadow does not render
             // the viewport offset. The second image shows the new control at its actual size.
-            for ((suffix, view) in listOf("page" to content, "control" to (title.parent.parent as View))) {
+            val control = if (prefix == "corner") title else title.parent.parent as View
+            for ((suffix, view) in listOf("page" to content, "control" to control)) {
                 val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
                 try {
                     view.draw(Canvas(bitmap))
@@ -850,22 +851,32 @@ class AdaptiveSettingsUiTest {
         }
     }
 
+    private fun openSlider(screen: DiPlayActivity, title: Int): SeekBar {
+        descendants(screen.window.decorView).filterIsInstance<Button>().single {
+            it.text.startsWith(screen.getString(title) + " · ")
+        }.performClick()
+        return descendants(ShadowAlertDialog.getLatestAlertDialog().window!!.decorView).filterIsInstance<SeekBar>().single()
+    }
+
     private fun captureNavigationSlider(name: String, fontScale: Float) {
         RuntimeEnvironment.setFontScale(fontScale)
         val screen = openSettings()
         ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
         layoutRoot(screen)
-        val slider = descendants(screen.window.decorView).filterIsInstance<SeekBar>().single { it.max == 20 }
-        slider.requestRectangleOnScreen(Rect(0, 0, slider.width, slider.height), true)
-        layoutRoot(screen)
+        val slider = openSlider(screen, R.string.settings_navigation_attenuation)
+        shadowOf(Looper.getMainLooper()).idle()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        val decor = dialog.window!!.decorView
+        decor.measure(View.MeasureSpec.makeMeasureSpec(screen.resources.displayMetrics.widthPixels, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(screen.resources.displayMetrics.heightPixels, View.MeasureSpec.EXACTLY))
+        decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
         val rectangle = Rect()
         assertTrue("Navigation volume slider should be visible", slider.getGlobalVisibleRect(rectangle))
         assertTrue(rectangle.height() >= slider.height / 2)
-        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
-        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
         try {
-            root.draw(Canvas(bitmap))
+            decor.draw(Canvas(bitmap))
             val output = Paths.get("build/reports/navigation-audio-ui/$name.png")
             Files.createDirectories(output.parent)
             Files.newOutputStream(output).use { stream ->
@@ -1157,7 +1168,8 @@ class AdaptiveSettingsUiTest {
             ReflectionHelpers.ClassParameter(SettingsCategory::class.java, SettingsCategory.OVERVIEW))
         open(R.string.about)
         assertEquals(SettingsCategory.ABOUT, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
-        assertTrue(texts(screen).any { it.text == screen.getString(R.string.carplay_at_home_in_your_car) })
+        assertTrue(texts(screen).any { it.text == VehicleBranding.text(screen, R.string.about_diplay) })
+        assertFalse(texts(screen).any { it.text == screen.getString(R.string.carplay_at_home_in_your_car) })
         screen.onBackPressedDispatcher.onBackPressed()
         if (expanded) {
             assertEquals("home", ReflectionHelpers.getField<String>(screen, "page"))

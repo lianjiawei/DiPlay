@@ -16,7 +16,7 @@ internal object FidelitySettingsMetrics {
     const val RAIL_ICON_DP=24
     const val ABOUT_COMPACT_ICON_DP=64
     const val ABOUT_ICON_DP=88
-    const val SETTING_ROW_DP=56
+    const val SETTING_ROW_DP=52
     const val ROW_GAP_DP=12
     const val HEADER_DP=52
     const val RAIL_ROW_DP=56
@@ -33,6 +33,8 @@ internal object FidelitySettingsMetrics {
     const val SECTION_GAP_DP=12
     const val ACTION_HEIGHT_DP=52
     const val CONTROL_GAP_DP=8
+    const val ROW_DIVIDER_DP=1
+    const val ROW_DIVIDER_ALPHA=56
     const val ROW_VERTICAL_DP=8
     const val ROW_ICON_DP=22
     const val ROW_ICON_INSET_DP=6

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="update_no_network">No network connection. Connect to the internet and try again.</string>
+    <string name="update_no_network">No network connection</string>
     <string name="update_server_unreachable">Unable to reach the update server. Check your connection and try again.</string>
     <string name="update_connection_timeout">The update server connection timed out. Please try again.</string>
 </resources>

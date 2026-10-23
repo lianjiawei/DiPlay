@@ -1,6 +1,8 @@
 package com.shilapi.xcertplay
 
 import android.Manifest
+import android.app.AlertDialog
+import android.os.Looper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.view.View
@@ -19,6 +21,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
+import org.robolectric.shadows.ShadowAlertDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [32])
@@ -105,6 +108,9 @@ class LocationReportingSettingsTest {
             ReflectionHelpers.setField(CarPlayBackgroundSession, "stopAction", stop)
 
             locationSwitch().performClick()
+            assertEquals("Changing a live session waits for consent", !enabled, AirPlayPersistence.loadLocationReportingEnabled(context))
+            ShadowAlertDialog.getLatestAlertDialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
 
             assertEquals(enabled, AirPlayPersistence.loadLocationReportingEnabled(context))
             assertEquals(CarPlayHostActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
