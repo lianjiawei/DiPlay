@@ -100,7 +100,9 @@ class WirelessStartupRecoveryTest {
             "android.bluetooth.BluetoothDevice, int, android.os.ParcelUuid, int, int)' on a null object reference"),
             "phone-address") as WirelessStartupException
         report(status = CarPlayStatus.Failed(failure.message!!, startupFailure = failure.reason))
-        assertEquals(activity.getString(R.string.bluetooth_cannot_open_connections), stage.text.toString())
+        assertEquals(activity.getString(R.string.ui_connection_hint_usb_fallback), stage.text.toString())
+        assertEquals(activity.getString(R.string.bluetooth_cannot_open_connections),
+            ReflectionHelpers.getField<String>(activity, "connectionStageDetail"))
         assertEquals(0, budget().retries)
         assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
         assertTrue(ReflectionHelpers.getField(activity, "startupRetryStopped"))
@@ -113,7 +115,9 @@ class WirelessStartupRecoveryTest {
         ReflectionHelpers.setField(activity, "stageStatusView", stage)
         val failure = BluetoothRadioCheck.failure(BluetoothRadioCheck.NO_ADAPTER) as WirelessStartupException
         report(status = CarPlayStatus.Failed(failure.message!!, startupFailure = failure.reason))
-        assertEquals(activity.getString(R.string.bluetooth_cannot_open_connections), stage.text.toString())
+        assertEquals(activity.getString(R.string.ui_connection_hint_usb_fallback), stage.text.toString())
+        assertEquals(activity.getString(R.string.bluetooth_cannot_open_connections),
+            ReflectionHelpers.getField<String>(activity, "connectionStageDetail"))
         assertEquals(0, budget().retries)
         assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
         assertTrue(ReflectionHelpers.getField(activity, "startupRetryStopped"))

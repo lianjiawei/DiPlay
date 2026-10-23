@@ -262,9 +262,10 @@ class GlassUiRegressionTest {
         }
         descendants(root).filterIsInstance<ReferenceHomeScene>().forEach { scene ->
             val carHome = descendants(root).filterIsInstance<android.widget.Button>()
-                .single { it.text.toString() == screen.getString(R.string.car_home) }
+                .single { it.contentDescription?.toString() == screen.getString(R.string.car_home) }
             val header = carHome.parent as ViewGroup
             assertTrue("The complete car-home button fits the header",carHome.left >= 0 && carHome.right <= header.width)
+            for (line in 0 until carHome.layout.lineCount) assertEquals("Header actions must not ellipsize",0,carHome.layout.getEllipsisCount(line))
             val hero = scene.getChildAt(0)
             val firstAction = scene.getChildAt(1)
             val settings = scene.getChildAt(2)

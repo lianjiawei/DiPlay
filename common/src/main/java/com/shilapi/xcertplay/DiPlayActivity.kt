@@ -930,9 +930,22 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             else navigateBack()
         }.apply {
             // Leave room for the brand and theme control even with a long translated label.
-            maxWidth=dp(((resources.configuration.screenWidthDp-ReferenceHomeMetrics.SIDE_DP*2)*.45f).toInt())
-            ellipsize=android.text.TextUtils.TruncateAt.END
-            TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this,12,16,1,TypedValue.COMPLEX_UNIT_SP)
+            val available=dp(resources.configuration.screenWidthDp-ReferenceHomeMetrics.SIDE_DP*2)
+            maxWidth=minOf(available/2,available-logoSize-dp(control+8+52)).coerceAtLeast(dp(control))
+            val label=text.toString()
+            contentDescription=label
+            val textRoom=(maxWidth-compoundPaddingLeft-compoundPaddingRight-dp(2)).coerceAtLeast(1)
+            val desired=paint.measureText(label)
+            if(desired>textRoom) {
+                val fitted=textSize*textRoom/desired
+                val minimum=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,12f,resources.displayMetrics)
+                if(fitted>=minimum) setTextSize(TypedValue.COMPLEX_UNIT_PX,fitted)
+                else {
+                    // Long translations use the familiar car/back icon and retain the spoken label.
+                    text="";minWidth=dp(control);minimumWidth=dp(control)
+                    setPadding(dp(12),0,dp(12),0)
+                }
+            }
         }, LinearLayout.LayoutParams(-2, dp(control)))
     }
 
@@ -1080,7 +1093,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val phone = actionButton(if (DiPlayPreferences.phoneAddress(this) == null) brandString(R.string.choose_iphone)
             else DiPlayPreferences.phoneName(this), false) { choosePhone() }.apply {
             SceneText.apply(this, appNight); textSize=UiTypography.ROW_SP.toFloat(); includeFontPadding=false
-            setSingleLine(true);ellipsize=android.text.TextUtils.TruncateAt.END
             background=RippleDrawable(ColorStateList.valueOf(RIPPLE), ColorDrawable(Color.TRANSPARENT),null)
             setPadding(dp(8),0,dp(8),0)
             val arrow=android.graphics.drawable.RotateDrawable().apply {

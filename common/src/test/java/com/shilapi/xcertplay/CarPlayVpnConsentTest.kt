@@ -145,8 +145,10 @@ class CarPlayVpnConsentTest {
         assertFalse(field("awaitingVpnConsent"))
         assertNull(ReflectionHelpers.getField<Any?>(activity, "controller"))
         val message = ReflectionHelpers.getField<TextView>(activity, "stageStatusView").text.toString()
-        assertTrue(message.contains("VPN authorization"))
-        assertTrue(message.contains("Return to CorsairPlay"))
+        assertEquals(activity.getString(com.shilapi.xcertplay.host.R.string.ui_connection_hint_permissions), message)
+        val detail = ReflectionHelpers.getField<String>(activity, "connectionStageDetail")
+        assertTrue(detail.contains("VPN authorization"))
+        assertTrue(detail.contains("Return to CorsairPlay"))
         assertFalse(message.contains("Exception"))
         assertFalse(message.contains("adb shell"))
     }
