@@ -65,15 +65,16 @@ class CarHotspotNameTextTest {
     @Test fun theHomePageDoesNotQuoteAHotspotNameThatWasNeverSaved() {
         val home = open()
         val shown = texts(home)
-        assertTrue(shown.toString(), home.getString(R.string.hotspot_details_off) in shown)
+        assertFalse(shown.toString(), home.getString(R.string.hotspot_details_off) in shown)
         assertFalse(shown.toString(), home.getString(R.string.msg_car_hotspot_off, "") in shown)
         assertFalse(shown.toString(), shown.any { "“”" in it })
     }
 
-    @Test fun theHomePageNamesASavedHotspotThatIsOff() {
+    @Test fun theHomePageDoesNotRestoreTheRemovedHotspotCardWhenDetailsExist() {
         saveHotspot("Car 5G")
         val home = open()
-        assertTrue(texts(home).toString(), home.getString(R.string.msg_car_hotspot_off, "Car 5G") in texts(home))
+        assertFalse(texts(home).toString(), home.getString(R.string.msg_car_hotspot_off, "Car 5G") in texts(home))
+        assertTrue(AirPlayPersistence.loadManualHotspotSsid(context) == "Car 5G")
     }
 
     @Test fun connectionSetupAsksForTheDetailsUntilTheyAreSaved() {
