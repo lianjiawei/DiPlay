@@ -189,8 +189,13 @@ Two properties of the in-app updater shape the release:
   `SHA256SUMS.txt`. The checksum file lists `sha256  filename`, and the name must match the
   APK asset exactly or the install aborts on a checksum mismatch.
 - `UpdateVersion.isNewer` compares the **tag** against the installed `versionName` by parsed
-  `x.y.z` numbers. A tag outside that shape, or a tag that is not newer, is read as
-  "up to date", so `--bump` increments `versionName` and `versionCode` before tagging.
+  `x.y.z` numbers. CorsairPlay product releases start at `1.0.0` / `v1.0.0`; increment
+  `versionCode` for every published APK. The retired `precision.N` line remains readable,
+  but must not be offered as newer than an installed 1.x product release.
+
+Old precision clients cannot automatically compare the new product tag with their installed
+version. For the first move to 1.0.0, download the APK from GitHub (or the app's release-history
+picker) and install it over the existing app. Once upgraded, normal product-version checks apply.
 
 An in-place install keeps settings when the package name and signing certificate match.
 The first move from the old personal signing key to `precision.10` requires a manual

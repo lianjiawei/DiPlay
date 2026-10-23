@@ -17,7 +17,7 @@ android {
         minSdk = 25
         targetSdk = 37
         versionCode = 72
-        versionName = "precision.17"
+        versionName = "1.0.0"
 
     }
 

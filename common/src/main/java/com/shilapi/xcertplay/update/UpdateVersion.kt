@@ -21,20 +21,26 @@ internal object UpdateVersion {
         parse(value) != null || (PERSONAL_ONLY.containsMatchIn(value) && revision(value) != null)
 
     internal fun isNewer(remote: String, installed: String): Boolean {
+        val target = parse(remote)
+        val current = parse(installed)
+        val targetRevision = revision(remote)
+        val currentRevision = revision(installed)
+        // CorsairPlay 1.x and later replace the retired precision release line. Its revision
+        // number must not make an old preview look newer than an installed product release.
+        if (currentRevision != null && targetRevision == null && target != null && target.first >= 1) return true
+        if (targetRevision != null && currentRevision == null && current != null && current.first >= 1) return false
         // New personal builds omit the upstream base. Keep legacy release tags readable
         // so existing clients can discover the first build with the shorter version name.
         if (PERSONAL_ONLY.containsMatchIn(remote) || PERSONAL_ONLY.containsMatchIn(installed)) {
-            val target = revision(remote) ?: return false
-            val current = revision(installed) ?: 0L
-            return target > current
+            return (targetRevision ?: return false) > (currentRevision ?: 0L)
         }
-        val target = parse(remote) ?: return false
-        val current = parse(installed) ?: return true
+        if (target == null) return false
+        if (current == null) return true
         if (target.first != current.first) return target.first > current.first
         if (target.second != current.second) return target.second > current.second
         if (target.third != current.third) return target.third > current.third
         // Preserve the existing beta/RC policy; only this fork's numbered revisions compare
         // within the same upstream version. Tags and the APK's versionName use the same suffix.
-        return (revision(remote) ?: 0L) > (revision(installed) ?: 0L)
+        return (targetRevision ?: 0L) > (currentRevision ?: 0L)
     }
 }

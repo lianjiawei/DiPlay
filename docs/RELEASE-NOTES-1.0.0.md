@@ -1,6 +1,6 @@
-# CorsairPlay precision.17
+# CorsairPlay 1.0.0
 
-林肯版正式发布。功能与 precision.16-rc1 相同，版本代码递增为 72；沿用既有包名和发布签名，支持从 precision.10 及后续版本覆盖升级并保留设置。
+林肯版正式发布，采用清晰的产品版本号 1.0.0，后续按 1.0.x 修复版、1.x.0 功能版递增。CarPlay 功能与 precision.16-rc1 相同，另外适配正式版本号与旧迭代编号的更新比较。Android 版本代码递增为 72；沿用既有包名和发布签名，支持从 precision.10 及后续版本覆盖升级并保留设置。
 
 ## 本次正式发布包含
 
@@ -15,7 +15,8 @@
 ## 安装与验证
 
 - 最低 Android 7.1（API 25），继续兼容 Android 8.1；包含 arm64-v8a、armeabi-v7a、x86 和 x86_64。
-- 正式版编号递增为 precision.17，使 precision.16-rc1 及更早的 precision 版本可被应用内更新识别为旧版本；发布附件包含 APK 与 SHA256SUMS.txt。
+- 正式版本号与发布标签为 1.0.0 / v1.0.0；发布附件为 CorsairPlay-1.0.0.apk 与 SHA256SUMS.txt。
+- 从旧 precision 版本首次迁移时，请直接下载安装本页 APK，或在应用的历史版本入口选择 v1.0.0 下载后安装。旧版的自动更新比较规则无法识别新命名；安装 1.0.0 后恢复正常的产品版本比较，也不会把旧 precision 测试包误报成新版本。
 - precision.10 起的版本可直接覆盖安装，无需卸载；precision.9 及更早版本使用旧签名，需先卸载再安装，设置需要重新配置。
 - 发布验证包括完整 Android CI、Release Lint、APK 签名、文件完整性和上传后重新下载核验。精确检查结果随 GitHub 发布说明附上。
 

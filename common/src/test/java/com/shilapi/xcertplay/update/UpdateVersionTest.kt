@@ -5,6 +5,27 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpdateVersionTest {
+    @Test fun productReleaseSucceedsTheRetiredPrecisionLine() {
+        for (installed in listOf("precision.16-rc1", "precision.10", "0.2.26-precision.9")) {
+            assertTrue(UpdateVersion.isNewer("v1.0.0", installed))
+        }
+    }
+
+    @Test fun oldPrecisionTagsNeverDowngradeAnInstalledProductRelease() {
+        for (remote in listOf("precision.16-rc1", "vprecision.99", "v0.2.26-precision.16-rc1")) {
+            assertFalse(UpdateVersion.isNewer(remote, "1.0.0"))
+            assertFalse(UpdateVersion.isNewer(remote, "1.0.0-hud-test"))
+        }
+    }
+
+    @Test fun productReleasesContinueWithPatchAndMinorVersions() {
+        assertFalse(UpdateVersion.isNewer("v1.0.0", "1.0.0"))
+        assertTrue(UpdateVersion.isNewer("v1.0.1", "1.0.0"))
+        assertTrue(UpdateVersion.isNewer("v1.1.0", "1.0.1"))
+        assertFalse(UpdateVersion.isNewer("v1.0.0", "1.0.1"))
+        assertFalse(UpdateVersion.isNewer("v0.2.27", "1.0.0"))
+    }
+
     @Test fun shortPersonalNamesCompareWithLegacyTagsWithoutOfferingTheInstalledBuildAgain() {
         assertTrue(UpdateVersion.isNewer("v0.2.26-precision.6", "0.2.26-precision.5"))
         assertTrue(UpdateVersion.isNewer("precision.6", "0.2.26-precision.5"))
