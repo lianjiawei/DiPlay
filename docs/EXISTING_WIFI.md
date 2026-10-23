@@ -25,7 +25,10 @@ receiver's default route or joins a different network. Compatibility credentials
 are bound to their saved SSID: editing the network name clears the staged password,
 and a readable different live SSID blocks startup instead of advertising the old
 credentials for a new network. Modern Android rejects compatibility provisioning
-for observed non-WPA2 networks; password-free reuse remains available for those.
+for observed open/enterprise networks. Like the original flow, a receiver that
+negotiated SAE is accepted because a WPA2/WPA3 mixed router can still offer WPA2
+to the iPhone; the compatibility advertisement remains WPA2. This does not establish
+support for WPA3-only routers. Password-free reuse remains available independently.
 Cancelling either form preserves the existing choice. Saving marks the next
 connection for update and does not interrupt an active session.
 

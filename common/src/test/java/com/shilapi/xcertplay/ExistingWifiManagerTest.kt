@@ -116,11 +116,19 @@ class ExistingWifiManagerTest {
     }
 
     @Test @Config(sdk = [33]) fun legacyWpa2CredentialsAreNotAdvertisedForOpenOrEnterpriseNetworks() {
-        for (security in listOf(WifiInfo.SECURITY_TYPE_OPEN, WifiInfo.SECURITY_TYPE_EAP, WifiInfo.SECURITY_TYPE_SAE)) {
+        for (security in listOf(WifiInfo.SECURITY_TYPE_OPEN, WifiInfo.SECURITY_TYPE_EAP)) {
             `when`(info.currentSecurityType).thenReturn(security)
             ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
                 assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("WPA2-Personal"))
             }
+        }
+        // SAE on the receiver does not prove a router lacks WPA2: mixed networks can
+        // negotiate SAE with Android while the original CarPlay bootstrap uses WPA2.
+        `when`(info.currentSecurityType).thenReturn(WifiInfo.SECURITY_TYPE_SAE)
+        ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
+            val result = start(it)
+            assertTrue(result.configureWifi)
+            assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
         }
     }
 

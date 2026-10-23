@@ -102,7 +102,8 @@ class ExistingWifiManager(
                         "Connected Wi-Fi differs from the legacy credentials; select the current network and enter its password again",
                     )
                     if (Build.VERSION.SDK_INT >= 31 && info != null &&
-                        info.currentSecurityType !in listOf(WifiInfo.SECURITY_TYPE_UNKNOWN, WifiInfo.SECURITY_TYPE_PSK)) {
+                        info.currentSecurityType !in listOf(WifiInfo.SECURITY_TYPE_UNKNOWN,
+                            WifiInfo.SECURITY_TYPE_PSK, WifiInfo.SECURITY_TYPE_SAE)) {
                         throw IOException("Legacy connection requires WPA2-Personal; use system Wi-Fi reuse for this network")
                     }
                 }
