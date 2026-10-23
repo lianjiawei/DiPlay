@@ -7240,13 +7240,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         var rowIconResource=R.drawable.ic_dp_display
         var rowHelp: (() -> Unit)?=null
         private var rowDetailsTouch=false
+        private var rowDetailsCancelled=false
+        private var rowDetailsDownX=0f
+        private var rowDetailsDownY=0f
         private var titleLayout: android.text.StaticLayout?=null
         private var valueLayout: android.text.StaticLayout?=null
         private var summaryLayout: android.text.StaticLayout?=null
         private var titleX=0f
         private var valueX=0f
         private var titleWidth=0
+        private var rowHeaderTop=0f
+        private var rowHeaderHeight=0
+        private var summaryX=0f
         private var summaryY=0f
+        private val helpIconBounds=android.graphics.Rect()
+        private val helpTouchBounds=android.graphics.RectF()
         private fun px(v:Int)=(v*resources.displayMetrics.density).roundToInt()
         private fun textLayout(value:String,width:Int,size:Float,color:Int):android.text.StaticLayout {
             val p=android.text.TextPaint(paint).apply { textSize=size;this.color=color }
@@ -7262,26 +7270,66 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val rtl=layoutDirection==View.LAYOUT_DIRECTION_RTL
             val narrow=measuredWidth/resources.displayMetrics.density<420
             val startInset=FidelitySettingsMetrics.ROW_START_DP
-            val available=(measuredWidth-px(startInset+FidelitySettingsMetrics.ROW_END_DP)).coerceAtLeast(px(100))
+            val available=(measuredWidth-px(startInset+FidelitySettingsMetrics.ROW_END_DP)).coerceAtLeast(1)
+            // Help is a trailing accessory beside the value, never a separate summary line.
+            // Reserve its complete touch target before measuring either text column.
+            val helpWidth=if(rowHelp!=null && rowSummary.isNotBlank())px(FidelitySettingsMetrics.ROW_HELP_TARGET_DP)else 0
+            val headerAvailable=(available-helpWidth).coerceAtLeast(1)
+            val titleText=rowTitle ?: text.substring(0,split)
             val valueText=if(split>0)text.substring(split+VALUE_SEPARATOR.length)else ""
             val valueSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, UiTypography.BODY_SP.toFloat(), resources.displayMetrics)
             val valuePaint=android.text.TextPaint(paint).apply { textSize=valueSize }
             val desiredValueWidth=kotlin.math.ceil(android.text.Layout.getDesiredWidth(valueText,valuePaint).toDouble()).toInt()+px(2)
-            val valueWidth=minOf(desiredValueWidth,(available*.40f).toInt()).coerceAtLeast(1)
-            titleWidth=(available-valueWidth-px(if(narrow)8 else 16)).coerceAtLeast(px(48))
+            val gap=if(valueText.isBlank())0 else px(if(narrow)FidelitySettingsMetrics.COMPACT_ROW_VALUE_GAP_DP else FidelitySettingsMetrics.ROW_VALUE_GAP_DP)
+            val desiredTitleWidth=kotlin.math.ceil(android.text.Layout.getDesiredWidth(titleText,paint).toDouble()).toInt()+px(2)
+            val titleShare=minOf(desiredTitleWidth,((headerAvailable-gap)*.60f).toInt())
+            val valueWidth=if(valueText.isBlank())0 else minOf(desiredValueWidth,headerAvailable-gap-titleShare).coerceAtLeast(1)
+            titleWidth=(headerAvailable-valueWidth-gap).coerceAtLeast(1)
             titleX=if(rtl)(measuredWidth-px(startInset)-titleWidth).toFloat() else px(startInset).toFloat()
-            valueX=if(rtl)px(FidelitySettingsMetrics.ROW_END_DP).toFloat() else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-valueWidth).toFloat()
-            titleLayout=textLayout(rowTitle ?: text.substring(0,split),titleWidth,textSize,currentTextColor)
-            valueLayout=textLayout(if(split>0)text.substring(split+VALUE_SEPARATOR.length)else "",valueWidth,valueSize,muted)
-            summaryLayout=if(rowSummary.isNotBlank())textLayout(rowSummary,available-(if(rowHelp!=null)px(20)else 0),TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, UiTypography.CAPTION_SP.toFloat(), resources.displayMetrics),muted)else null
-            val height=maxOf(titleLayout?.height?:0,valueLayout?.height?:0)+(summaryLayout?.height?:0)+(if(summaryLayout!=null)px(4)else 0)+px(FidelitySettingsMetrics.ROW_VERTICAL_DP*2)
+            valueX=if(rtl)(px(FidelitySettingsMetrics.ROW_END_DP)+helpWidth).toFloat() else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-helpWidth-valueWidth).toFloat()
+            titleLayout=textLayout(titleText,titleWidth,textSize,currentTextColor)
+            valueLayout=if(valueText.isBlank())null else textLayout(valueText,valueWidth,valueSize,muted)
+            summaryLayout=if(rowSummary.isNotBlank())textLayout(rowSummary,available,TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, UiTypography.CAPTION_SP.toFloat(), resources.displayMetrics),muted)else null
+            rowHeaderHeight=maxOf(titleLayout?.height?:0,valueLayout?.height?:0,px(FidelitySettingsMetrics.ROW_ICON_DP))
+            val groupHeight=rowHeaderHeight+(summaryLayout?.height?:0)+(if(summaryLayout!=null)px(FidelitySettingsMetrics.CAPTION_GAP_DP)else 0)
+            val height=groupHeight+px(FidelitySettingsMetrics.ROW_VERTICAL_DP*2)
             setMeasuredDimension(measuredWidth,resolveSize(maxOf(minHeight,height),heightMeasureSpec))
+            rowHeaderTop=(measuredHeight-groupHeight)/2f
+            summaryX=if(rtl)px(FidelitySettingsMetrics.ROW_END_DP).toFloat()else titleX
+            summaryY=rowHeaderTop+rowHeaderHeight+px(FidelitySettingsMetrics.CAPTION_GAP_DP)
+            helpIconBounds.setEmpty()
+            helpTouchBounds.setEmpty()
+            if(helpWidth>0) {
+                val left=if(rtl)px(FidelitySettingsMetrics.ROW_END_DP).toFloat()else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-helpWidth).toFloat()
+                val centreY=rowHeaderTop+rowHeaderHeight/2f
+                val targetTop=(centreY-helpWidth/2f).coerceIn(0f,(measuredHeight-helpWidth).coerceAtLeast(0).toFloat())
+                helpTouchBounds.set(left,targetTop,left+helpWidth,targetTop+helpWidth)
+                val iconSize=px(FidelitySettingsMetrics.ROW_HELP_ICON_DP)
+                val iconLeft=(left+(helpWidth-iconSize)/2f).roundToInt()
+                val iconTop=(centreY-iconSize/2f).roundToInt()
+                helpIconBounds.set(iconLeft,iconTop,iconLeft+iconSize,iconTop+iconSize)
+            }
         }
+        private fun isRowDetailsAt(x:Float,y:Float):Boolean = helpTouchBounds.contains(x,y) ||
+            (summaryLayout!=null && x>=summaryX && x<=summaryX+summaryLayout!!.width &&
+                y>=summaryY && y<=summaryY+summaryLayout!!.height)
+
         override fun onTouchEvent(event:android.view.MotionEvent):Boolean {
-            if(rowPresentation && rowHelp!=null && rowSummary.isNotBlank()) {
-                if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN)rowDetailsTouch=event.x>=px(24) && event.x<=width-px(24) && event.y>=summaryY
+            if(rowPresentation && rowHelp!=null) {
+                if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN) {
+                    rowDetailsTouch=isRowDetailsAt(event.x,event.y)
+                    rowDetailsCancelled=false
+                    rowDetailsDownX=event.x;rowDetailsDownY=event.y
+                }
                 if(rowDetailsTouch) {
-                    if(event.actionMasked==android.view.MotionEvent.ACTION_UP) { rowDetailsTouch=false;rowHelp?.invoke() }
+                    if(event.actionMasked==android.view.MotionEvent.ACTION_MOVE) {
+                        val slop=android.view.ViewConfiguration.get(context).scaledTouchSlop
+                        if(kotlin.math.abs(event.x-rowDetailsDownX)>slop || kotlin.math.abs(event.y-rowDetailsDownY)>slop)rowDetailsCancelled=true
+                    }
+                    if(event.actionMasked==android.view.MotionEvent.ACTION_UP) {
+                        rowDetailsTouch=false
+                        if(!rowDetailsCancelled && isRowDetailsAt(event.x,event.y))rowHelp?.invoke()
+                    }
                     if(event.actionMasked==android.view.MotionEvent.ACTION_CANCEL)rowDetailsTouch=false
                     return true
                 }
@@ -7315,35 +7363,34 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if(rowPresentation && titleLayout!=null) {
                 val title=titleLayout!!
                 val summary=summaryLayout
-                val firstLineHeight=maxOf(title.height,valueLayout?.height?:0)
-                val groupHeight=firstLineHeight+(summary?.height?:0)+if(summary!=null)px(4)else 0
-                val y=(height-groupHeight)/2f
+                val centreY=rowHeaderTop+rowHeaderHeight/2f
                 fun draw(layout:android.text.StaticLayout?,x:Float,top:Float) {
                     if(layout==null)return
                     val checkpoint=canvas.save();canvas.translate(x,top);layout.draw(canvas);canvas.restoreToCount(checkpoint)
                 }
-                draw(title,titleX,y)
-                summaryY=y+firstLineHeight+px(4)
-                val summaryX=if(layoutDirection==View.LAYOUT_DIRECTION_RTL)px(28+(if(rowHelp!=null)20 else 0)).toFloat()else titleX
+                draw(title,titleX,centreY-title.height/2f)
                 draw(summary,summaryX,summaryY)
-                if(summary!=null && rowHelp!=null) context.getDrawable(R.drawable.ic_dp_about)?.mutate()?.apply {
+                if(rowHelp!=null && !helpIconBounds.isEmpty) context.getDrawable(R.drawable.ic_dp_about)?.mutate()?.apply {
                     setTint(muted)
-                    val rtl=layoutDirection==View.LAYOUT_DIRECTION_RTL
-                    val x=if(rtl)px(28).toFloat()else width-px(46).toFloat()
-                    setBounds(x.toInt(),summaryY.toInt(),x.toInt()+px(14),summaryY.toInt()+px(14));draw(canvas)
+                    bounds=helpIconBounds;draw(canvas)
                 }
-                draw(valueLayout,valueX,y+(firstLineHeight-(valueLayout?.height?:0))/2f)
+                draw(valueLayout,valueX,centreY-(valueLayout?.height?:0)/2f)
                 val rtl=layoutDirection==View.LAYOUT_DIRECTION_RTL
                 context.getDrawable(rowIconResource)?.mutate()?.apply {
                     setTint(accent)
                     val iconSize=px(FidelitySettingsMetrics.ROW_ICON_DP)
                     val inset=px(FidelitySettingsMetrics.ROW_ICON_INSET_DP)
                     val x=if(rtl)width-inset-iconSize else inset
-                    setBounds(x,(height-iconSize)/2,x+iconSize,(height+iconSize)/2);draw(canvas)
+                    val top=(centreY-iconSize/2f).roundToInt()
+                    setBounds(x,top,x+iconSize,top+iconSize);draw(canvas)
                 }
                 context.getDrawable(R.drawable.ic_dp_chevron)?.mutate()?.apply {
-                    setTint(currentTextColor);val x=if(rtl)px(4)else width-px(24)
-                    setBounds(x,(height-px(20))/2,x+px(20),(height+px(20))/2);draw(canvas)
+                    setTint(currentTextColor)
+                    setLayoutDirection(if(rtl)View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR)
+                    val x=if(rtl)px(FidelitySettingsMetrics.ROW_CHEVRON_INSET_DP)else width-px(FidelitySettingsMetrics.ROW_END_DP)
+                    val size=px(FidelitySettingsMetrics.ROW_CHEVRON_DP)
+                    val top=(centreY-size/2f).roundToInt()
+                    setBounds(x,top,x+size,top+size);draw(canvas)
                 }
                 if(drawRowDivider) {
                     val line=android.graphics.Paint().apply { color=android.graphics.Color.argb(72,190,215,240);strokeWidth=resources.displayMetrics.density }

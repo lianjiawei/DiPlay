@@ -38,4 +38,10 @@ internal object FidelitySettingsMetrics {
     const val ROW_ICON_INSET_DP=6
     const val ROW_START_DP=40
     const val ROW_END_DP=24
+    const val ROW_VALUE_GAP_DP=16
+    const val COMPACT_ROW_VALUE_GAP_DP=8
+    const val ROW_HELP_ICON_DP=14
+    const val ROW_HELP_TARGET_DP=48
+    const val ROW_CHEVRON_DP=20
+    const val ROW_CHEVRON_INSET_DP=4
 }
