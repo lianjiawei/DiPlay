@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Rect
 import android.os.Looper
 import android.view.Surface
@@ -68,6 +69,9 @@ class VehicleModelUiTest {
         prefs.edit().putString("vehicle_scene_model", "unknown-future-model").commit()
         assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
         val screen = open()
+        assertFalse("A single model choice should not have a separate vehicle-appearance heading",
+            descendants(screen.window.decorView).filterIsInstance<TextView>()
+                .any { it.isShown && it.text.toString() == screen.getString(R.string.settings_vehicle_appearance) })
         val dialog = picker(screen)
         assertEquals(3, dialog.listView.count)
         assertEquals(listOf("冒险家", "航海家", "飞行家"),
@@ -150,6 +154,13 @@ class VehicleModelUiTest {
             ReflectionHelpers.setField(screen, "page", "settings")
             ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.VEHICLE)
             render(screen)
+            val row = modelChoiceButton(screen)
+            val rowImage = Bitmap.createBitmap(row.width, row.height, Bitmap.Config.ARGB_8888)
+            try {
+                row.draw(Canvas(rowImage))
+                assertEquals("A one-row card must not draw an extra internal divider", 0,
+                    Color.alpha(rowImage.getPixel(row.width / 2, row.height - 1)))
+            } finally { rowImage.recycle() }
             writeScreenshot(root(screen), "$name-${model.key}-settings")
         }
         assertEquals("Each choice must show its own car, including after a cached image", 3, homeImages.size)
@@ -177,13 +188,16 @@ class VehicleModelUiTest {
     }
 
     private fun picker(screen: DiPlayActivity): AlertDialog {
-        val title = screen.getString(R.string.settings_vehicle_model)
-        descendants(screen.window.decorView).filterIsInstance<TextView>()
-            .single { it.text.toString().startsWith("$title · ") || it.contentDescription?.toString()?.startsWith(title) == true }
-            .performClick()
+        modelChoiceButton(screen).performClick()
         // Let WindowManager attach the dialog before native scroll indicators are drawn.
         shadowOf(Looper.getMainLooper()).idle()
         return requireNotNull(ShadowAlertDialog.getLatestAlertDialog())
+    }
+
+    private fun modelChoiceButton(screen: DiPlayActivity): TextView {
+        val title = screen.getString(R.string.settings_vehicle_model)
+        return descendants(screen.window.decorView).filterIsInstance<TextView>()
+            .single { it.text.toString().startsWith("$title · ") || it.contentDescription?.toString()?.startsWith(title) == true }
     }
 
     private fun select(dialog: AlertDialog, index: Int) {

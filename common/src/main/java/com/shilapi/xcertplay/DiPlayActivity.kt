@@ -1931,7 +1931,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun allSettingsSections(content: LinearLayout) {
         if (VehicleBranding.preset(this) == VehicleBrandPreset.LINCOLN) {
             filteredSection(content, SettingsSection.VEHICLE_APPEARANCE,
-                brandString(R.string.settings_vehicle_appearance), R.drawable.ic_dp_car) { card ->
+                brandString(R.string.settings_vehicle_appearance), R.drawable.ic_dp_car,
+                showHeading = false) { card ->
                 val models = VehicleModel.entries
                 choice(card, brandString(R.string.settings_vehicle_model),
                     models.map { brandString(it.label) }, models.indexOf(AirPlayPersistence.loadVehicleModel(this)),
@@ -1956,7 +1957,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             toggle(card, brandString(R.string.right_hand_drive), brandString(R.string.place_carplay_s_controls_closer_to_the_driver), AirPlayPersistence.loadRightHandDrive(this)) { AirPlayPersistence.saveRightHandDrive(this, it); markReconnectNeeded() }
         }
         filteredSection(content, SettingsSection.WHEEL_KEYS,
-            brandString(R.string.settings_wheel_keys), R.drawable.ic_dp_controls, ::wheelKeysSettings)
+            brandString(R.string.settings_wheel_keys), R.drawable.ic_dp_controls, build = ::wheelKeysSettings)
         filteredSection(content, SettingsSection.CONNECTION_SETUP,
             brandString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
             card.addView(label(brandString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
@@ -2774,7 +2775,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         if (com.shilapi.xcertplay.lincoln.LincolnVehicle.eligible(this)) {
             filteredSection(content, SettingsSection.LINCOLN_CLUSTER,
-                brandString(R.string.settings_lincoln_cluster), R.drawable.ic_dp_navigation, ::lincolnClusterSection)
+                brandString(R.string.settings_lincoln_cluster), R.drawable.ic_dp_navigation, build = ::lincolnClusterSection)
         }
         filteredSection(content, SettingsSection.PERMISSIONS_AND_HELP,
             brandString(R.string.permissions_and_connection_help), R.drawable.ic_dp_permissions) { card ->
@@ -6690,7 +6691,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
-    private fun section(parent: LinearLayout, title: String, icon: Int? = null, build: (LinearLayout) -> Unit) {
+    private fun section(parent: LinearLayout, title: String, icon: Int? = null,
+        showHeading: Boolean = true, build: (LinearLayout) -> Unit) {
         searchIndexSink?.add(title)
         val card = card()
         val heading = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(FidelitySettingsMetrics.SECTION_GAP_DP)) }
@@ -6701,10 +6703,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         heading.addView(label(title, UiTypography.SECTION_SP, TEXT, true,
             centreGlyphs = icon != null && usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)),
             LinearLayout.LayoutParams(0, -2, 1f))
-        card.addView(heading)
+        if (showHeading) card.addView(heading)
         build(card)
         if (page == "settings") {
             normalizeSpacing(card);polishSettingsRows(card)
+            if (!showHeading) card.setPadding(
+                dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.ROW_VERTICAL_DP),
+                dp(FidelitySettingsMetrics.CARD_PAD_DP), dp(FidelitySettingsMetrics.ROW_VERTICAL_DP))
             if(settingsCategory==SettingsCategory.DISPLAY && title==brandString(R.string.display_and_performance)) {
                 heading.visibility=View.GONE
                 if(!isExpandedSettingsLayout)card.setPadding(dp(FidelitySettingsMetrics.ROW_GAP_DP),dp(FidelitySettingsMetrics.ROW_GAP_DP),dp(FidelitySettingsMetrics.ROW_GAP_DP),dp(FidelitySettingsMetrics.ROW_GAP_DP))
@@ -6741,10 +6746,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         key: SettingsSection,
         title: String,
         icon: Int? = null,
+        showHeading: Boolean = true,
         build: (LinearLayout) -> Unit,
     ) {
         if (settingsSectionFilter?.contains(key) == false) return
-        section(parent, title, icon, build)
+        section(parent, title, icon, showHeading, build)
     }
     // Routing changes affect the live cluster surface as soon as the host resumes.
     // Ask before saving them instead of promising to defer only part of the change.
@@ -7012,6 +7018,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 view.setOnLongClickListener { view.rowHelp?.invoke();true }
                 view.contentDescription="${view.text}. ${brandString(R.string.ui_glass_details)}: $full"
             }
+            view.drawRowDivider=children.drop(index+1).any { it.visibility==View.VISIBLE && it.tag!=SPACER }
             view.background=RippleDrawable(ColorStateList.valueOf(RIPPLE),ColorDrawable(Color.TRANSPARENT),null)
             (view.layoutParams as? LinearLayout.LayoutParams)?.apply {
                 topMargin=0
@@ -7227,6 +7234,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
         var rowTitle: String?=null
         var rowPresentation=false
+        var drawRowDivider=false
         var rowReconnects=false
         var rowSummary=""
         var rowIconResource=R.drawable.ic_dp_display
@@ -7337,8 +7345,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     setTint(currentTextColor);val x=if(rtl)px(4)else width-px(24)
                     setBounds(x,(height-px(20))/2,x+px(20),(height+px(20))/2);draw(canvas)
                 }
-                val line=android.graphics.Paint().apply { color=android.graphics.Color.argb(72,190,215,240);strokeWidth=resources.displayMetrics.density }
-                canvas.drawLine(0f,height-1f,width.toFloat(),height-1f,line)
+                if(drawRowDivider) {
+                    val line=android.graphics.Paint().apply { color=android.graphics.Color.argb(72,190,215,240);strokeWidth=resources.displayMetrics.density }
+                    canvas.drawLine(0f,height-1f,width.toFloat(),height-1f,line)
+                }
                 return
             }
             var offset = contentOffsetY

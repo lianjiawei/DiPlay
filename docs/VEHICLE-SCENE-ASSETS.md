@@ -1,25 +1,102 @@
 # 车型背景素材
 
-默认冒险家继续使用原有 `corsair_scene.png` / `corsair_scene_soft.png`，两文件未改动。
+**冒险家保留 1.1.0 原图和原柔焦图，仍为默认选项**。按用户最终选择，不采用本轮冒险家重绘稿。航海家、飞行家以 **2022 年中国市场车型** 为外形参考，替换 1.1.0 中较新款的生成图。
 
-新增素材通过内置 imagegen 生成，属于装饰性插画背景，并非车型实拍。以原冒险家背景为编辑目标，保留场景与构图，仅替换车型及相应倒影。车型选择不会改变配对身份、车型硬件参数或 CarPlay 传输。
+湖景、建筑、黄昏配色、车辆位置及界面布局沿用既有设计。仅替换车与对应倒影、接地阴影，设置页同步使用配套柔焦版本。车型选择及其存储值保持不变，不改变配对、连接或车辆硬件参数。
 
-- 航海家：`common/src/main/res/drawable-nodpi/nautilus_scene.png`
-- 飞行家：`common/src/main/res/drawable-nodpi/aviator_scene.png`
-- 对应柔焦背景：同目录下的 `nautilus_scene_soft.png`、`aviator_scene_soft.png`。
+航海家、飞行家及其配套柔焦素材通过 **内置 imagegen** 编辑生成，属于装饰性生成背景，并非官方车型实拍。实车照片用于核对年代、格栅、车灯及车身比例，未作为独立产品照片打包。
 
-外形参考：[林肯官方车型目录](https://www.lincoln.com/suv-crossover-models/)、[林肯中国飞行家页面](https://www.lincoln.com.cn/vehicle/suvs-2024aviator/)。仅用于车型特征核对，未打包第三方产品图片。
+## 外形参考
+
+| 车型 | 2022 款识别重点 | 参考 |
+| --- | --- | --- |
+| 冒险家 | 保留用户喜欢的原版风格，未替换 | 仓库 1.1.0 原素材 |
+| 航海家 | 第一代国产车型的圆角格栅、较宽大矩形主灯、下方独立灯条，保留外露门把手 | [2022 年 2.7T 车型上市实拍](https://www.autohome.com.cn/news/202204/1244600.html) |
+| 飞行家 | 改款前星辉格栅、双透镜主灯与下方独立灯组、长车身及涡扇式轮圈 | [2022 款上市报道与厂商图片](https://www.autohome.com.cn/news/202205/1247808.html) |
+
+两款新图的图片身份参考来自上述 2022 款页面；旧的 2024–2026 提示词已被以下最终提示词取代。页面图片地址及本地参考文件保存在工作区 `design/vehicle-2022/reference/`，不打包进 APK。
+
+车型设置在「车辆」中以单行「车型背景 · 当前车型」展示，保留原有三选一弹窗，不再显示重复的「车辆外观」卡片标题。设置行仅在后面还有可见内容时绘制内部分隔线，单行卡片和卡片最后一项不再带额外横线。
+
+## 项目素材
+
+全部位于 `common/src/main/res/drawable-nodpi/`：
+
+| 车型 | 首页 | 设置页 |
+| --- | --- | --- |
+| 冒险家（默认） | `corsair_scene.png` | `corsair_scene_soft.png` |
+| 航海家 | `nautilus_scene.png` | `nautilus_scene_soft.png` |
+| 飞行家 | `aviator_scene.png` | `aviator_scene_soft.png` |
+
+原始生成文件保留在 `/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/`；工作区副本在 `design/vehicle-2022/assets/`。
 
 ## 最终提示词
 
-### nautilus
+最终采用的首页两图：输入 1 为修改前 `corsair_scene.png` 场景；输入 2 分别为 2022 年航海家上市实拍、2022 款飞行家厂商图片。柔焦图以对应已完成首页图作为唯一编辑目标。下方冒险家提示词仅保留为弃稿记录，最终项目使用原图。
 
-Use case: precise-object-edit. Asset: Android head-unit wallpaper. Input image is the EDIT TARGET. Replace ONLY the black SUV with the requested Lincoln vehicle, keeping every other part of the image unchanged: exact same camera, framing, canvas aspect ratio, dusk sky, mountains, lake, town lights, building, paving, lighting direction, color grade and scene perspective. Keep the replacement parked in the same right-side position, same front three-quarter orientation, facing camera/right, with the entire vehicle visible. Preserve the empty left half for UI text. Match realistic black paint, high-quality sharp automotive photography and wet-paving reflections. Correct only the vehicle and its immediate reflection/contact shadow to fit the new model. No captions, UI, badges with model names, watermark, borders, split panels or collage. Deliver one full scene at the same dimensions and aspect ratio as the reference, not a crop. Vehicle: a black 2024–2026 China-market Lincoln Nautilus (林肯航海家), clearly the midsize Nautilus rather than a Corsair: modern wider body, long slim headlights with the continuous horizontal front light bar across the broad patterned grille through the Lincoln emblem, sleek flush door handles and Nautilus proportions. Retain original background exactly.
+### corsair / sharp（弃稿，未采用）
 
-### aviator
+生成原件：`/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/exec-f5bc9f0b-36c5-4793-b761-b4b7b0b5ccb5.png`
 
-Use case: precise-object-edit. Asset: Android head-unit wallpaper. Input image is the EDIT TARGET. Replace ONLY the black SUV with the requested Lincoln vehicle, keeping every other part of the image unchanged: exact same camera, framing, canvas aspect ratio, dusk sky, mountains, lake, town lights, building, paving, lighting direction, color grade and scene perspective. Keep the replacement parked in the same right-side position, same front three-quarter orientation, facing camera/right, with the entire vehicle visible. Preserve the empty left half for UI text. Match realistic black paint, high-quality sharp automotive photography and wet-paving reflections. Correct only the vehicle and its immediate reflection/contact shadow to fit the new model. No captions, UI, badges with model names, watermark, borders, split panels or collage. Deliver one full scene at the same dimensions and aspect ratio as the reference, not a crop. Vehicle: a black 2024–2026 China-market Lincoln Aviator (林肯飞行家), clearly the larger three-row Aviator rather than a Corsair or Navigator: longer elegant body, sculpted hood, broad starburst mesh Lincoln grille, slim swept LED headlamps, tall upright side profile and long roof with characteristic tapering rear roofline, chrome fender detail and correct Aviator proportions. Do not substitute a Navigator. Retain original background exactly.
+```text
+Use case: precise-object-edit.
+Asset: production wallpaper for an Android Lincoln head unit.
+Input image 1 is the EDIT TARGET and defines the entire scene, camera and output framing. Input image 2 is the MODEL IDENTITY REFERENCE, an actual China-market 2022 Lincoln Corsair (冒险家), pre-facelift.
+Replace ONLY the SUV in image 1 and its immediate contact shadow/reflection with a faithful black 2022 China-market Lincoln Corsair matching image 2's real bodywork geometry. This is an accuracy correction, not a redesign. Copy the reference car's compact proportions, relatively small chrome-surrounded rounded-rectangular star-pattern grille, the precise slim swept single lamp housings and their separate short horizontal daytime running lamps BELOW the main headlights, conventional exposed door handles, side fender badge, roofline and normal OEM multi-spoke wheels. The 2022 car has NO full-width front light strip, no gigantic modern grille. Do not retain the inaccurate headlight/grille design from image 1, and do not invent ornate headlights or oversized wheels. Use standard Chinese-market chrome trim rather than a blackout sport package.
+Keep the same front three-quarter orientation as image 1 with the visible side extending to the LEFT and nose pointing toward the RIGHT/camera. Keep entire car within the existing vehicle footprint in the RIGHT half, with roof and wheel contact at the same scene heights; preserve blank left area for interface. Photorealistic, calm premium black automotive photograph with natural dusk reflections and fine details, not a cartoon or futuristic concept.
+Invariant: keep the lake, mountain silhouettes, dusk clouds, town lights, glass building and its posts, paving and horizon in exactly the original positions. No change to camera, crop, color grade or brightness. Only car and associated shadow/reflection change. Do not transfer the reference's dealership background, number plate text, stickers or watermark. Do not add interface, captions, borders, logos outside the vehicle or model-name text. One full-scene image, 1620 by 971 pixels or same exact aspect ratio as image 1.
+```
 
-### 两张柔焦背景
+### corsair / soft（弃稿，未采用）
 
-Use case: precise-object-edit. Make a soft-focus version of this exact image for the settings-page background. Apply a uniform subtle Gaussian-style blur equivalent to a 7-pixel radius at the original resolution. Preserve the entire original image composition, the exact vehicle model and its identity, colors, exposure, sky, lake, building, camera and dimensions. Do not redraw or change any subject or object. No text, borders or overlays. One blurred full-scene image, same aspect ratio.
+生成原件：`/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/exec-df290716-27bb-4f68-8c01-2fa0e43bc228.png`
+
+```text
+Use case: precise-object-edit. Create the settings soft-focus companion of this exact wallpaper. Apply ONLY a uniform subtle optical/Gaussian-style blur, about 7 pixels at the original width. Retain the identical 2022 Lincoln Corsair, its silhouette, every grille, lamp, handle and wheel, and all background pixels' placement, color, exposure and framing. No redesign, regeneration, changes to car or scenery, no added text, no crop. Same dimensions and aspect ratio as source. One soft full-scene wallpaper.
+```
+
+### nautilus / sharp
+
+生成原件：`/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/exec-187913c8-9f74-4530-9870-0c67a037013d.png`
+
+```text
+Use case: precise-object-edit. Asset: production wallpaper for an Android Lincoln head unit.
+Input image 1 is the EDIT TARGET defining the entire scene, camera and full framing. Image 2 is ONLY a real 2022 China-market car MODEL IDENTITY REFERENCE; do not copy its background, camera angle, text or watermark.
+Replace ONLY the SUV and its immediate contact shadow/reflection in image 1 with a faithfully accurate black car matching image 2. This is a real model-year identity correction, NOT a concept design.
+Preserve image 1's front three-quarter camera orientation: visible side extends LEFT, nose points RIGHT and towards camera. Regardless of the reference photograph's direction or overhead view, show the replacement from exactly the original scene's viewpoint. Entire vehicle stays in the RIGHT-half vehicle footprint, roof and wheels at the same scene heights; preserve negative left space for interface.
+Keep every other part of image 1 unchanged: exact clouds, mountains, lake, town lights, building, posts, paving, camera framing, horizon, color grading and brightness. Photorealistic premium BLACK automotive photography at dusk, credible reflections. Correct the associated reflection and contact shadow to match. Standard chrome luxury trim and correct factory wheels.
+Do not add UI, borders, text captions, number plate writing, dealer stickers, people or logos outside the car. Do not transfer any reference background or watermark. One full scene, 1620 by 971 pixels or same exact aspect ratio.
+Vehicle specification:
+The car MUST be the 2022 China-market Lincoln Nautilus 航海家, the FIRST-generation pre-2023 replacement model, matching the reference photo exactly. Rounded midsize two-row body (4849mm long, 2850mm wheelbase), tall compact hood, rounded chrome-framed star-pattern grille, the reference's relatively LARGE rounded rectangular headlamp housings with dual lenses and upper/outer LED outline, separate slim horizontal light strips below the main lamp, traditional protruding door handles, chrome fender badge and window surround. Match the actual headlamp housing and bumper shapes in the reference; do not substitute the slimmer Corsair headlight assembly. The classic grille has no horizontal bar bisecting it, and no continuous front light strip. NO 2023–2026 new-generation Nautilus, NO flush handles, NO narrow light-bar front, NO Lincoln Z styling. The reference is the source of truth for the bodywork.
+```
+
+### nautilus / soft
+
+生成原件：`/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/exec-ba073d47-c73f-41c6-9ec7-8c2cf874d353.png`
+
+```text
+Use case: precise-object-edit. Create the settings soft-focus companion of this exact 2022 Lincoln nautilus wallpaper. Apply ONLY a uniform subtle optical/Gaussian-style blur, about 7 pixels at the original width. Retain the identical vehicle, its silhouette and length, every grille, lamp, handle and wheel, and all background pixels' placement, color, exposure and framing. No redesign or change to car or scenery. No text, no crop. Same dimensions and aspect ratio as source. One soft full-scene wallpaper.
+```
+
+### aviator / sharp
+
+生成原件：`/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/exec-381de68a-c52a-4f76-8df7-4c309ebc0459.png`
+
+```text
+Use case: precise-object-edit. Asset: production wallpaper for an Android Lincoln head unit.
+Input image 1 is the EDIT TARGET defining the entire scene, camera and full framing. Image 2 is ONLY a real 2022 China-market car MODEL IDENTITY REFERENCE; do not copy its background, camera angle, text or watermark.
+Replace ONLY the SUV and its immediate contact shadow/reflection in image 1 with a faithfully accurate black car matching image 2. This is a real model-year identity correction, NOT a concept design.
+Preserve image 1's front three-quarter camera orientation: visible side extends LEFT, nose points RIGHT and towards camera. Regardless of the reference photograph's direction or overhead view, show the replacement from exactly the original scene's viewpoint. Entire vehicle stays in the RIGHT-half vehicle footprint, roof and wheels at the same scene heights; preserve negative left space for interface.
+Keep every other part of image 1 unchanged: exact clouds, mountains, lake, town lights, building, posts, paving, camera framing, horizon, color grading and brightness. Photorealistic premium BLACK automotive photography at dusk, credible reflections. Correct the associated reflection and contact shadow to match. Standard chrome luxury trim and correct factory wheels.
+Do not add UI, borders, text captions, number plate writing, dealer stickers, people or logos outside the car. Do not transfer any reference background or watermark. One full scene, 1620 by 971 pixels or same exact aspect ratio.
+Vehicle specification:
+The car MUST be the 2022 China-market Lincoln Aviator 飞行家, the second-generation PRE-FACELIFT original 2020–2022 design shown in reference 2. Long three-row body (5080mm long, 3025mm wheelbase), rear-wheel-drive proportions with long sculpted hood, chrome rounded rectangular rectangular-pattern star grille, relatively short broad rectangular dual-projector headlamp housings with a subtle downward outer LED corner, separate narrow horizontal daytime strip below main lamp, small multi-element lower fog lamp units at the outer bumper, a strong long chrome-accented fender spear, traditional exposed handles, elegant long floating roof and OEM turbine multi-spoke wheels. Preserve the distinctive longer cabin and upright rear quarter rather than drawing another Corsair. Keep standard chrome trim. NO giant 2025 facelift grille, NO light strip across grille, NO thin modern eyebrow headlamps, NO Navigator, no inflated cartoon SUV. Accurately follow the model bodywork of the real reference photo but retain the edit target's low front three-quarter viewpoint, not the reference's overhead camera.
+```
+
+### aviator / soft
+
+生成原件：`/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/exec-f6050a0a-36cf-4407-af9b-157a0a27dc3e.png`
+
+```text
+Use case: precise-object-edit. Create the settings soft-focus companion of this exact 2022 Lincoln aviator wallpaper. Apply ONLY a uniform subtle optical/Gaussian-style blur, about 7 pixels at the original width. Retain the identical vehicle, its silhouette and length, every grille, lamp, handle and wheel, and all background pixels' placement, color, exposure and framing. No redesign or change to car or scenery. No text, no crop. Same dimensions and aspect ratio as source. One soft full-scene wallpaper.
+```
