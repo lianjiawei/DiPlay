@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import com.shilapi.xcertplay.host.R
@@ -58,8 +59,8 @@ class ExistingWifiScreenshotsTest {
                 val details = ShadowAlertDialog.getLatestAlertDialog()
                 assertEquals(1, descendants(details.window!!.decorView).filterIsInstance<EditText>().count { it.visibility == View.VISIBLE })
                 capture(details, "$name-details", width, height)
-                descendants(details.window!!.decorView).filterIsInstance<Button>().single {
-                    it.text.startsWith(activity.getString(R.string.settings_existing_wifi_select) + " · ")
+                descendants(details.window!!.decorView).filterIsInstance<ImageButton>().single {
+                    it.contentDescription.toString().startsWith(activity.getString(R.string.settings_existing_wifi_select) + " · ")
                 }.performClick()
                 val list = ShadowAlertDialog.getLatestAlertDialog()
                 capture(list, "$name-networks", width, height)

@@ -4260,12 +4260,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             updateHandshake()
         }
         fields.addView(instructions)
-        lateinit var choose: Button
+        lateinit var choose: ImageButton
         fun updateChoice() {
-            choose.text = "${brandString(R.string.settings_existing_wifi_select)} · " +
+            choose.contentDescription = "${brandString(R.string.settings_existing_wifi_select)} · " +
                 name.text.toString().ifEmpty { brandString(R.string.auto) }
         }
-        choose = button("", false) {
+        choose = iconButton(R.drawable.ic_dp_chevron, brandString(R.string.settings_existing_wifi_select)) {
             systemWifiPicker.show({ active }) { network ->
                 name.setText(network.ssid)
             }
@@ -4280,11 +4280,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             updateChoice()
         }
         password.doAfterTextChanged { error.visibility = View.GONE }
-        fields.addView(choose, matchButton(SETTINGS_BLOCK_GAP_DP, 60))
+        val networkInput = row().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(name, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(choose, LinearLayout.LayoutParams(dp(GlassChrome.MIN_TARGET_DP), dp(GlassChrome.MIN_TARGET_DP)).apply {
+                marginStart = dp(FidelitySettingsMetrics.CONTROL_GAP_DP)
+            })
+        }
         val wide = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
             resources.configuration.screenWidthDp >= FidelitySettingsMetrics.DIALOG_FORM_MAX_WIDTH_DP
         fields.addView((if (wide) row() else column()).apply {
-            addView(name, LinearLayout.LayoutParams(if (wide) 0 else -1, -2, if (wide) 1f else 0f))
+            addView(networkInput, LinearLayout.LayoutParams(if (wide) 0 else -1, -2, if (wide) 1f else 0f))
             addView(password, LinearLayout.LayoutParams(if (wide) 0 else -1, -2, if (wide) 1f else 0f).apply {
                 if (wide) marginStart = dp(FidelitySettingsMetrics.CONTROL_GAP_DP)
             })
