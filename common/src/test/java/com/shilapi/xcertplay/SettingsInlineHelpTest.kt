@@ -285,23 +285,21 @@ class SettingsInlineHelpTest {
             it.text == VehicleBranding.text(screen, R.string.about_diplay)
         }
         val header = title.parent as ViewGroup
-        assertEquals("Only the title and small details action remain", 2, header.childCount)
+        assertEquals("Only the title and version remain", 2, header.childCount)
+        assertFalse("The About header needs no separate help action", descendants(header).any { it is ImageButton })
         assertFalse(descendants(root(screen)).filterIsInstance<TextView>().any {
             it.text == screen.getString(R.string.carplay_at_home_in_your_car) ||
                 it.text == screen.getString(R.string.ui_glass_not_certified)
         })
-        descendants(header).filterIsInstance<ImageButton>().single().performClick()
-        var dialog = ShadowAlertDialog.getLatestAlertDialog()
-        assertTrue(descendants(dialog.window!!.decorView).filterIsInstance<TextView>().any {
-            it.text == VehicleBranding.text(screen, R.string.an_independent_carplay_receiver_for_android_head_units_wir)
-        })
-        dialog.dismiss()
         descendants(root(screen)).filterIsInstance<Button>().single {
             it.text == screen.getString(R.string.made_possible_by_open_source)
         }.performClick()
-        dialog = ShadowAlertDialog.getLatestAlertDialog()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
         assertTrue(descendants(dialog.window!!.decorView).filterIsInstance<TextView>().any {
-            it.text == VehicleBranding.text(screen, R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay)
+            it.text.contains(VehicleBranding.text(screen, R.string.an_independent_carplay_receiver_for_android_head_units_wir))
+        })
+        assertTrue(descendants(dialog.window!!.decorView).filterIsInstance<TextView>().any {
+            it.text.contains(VehicleBranding.text(screen, R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay))
         })
         dialog.dismiss()
     }

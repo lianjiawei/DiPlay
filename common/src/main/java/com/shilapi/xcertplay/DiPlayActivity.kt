@@ -1016,9 +1016,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         // Reserve the action buttons first; only the title may shrink in a narrow header.
         val titleBlock: View=if(isExpandedSettingsLayout && !settingsSearchExpanded) column().apply {
-            setPadding(dp(FidelitySettingsMetrics.CONTENT_PAD_DP),0,0,0)
+            gravity = Gravity.CENTER_VERTICAL
+            setPaddingRelative(dp(FidelitySettingsMetrics.CONTENT_PAD_DP),0,0,0)
             addView(label(brandString(R.string.settings),UiTypography.PAGE_SP,TEXT,true).apply { includeFontPadding=false })
-            addView(label(getString(R.string.app_name),UiTypography.CAPTION_SP,MUTED).apply { includeFontPadding=false })
         } else if(!isExpandedSettingsLayout && !settingsSearchExpanded)View(this@DiPlayActivity)else settingsTitle
         addView(titleBlock, LinearLayout.LayoutParams(
             if (settingsSearchExpanded) -2 else 0, controlHeight,
@@ -2777,12 +2777,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val explanation=brandString(R.string.an_independent_carplay_receiver_for_android_head_units_wir)
         val title = brandString(R.string.about_diplay)
         content.addView(column().apply {
-            addView(row().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(label(title, UiTypography.PAGE_SP, TEXT, true), LinearLayout.LayoutParams(0, -2, 1f))
-                addView(settingsHelpButton(title, explanation), LinearLayout.LayoutParams(
-                    dp(FidelitySettingsMetrics.ROW_HELP_TARGET_DP), dp(FidelitySettingsMetrics.ROW_HELP_TARGET_DP)))
-            })
+            addView(label(title, UiTypography.PAGE_SP, TEXT, true))
             addView(label(version(), UiTypography.BODY_SP, MUTED))
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
         val maintenance=card()
@@ -2799,7 +2794,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         content.addView(card().apply {
             addView(destinationRow(brandString(R.string.made_possible_by_open_source), "", R.drawable.ic_dp_about) {
                 appDialogBuilder().setTitle(brandString(R.string.made_possible_by_open_source))
-                    .setMessage(brandString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay))
+                    .setMessage(explanation + "\n\n" +
+                        brandString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay))
                     .setPositiveButton(android.R.string.ok, null).show()
             })
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
