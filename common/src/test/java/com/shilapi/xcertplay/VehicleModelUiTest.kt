@@ -181,6 +181,8 @@ class VehicleModelUiTest {
         descendants(screen.window.decorView).filterIsInstance<TextView>()
             .single { it.text.toString().startsWith("$title · ") || it.contentDescription?.toString()?.startsWith(title) == true }
             .performClick()
+        // Let WindowManager attach the dialog before native scroll indicators are drawn.
+        shadowOf(Looper.getMainLooper()).idle()
         return requireNotNull(ShadowAlertDialog.getLatestAlertDialog())
     }
 
