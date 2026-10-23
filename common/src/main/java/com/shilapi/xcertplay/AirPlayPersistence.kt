@@ -73,6 +73,7 @@ object AirPlayPersistence {
     private const val KEY_MODEL = "model"
     private const val KEY_OEM_LABEL = "oem_label"
     private const val KEY_VEHICLE_BRAND_PRESET = "vehicle_brand_preset"
+    private const val KEY_VEHICLE_MODEL = "vehicle_scene_model"
     private const val KEY_APP_APPEARANCE = "app_appearance"
     private const val KEY_CARPLAY_NIGHT_MODE = "carplay_night_mode"
     private const val KEY_CARPLAY_NIGHT_START = "carplay_night_start_minute"
@@ -698,6 +699,15 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_VEHICLE_BRAND_PRESET, preset)
             .apply()
+    }
+
+    internal fun loadVehicleModel(context: Context): VehicleModel = VehicleModel.fromKey(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_VEHICLE_MODEL, null),
+    )
+
+    internal fun saveVehicleModel(context: Context, model: VehicleModel) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_VEHICLE_MODEL, model.key).apply()
     }
 
     fun sanitizeCarPlayCornerRadiusDp(radiusDp: Int): Int {

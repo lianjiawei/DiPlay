@@ -27,7 +27,7 @@ object SettingsBackupCodec {
         "navigation_duck_db", "navigation_duck_down_ms", "navigation_duck_up_ms",
         "navigation_duck_ramp_ms", "navigation_duck_hold_ms",
         "navigation_stream_type", "wireless_enabled", "wireless_hotspot_mode", "wifi_p2p_preferred_channel", "wifi_direct_scan_pause",
-        "manual_hotspot_band", "manual_hotspot_channel", "manual_hotspot_security", "app_appearance",
+        "manual_hotspot_band", "manual_hotspot_channel", "manual_hotspot_security", "app_appearance", "vehicle_scene_model",
         "ambient_lux_threshold", "display_fps", "media_buffer_ms", "wired_media_buffer_ms", "main_buffered_audio",
         "speech_without_8_16_khz", "car_bluetooth_audio", "call_echo_cancellation", "call_voice_filter",
         "music_clock_trim",

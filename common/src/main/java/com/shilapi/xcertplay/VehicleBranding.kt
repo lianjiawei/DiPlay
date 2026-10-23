@@ -20,7 +20,7 @@ internal enum class VehicleBrandPreset(val storageValue: String) {
 
 /** User-visible vehicle identity. This never changes the CarPlay pairing identity. */
 internal object VehicleBranding {
-    private const val APP_DISPLAY_NAME = "CorsairPlay"
+    private const val APP_DISPLAY_NAME = "CarPlay"
     private val brandToken = Regex("Lincoln/Ford|林肯/福特|Lincoln|林肯")
     private val literalBrandResources = setOf(
         R.string.car_button_brand_lincoln,

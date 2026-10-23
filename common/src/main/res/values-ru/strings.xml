@@ -110,7 +110,7 @@
     <string name="a_familiar_drive">Привычная поездка.</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">Предыдущее подключение Wi-Fi Direct всё ещё активно. Сбросьте его, чтобы подключиться.</string>
     <string name="about">О программе</string>
-    <string name="about_diplay">О CorsairPlay</string>
+    <string name="about_diplay">О CarPlay</string>
     <string name="active">Активно</string>
     <string name="advanced_audio_channel_mapping">Расширенное сопоставление звуковых каналов</string>
     <string name="airplay_icon">Значок AirPlay</string>
@@ -135,7 +135,7 @@
     <string name="automatic_map_setup_adb">Автоматическая настройка карты · ADB</string>
     <string name="availability_depends_on_your_head_unit_s_startup_settings">Доступность зависит от настроек запуска вашего головного устройства.</string>
     <string name="back">Назад</string>
-    <string name="back_to_diplay">Вернуться в CorsairPlay</string>
+    <string name="back_to_diplay">Вернуться в CarPlay</string>
     <string name="band">Диапазон</string>
     <string name="bluetooth_settings">Настройки Bluetooth</string>
     <string name="byd_navigation">Навигация BYD</string>

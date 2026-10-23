@@ -77,15 +77,15 @@ class VehicleBrandingTest {
         VehicleBranding.setPreset(context, VehicleBrandPreset.FORD)
 
         assertEquals(
-            "CorsairPlay steering wheel keys",
+            "CarPlay steering wheel keys",
             VehicleBranding.localize(R.string.wheel_key_service_label, "Lincoln steering wheel keys"),
         )
         assertEquals(
-            "CorsairPlay 方向盘按键",
+            "CarPlay 方向盘按键",
             VehicleBranding.localize(R.string.wheel_key_service_label, "林肯 方向盘按键"),
         )
         assertEquals(
-            "CorsairPlay cluster",
+            "CarPlay cluster",
             VehicleBranding.localize(R.string.settings_lincoln_cluster, "Lincoln/Ford cluster"),
         )
         assertEquals(

@@ -10,14 +10,16 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.ColorDrawable
-import com.shilapi.xcertplay.host.R
 
 /** Decorative app chrome only; never placed on a media surface or an instrument output. */
 internal class SceneBackdrop(context: Context, private val night: Boolean, private val quiet: Boolean,
     private val readingShare: Float = .50f, private val fullWidthReading: () -> Boolean = { false }) :
     ColorDrawable(DiPlayPalette.of(night).background) {
     init { FidelityMaterials.install(context) }
-    private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) image(context, quiet) else null
+    private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) {
+        val model = AirPlayPersistence.loadVehicleModel(context)
+        image(context, if (quiet) model.softScene else model.scene)
+    } else null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val destination = RectF()
 
@@ -48,13 +50,15 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
     }
 
     companion object {
-        @Volatile private var cached: Bitmap? = null
-        @Volatile private var cachedSoft: Bitmap? = null
-        @Synchronized private fun image(context: Context, quiet: Boolean): Bitmap? {
-            (if (quiet) cachedSoft else cached)?.takeUnless { it.isRecycled }?.let { return it }
-            return runCatching { BitmapFactory.decodeResource(context.resources,
-                if (quiet) R.drawable.corsair_scene_soft else R.drawable.corsair_scene) }
-                .getOrNull()?.also { if (quiet) cachedSoft = it else cached = it }
+        // Do not retain six full-size photos on old head units. Eviction leaves bitmaps held
+        // by an existing drawable valid until that screen is released.
+        private val images = object : android.util.LruCache<Int, Bitmap>(16 * 1024 * 1024) {
+            override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
+        }
+        @Synchronized private fun image(context: Context, resource: Int): Bitmap? {
+            images.get(resource)?.takeUnless { it.isRecycled }?.let { return it }
+            return runCatching { BitmapFactory.decodeResource(context.resources, resource) }
+                .getOrNull()?.also { images.put(resource, it) }
         }
     }
 }

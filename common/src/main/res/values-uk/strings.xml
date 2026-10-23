@@ -103,7 +103,7 @@
     <string name="safe_area_mapping_summary">Безпечна область: %1$d x %2$d у точці (%3$d, %4$d) на екрані %5$d x %6$d</string>
     <string name="settings_android9_compat">Наведені нижче налаштування недоступні та приховані в Android 9 (API 28):\n• Wi-Fi P2P (5 ГГц) — натомість використовується LocalOnlyHotspot.\n• Програмний декодер HEVC — натомість використовується апаратне декодування.</string>
     <string name="settings_mfi_address_hint">Адреса має починатися з http:// або https://. Токен необов’язковий і надсилається як токен авторизації Bearer.</string>
-    <string name="app_name">CorsairPlay</string>
+    <string name="app_name">CarPlay</string>
     <string name="language_section_title">Мова</string>
     <string name="language_app_language">Мова застосунку</string>
     <string name="language_system_default">Мова системи</string>
@@ -113,7 +113,7 @@
     <string name="a_familiar_drive">Знайома подорож.</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">Попереднє з’єднання Wi-Fi Direct ще активне. Скиньте його, щоб підключитися.</string>
     <string name="about">Про застосунок</string>
-    <string name="about_diplay">Про CorsairPlay</string>
+    <string name="about_diplay">Про CarPlay</string>
     <string name="active">Активно</string>
     <string name="advanced_audio_channel_mapping">Розширене налаштування аудіоканалів</string>
     <string name="airplay_icon">Значок AirPlay</string>
@@ -138,7 +138,7 @@
     <string name="automatic_map_setup_adb">Автоматичне налаштування карти · ADB</string>
     <string name="availability_depends_on_your_head_unit_s_startup_settings">Доступність залежить від налаштувань запуску головного пристрою.</string>
     <string name="back">Назад</string>
-    <string name="back_to_diplay">Повернутися до CorsairPlay</string>
+    <string name="back_to_diplay">Повернутися до CarPlay</string>
     <string name="band">Діапазон</string>
     <string name="bluetooth_settings">Налаштування Bluetooth</string>
     <string name="byd_navigation">Навігація BYD</string>
@@ -203,7 +203,7 @@
     <string name="default_placeholder_icon">Типовий значок-заповнювач</string>
     <string name="diagnostic_report_saved">Діагностичний звіт збережено</string>
     <string name="diagnostics">Діагностика</string>
-    <string name="diplay">CorsairPlay</string>
+    <string name="diplay">CarPlay</string>
     <string name="discard_changes_and_exit_settings">Скасувати зміни й вийти з налаштувань</string>
     <string name="disconnect">Відключити</string>
     <string name="discovering_iphone">Пошук iPhone</string>

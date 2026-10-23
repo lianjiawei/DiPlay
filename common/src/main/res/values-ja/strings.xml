@@ -11,7 +11,7 @@
     <string name="settings_existing_wifi_connect">Wi-Fi に接続</string>
     <string name="settings_existing_wifi_connecting">Wi-Fi 接続を要求しました。システムの接続完了後に CarPlay を起動してください。</string>
     <string name="settings_existing_wifi_connect_failed">接続を要求できませんでした。Wi-Fi が有効でパスワードが正しいこと（8～63 文字）を確認するか、システムの Wi-Fi 設定で接続してください。</string>
-    <string name="app_name">CorsairPlay</string>
+    <string name="app_name">CarPlay</string>
     <string name="language_section_title">言語</string>
     <string name="language_app_language">アプリの言語</string>
     <string name="language_system_default">システムの設定に従う</string>
@@ -110,7 +110,7 @@
     <string name="a_familiar_drive">いつもの操作を車でも。</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">以前のWi-Fi Direct接続が残っています。接続するにはリセットしてください。</string>
     <string name="about">アプリ情報</string>
-    <string name="about_diplay">CorsairPlayについて</string>
+    <string name="about_diplay">CarPlayについて</string>
     <string name="active">有効</string>
     <string name="advanced_audio_channel_mapping">高度な音声チャンネル設定</string>
     <string name="airplay_icon">AirPlayアイコン</string>
@@ -138,7 +138,7 @@
     <string name="automatic_map_setup_adb">地図の自動設定 · ADB</string>
     <string name="availability_depends_on_your_head_unit_s_startup_settings">利用可否は車載端末の起動設定によって異なります。</string>
     <string name="back">戻る</string>
-    <string name="back_to_diplay">CorsairPlayに戻る</string>
+    <string name="back_to_diplay">CarPlayに戻る</string>
     <string name="band">周波数帯</string>
     <string name="bluetooth_settings">Bluetooth設定</string>
     <string name="byd_navigation">BYDナビゲーション</string>
@@ -203,7 +203,7 @@
     <string name="default_placeholder_icon">標準の仮アイコン</string>
     <string name="diagnostic_report_saved">診断レポートを保存しました</string>
     <string name="diagnostics">診断</string>
-    <string name="diplay">CorsairPlay</string>
+    <string name="diplay">CarPlay</string>
     <string name="discard_changes_and_exit_settings">変更を破棄して設定を終了</string>
     <string name="disconnect">切断</string>
     <string name="discovering_iphone">iPhoneを検索しています</string>

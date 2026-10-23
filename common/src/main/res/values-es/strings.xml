@@ -110,7 +110,7 @@
     <string name="a_familiar_drive">Un trayecto familiar.</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">Hay una conexión Wi-Fi Direct anterior todavía en ejecución. Restablécela para conectarte.</string>
     <string name="about">Acerca de</string>
-    <string name="about_diplay">Acerca de CorsairPlay</string>
+    <string name="about_diplay">Acerca de CarPlay</string>
     <string name="active">Activo</string>
     <string name="advanced_audio_channel_mapping">Asignación avanzada de canales de audio</string>
     <string name="airplay_icon">Icono de AirPlay</string>
@@ -135,7 +135,7 @@
     <string name="automatic_map_setup_adb">Configuración automática del mapa · ADB</string>
     <string name="availability_depends_on_your_head_unit_s_startup_settings">La disponibilidad depende de los ajustes de inicio de tu unidad principal.</string>
     <string name="back">Atrás</string>
-    <string name="back_to_diplay">Volver a CorsairPlay</string>
+    <string name="back_to_diplay">Volver a CarPlay</string>
     <string name="band">Banda</string>
     <string name="bluetooth_settings">Ajustes de Bluetooth</string>
     <string name="byd_navigation">Navegación BYD</string>

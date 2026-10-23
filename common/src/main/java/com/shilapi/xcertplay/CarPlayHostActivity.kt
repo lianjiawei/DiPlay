@@ -526,6 +526,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var callPopupSessionReady = false
     private var hideBydCallPopup = false
     private var paintWaitingScreen: () -> Unit = {}
+    private var paintedVehicleModel: VehicleModel? = null
     private var carPlayNightMode = CarPlayNightMode.SYSTEM
     private var nightSchedule = CarPlayNightSchedule()
     private var ambientLightThreshold = AmbientLightThreshold()
@@ -1119,6 +1120,7 @@ class CarPlayHostActivity : ComponentActivity() {
         nightModeController.resume(systemNight)
         AppAppearanceRuntime.publishHost(this, darkMode)
         refreshAppAppearance()
+        if (paintedVehicleModel != AirPlayPersistence.loadVehicleModel(this)) paintWaitingScreen()
         if (!menuOpen) {
             displayScalePercent = AirPlayPersistence.loadDisplayScalePercent(this)
             displayScaleTenths = CarPlayDisplayScale.sanitize((displayScalePercent + 5) / 10)
@@ -1944,6 +1946,7 @@ class CarPlayHostActivity : ComponentActivity() {
             visibility = View.GONE
         }
         paintWaitingScreen = {
+            paintedVehicleModel = AirPlayPersistence.loadVehicleModel(this)
             // The connection screen is DiPlay chrome: follow the app theme, not the day/night mode sent to CarPlay.
             viewport.background = SceneBackdrop(this, appNight, quiet = false,
                 readingShare = ConnectionScreenMetrics.CONTENT_SHARE, fullWidthReading = { viewport.usesFullWidthContent })

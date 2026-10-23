@@ -102,7 +102,7 @@
     <string name="safe_area_mapping_summary">Safe area: %1$d x %2$d at (%3$d, %4$d) in %5$d x %6$d</string>
     <string name="settings_android9_compat">The following settings are unavailable and hidden on Android 9 (API 28):\n• Wi-Fi P2P (5 GHz) — LocalOnlyHotspot is used instead.\n• HEVC software decoder — hardware decoding is used instead.</string>
     <string name="settings_mfi_address_hint">Address must start with http:// or https://. Token is optional and sent as an Authorization bearer token.</string>
-    <string name="app_name">CorsairPlay</string>
+    <string name="app_name">CarPlay</string>
     <string name="language_section_title">Language</string>
     <string name="language_app_language">App language</string>
     <string name="language_system_default">System default</string>
@@ -112,7 +112,7 @@
     <string name="a_familiar_drive">A familiar drive.</string>
     <string name="a_previous_wi_fi_direct_connection_is_still_running_reset">A previous Wi-Fi Direct connection is still running. Reset it to connect.</string>
     <string name="about">About</string>
-    <string name="about_diplay">About CorsairPlay</string>
+    <string name="about_diplay">About CarPlay</string>
     <string name="active">Active</string>
     <string name="advanced_audio_channel_mapping">Advanced audio channel mapping</string>
     <string name="airplay_icon">AirPlay icon</string>
@@ -140,7 +140,7 @@
     <string name="automatic_map_setup_adb">Automatic map setup · ADB</string>
     <string name="availability_depends_on_your_head_unit_s_startup_settings">Availability depends on your head unit’s startup settings.</string>
     <string name="back">Back</string>
-    <string name="back_to_diplay">Back to CorsairPlay</string>
+    <string name="back_to_diplay">Back to CarPlay</string>
     <string name="band">Band</string>
     <string name="bluetooth_settings">Bluetooth settings</string>
     <string name="byd_navigation">BYD navigation</string>
@@ -205,7 +205,7 @@
     <string name="default_placeholder_icon">Default placeholder icon</string>
     <string name="diagnostic_report_saved">Diagnostic report saved</string>
     <string name="diagnostics">Diagnostics</string>
-    <string name="diplay">CorsairPlay</string>
+    <string name="diplay">CarPlay</string>
     <string name="discard_changes_and_exit_settings">Discard changes and exit settings</string>
     <string name="disconnect">Disconnect</string>
     <string name="discovering_iphone">Discovering iPhone</string>

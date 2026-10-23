@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.shilapi.xcertplay.host.R
 import kotlin.math.roundToInt
 
 /** The approved photo-backed footer: a readable wordmark between two balanced rules. */
@@ -23,7 +24,7 @@ internal class HomeBrandView(context: Context) : LinearLayout(context) {
         val lineHeight = (ReferenceHomeMetrics.BRAND_RULE_DP * density).roundToInt().coerceAtLeast(1)
         addView(rule(), LayoutParams(0, lineHeight, 1f).apply { marginEnd = gap })
         addView(TextView(context).apply {
-            text = "CorsairPlay"
+            text = context.getString(R.string.app_name)
             textSize = ReferenceHomeMetrics.BRAND_TEXT_SP
             letterSpacing = .12f
             gravity = Gravity.CENTER

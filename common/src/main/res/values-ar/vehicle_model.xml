@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_vehicle_appearance">مظهر السيارة</string>
+    <string name="settings_vehicle_model">خلفية طراز السيارة</string>
+    <string name="settings_vehicle_corsair">Corsair</string>
+    <string name="settings_vehicle_nautilus">Nautilus</string>
+    <string name="settings_vehicle_aviator">Aviator</string>
+</resources>

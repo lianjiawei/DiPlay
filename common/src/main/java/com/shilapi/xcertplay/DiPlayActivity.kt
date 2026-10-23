@@ -115,6 +115,7 @@ internal enum class SettingsCategory {
 
 /** A settings card. Every entry needs one category in [SettingsInformationArchitecture]; see AGENTS.md. */
 internal enum class SettingsSection {
+    VEHICLE_APPEARANCE,
     CARPLAY_CONTROLS,
     WHEEL_KEYS,
     CONNECTION_SETUP,
@@ -157,6 +158,7 @@ internal object SettingsInformationArchitecture {
             SettingsSection.LINCOLN_CLUSTER,
         ),
         SettingsCategory.VEHICLE to setOf(
+            SettingsSection.VEHICLE_APPEARANCE,
             SettingsSection.CARPLAY_CONTROLS,
             SettingsSection.WHEEL_KEYS,
             SettingsSection.CAR_BUTTON,
@@ -1016,7 +1018,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val titleBlock: View=if(isExpandedSettingsLayout && !settingsSearchExpanded) column().apply {
             setPadding(dp(FidelitySettingsMetrics.CONTENT_PAD_DP),0,0,0)
             addView(label(brandString(R.string.settings),UiTypography.PAGE_SP,TEXT,true).apply { includeFontPadding=false })
-            addView(label("CorsairPlay",UiTypography.CAPTION_SP,MUTED).apply { includeFontPadding=false })
+            addView(label(getString(R.string.app_name),UiTypography.CAPTION_SP,MUTED).apply { includeFontPadding=false })
         } else if(!isExpandedSettingsLayout && !settingsSearchExpanded)View(this@DiPlayActivity)else settingsTitle
         addView(titleBlock, LinearLayout.LayoutParams(
             if (settingsSearchExpanded) -2 else 0, controlHeight,
@@ -1927,6 +1929,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
+        if (VehicleBranding.preset(this) == VehicleBrandPreset.LINCOLN) {
+            filteredSection(content, SettingsSection.VEHICLE_APPEARANCE,
+                brandString(R.string.settings_vehicle_appearance), R.drawable.ic_dp_car) { card ->
+                val models = VehicleModel.entries
+                choice(card, brandString(R.string.settings_vehicle_model),
+                    models.map { brandString(it.label) }, models.indexOf(AirPlayPersistence.loadVehicleModel(this)),
+                    reconnects = false) { index ->
+                    AirPlayPersistence.saveVehicleModel(this, models[index])
+                    render()
+                }
+            }
+        }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             brandString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
             val gestureFingers = listOf(0, 2, 3, 4)
