@@ -2777,8 +2777,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val explanation=brandString(R.string.an_independent_carplay_receiver_for_android_head_units_wir)
         val title = brandString(R.string.about_diplay)
         content.addView(column().apply {
-            addView(label(title, UiTypography.PAGE_SP, TEXT, true))
-            addView(label(version(), UiTypography.BODY_SP, MUTED))
+            addView(label(title, UiTypography.PAGE_SP, TEXT, true).apply {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            })
+            addView(label(version(), UiTypography.BODY_SP, MUTED).apply {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            })
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
         val maintenance=card()
         maintenance.addView(updateRow())
