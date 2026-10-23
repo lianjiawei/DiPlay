@@ -3,7 +3,8 @@
     <string name="settings_existing_wifi_handshake">Спосіб підключення</string>
     <string name="settings_existing_wifi_reuse">Поточна Wi-Fi (без пароля)</string>
     <string name="settings_existing_wifi_compatibility">Сумісне підключення (з паролем)</string>
-    <string name="settings_existing_wifi_compatibility_description">Передає назву мережі та пароль WPA2 на iPhone через Bluetooth за початковою процедурою. Обидва пристрої мають бути в одній мережі. Зміни діють з наступного підключення.</string>
+    <string name="settings_existing_wifi_reuse_description">Спершу підключіть обидва пристрої до однієї Wi-Fi. Зміни діють з наступного підключення.</string>
+    <string name="settings_existing_wifi_compatibility_description">Передає назву мережі та пароль WPA2 на iPhone через Bluetooth. Зміни діють з наступного підключення.</string>
     <string name="settings_existing_wifi_password_required">Введіть пароль WPA2 поточної Wi-Fi (8–63 символи).</string>
     <string name="settings_existing_wifi_compatibility_name_hint">Виберіть або введіть назву мережі, до якої підключено приймач. Після зміни мережі введіть пароль знову.</string>
     <string name="settings_existing_wifi_manual">Ввести мережу вручну</string>

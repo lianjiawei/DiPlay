@@ -2,7 +2,8 @@
     <string name="settings_existing_wifi_handshake">连接方式</string>
     <string name="settings_existing_wifi_reuse">复用当前 Wi-Fi（免密码）</string>
     <string name="settings_existing_wifi_compatibility">兼容连接（输入密码）</string>
-    <string name="settings_existing_wifi_compatibility_description">通过蓝牙将网络名和 WPA2 密码发送给 iPhone，使用原来的连接流程。两台设备应连接同一网络；保存后下次连接生效。</string>
+    <string name="settings_existing_wifi_reuse_description">车机和 iPhone 需先连上同一 Wi-Fi；保存后下次连接生效。</string>
+    <string name="settings_existing_wifi_compatibility_description">通过蓝牙将网络名与 WPA2 密码发送给 iPhone；保存后下次连接生效。</string>
     <string name="settings_existing_wifi_password_required">请输入当前 Wi-Fi 的 WPA2 密码（8–63 个字符）。</string>
     <string name="settings_existing_wifi_compatibility_name_hint">选择或输入车机当前连接的网络名。切换网络后请重新填写密码。</string>
     <string name="settings_existing_wifi_manual">手动连接网络</string>

@@ -79,6 +79,7 @@ class ExistingWifiSettingsTest {
         val fields = descendants(details.window!!.decorView).filterIsInstance<EditText>().toList()
         val name = fields.single { it.hint == app.getString(R.string.existing_wifi_ssid) }
         val password = fields.single { it.hint == app.getString(R.string.existing_wifi_password) }
+        assertTrue("Passwords stay masked after setting single-line input", password.transformationMethod is android.text.method.PasswordTransformationMethod)
         descendants(details.window!!.decorView).filterIsInstance<Button>().single {
             it.text.startsWith(app.getString(R.string.settings_existing_wifi_handshake) + " · ")
         }.performClick()
@@ -106,6 +107,13 @@ class ExistingWifiSettingsTest {
         controls().filterIsInstance<Button>().first { it.text.contains("Choose system Wi-Fi") }.performClick()
         shadowOf(Looper.getMainLooper()).idle()
         val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        descendants(dialog.window!!.decorView).filterIsInstance<EditText>().single {
+            it.hint == app.getString(R.string.existing_wifi_ssid)
+        }.setText("Router")
+        assertEquals("Re-selecting the same network keeps its staged password", "router-password",
+            descendants(dialog.window!!.decorView).filterIsInstance<EditText>().single {
+                it.hint == app.getString(R.string.existing_wifi_password)
+            }.text.toString())
         descendants(dialog.window!!.decorView).filterIsInstance<EditText>().single {
             it.hint == app.getString(R.string.existing_wifi_password)
         }.setText("another-password")

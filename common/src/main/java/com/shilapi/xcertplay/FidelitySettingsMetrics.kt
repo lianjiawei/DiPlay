@@ -4,6 +4,7 @@ internal object FidelitySettingsMetrics {
     const val DIALOG_ACTION_DP=48
     const val DIALOG_ACTION_MIN_WIDTH_DP=96
     const val DIALOG_ACTION_MAX_WIDTH_DP=160
+    const val DIALOG_FORM_MAX_WIDTH_DP=560
     const val DIALOG_ACTION_HORIZONTAL_PAD_DP=16
     const val DIALOG_ACTION_VERTICAL_PAD_DP=6
     const val DIALOG_HINT_DP=56

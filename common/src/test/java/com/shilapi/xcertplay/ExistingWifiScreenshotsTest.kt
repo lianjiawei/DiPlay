@@ -122,7 +122,8 @@ class ExistingWifiScreenshotsTest {
     private fun capture(dialog: AlertDialog, name: String, width: Int, height: Int) {
         shadowOf(android.os.Looper.getMainLooper()).idle()
         val decor = dialog.window!!.decorView
-        decor.measure(View.MeasureSpec.makeMeasureSpec(width - 32, View.MeasureSpec.EXACTLY),
+        val dialogWidth = dialog.window!!.attributes.width.takeIf { it > 0 } ?: (width - 32)
+        decor.measure(View.MeasureSpec.makeMeasureSpec(dialogWidth, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(height - 16, View.MeasureSpec.AT_MOST))
         decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
         val save = dialog.getButton(AlertDialog.BUTTON_POSITIVE).takeIf { it.visibility == View.VISIBLE }

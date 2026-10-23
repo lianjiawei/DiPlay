@@ -3,7 +3,8 @@
     <string name="settings_existing_wifi_handshake">Método de conexión</string>
     <string name="settings_existing_wifi_reuse">Usar Wi-Fi actual (sin contraseña)</string>
     <string name="settings_existing_wifi_compatibility">Conexión compatible (con contraseña)</string>
-    <string name="settings_existing_wifi_compatibility_description">Envía el nombre de red y la contraseña WPA2 al iPhone por Bluetooth con el proceso de conexión original. Ambos dispositivos deben usar la misma red. Los cambios guardados se aplican en la próxima conexión.</string>
+    <string name="settings_existing_wifi_reuse_description">Conecta ambos dispositivos al mismo Wi-Fi. Los cambios guardados se aplican en la próxima conexión.</string>
+    <string name="settings_existing_wifi_compatibility_description">Envía el nombre de red y la contraseña WPA2 al iPhone por Bluetooth. Los cambios guardados se aplican en la próxima conexión.</string>
     <string name="settings_existing_wifi_password_required">Introduce la contraseña WPA2 del Wi-Fi actual (8–63 caracteres).</string>
     <string name="settings_existing_wifi_compatibility_name_hint">Selecciona o introduce la red a la que está conectado el receptor. Vuelve a introducir la contraseña al cambiar de red.</string>
     <string name="settings_existing_wifi_manual">Introducir red manualmente</string>

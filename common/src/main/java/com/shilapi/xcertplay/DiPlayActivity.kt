@@ -4229,25 +4229,29 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             hint = brandString(R.string.existing_wifi_ssid)
             setText(current?.ssid ?: savedName)
             setSingleLine()
+            textSize = UiTypography.ROW_SP.toFloat()
+            minHeight = dp(GlassChrome.MIN_TARGET_DP)
             imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
         }
         val password = EditText(appDialogContext()).apply {
             hint = brandString(R.string.existing_wifi_password)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine()
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            textSize = UiTypography.ROW_SP.toFloat()
+            minHeight = dp(GlassChrome.MIN_TARGET_DP)
             imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
             if (legacyHandshake && name.text.toString() == savedName)
                 setText(AirPlayPersistence.loadExistingWifiPassphrase(this@DiPlayActivity))
         }
-        val nameHint = label("", UiTypography.BODY_SP, MUTED).apply {
-            setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
+        val error = label("", 14, WARNING).apply {
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            visibility = View.GONE
         }
         fun updateHandshake() {
             instructions.text = brandString(if (legacyHandshake) R.string.settings_existing_wifi_compatibility_description
-                else R.string.existing_wifi_instructions)
-            nameHint.text = brandString(if (legacyHandshake) R.string.settings_existing_wifi_compatibility_name_hint
-                else R.string.settings_existing_wifi_name_hint)
+                else R.string.settings_existing_wifi_reuse_description)
             password.visibility = if (legacyHandshake) View.VISIBLE else View.GONE
+            error.visibility = View.GONE
         }
         choice(fields, brandString(R.string.settings_existing_wifi_handshake), listOf(
             brandString(R.string.settings_existing_wifi_reuse), brandString(R.string.settings_existing_wifi_compatibility),
@@ -4267,14 +4271,25 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
         }
         updateChoice()
-        name.doAfterTextChanged { password.text.clear(); updateChoice() }
+        var passwordNetwork = name.text.toString()
+        name.doAfterTextChanged {
+            val selectedName = name.text.toString()
+            if (selectedName != passwordNetwork) password.text.clear()
+            passwordNetwork = selectedName
+            error.visibility = View.GONE
+            updateChoice()
+        }
+        password.doAfterTextChanged { error.visibility = View.GONE }
         fields.addView(choose, matchButton(SETTINGS_BLOCK_GAP_DP, 60))
-        fields.addView(nameHint)
-        fields.addView(name)
-        fields.addView(password)
+        val wide = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+            resources.configuration.screenWidthDp >= FidelitySettingsMetrics.DIALOG_FORM_MAX_WIDTH_DP
+        fields.addView((if (wide) row() else column()).apply {
+            addView(name, LinearLayout.LayoutParams(if (wide) 0 else -1, -2, if (wide) 1f else 0f))
+            addView(password, LinearLayout.LayoutParams(if (wide) 0 else -1, -2, if (wide) 1f else 0f).apply {
+                if (wide) marginStart = dp(FidelitySettingsMetrics.CONTROL_GAP_DP)
+            })
+        })
         updateHandshake()
-        fields.addView(label(brandString(R.string.saved_for_your_next_connection), 15, MUTED))
-        val error = label("", 14, WARNING).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         fields.addView(error)
         val dialog = appDialogBuilder().setTitle(R.string.existing_wifi_details)
             .setView(ScrollView(appDialogContext()).apply { addView(fields) })
@@ -4289,7 +4304,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     ssid.isEmpty() && !legacyHandshake -> null
                     else -> hotspotError(ssid, passphrase)
                 }
-                if (problem != null) error.text = problem else {
+                if (problem != null) {
+                    error.text = problem
+                    error.visibility = View.VISIBLE
+                } else {
                     AirPlayPersistence.saveExistingWifiCredentials(this, ssid, passphrase, legacyHandshake)
                     markReconnectNeeded()
                     dialog.dismiss()
@@ -4298,6 +4316,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
         }
         dialog.show()
+        dialog.window?.setLayout(dp(minOf(FidelitySettingsMetrics.DIALOG_FORM_MAX_WIDTH_DP,
+            resources.configuration.screenWidthDp - 2 * FidelitySettingsMetrics.CONTENT_PAD_DP)
+            .coerceAtLeast(FidelitySettingsMetrics.DIALOG_ACTION_MIN_WIDTH_DP)), -2)
     }
 
     private fun askHotspotCredentials(done: (String, String, ManualHotspotSecurity) -> Unit) {

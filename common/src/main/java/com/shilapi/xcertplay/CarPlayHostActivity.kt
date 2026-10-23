@@ -4461,7 +4461,7 @@ class CarPlayHostActivity : ComponentActivity() {
         lateinit var passwordInput: EditText
         fun updateHandshake() {
             existingInstructions.text = brandString(if (existingWifiLegacyHandshake)
-                R.string.settings_existing_wifi_compatibility_description else R.string.existing_wifi_instructions)
+                R.string.settings_existing_wifi_compatibility_description else R.string.settings_existing_wifi_reuse_description)
             existingNameHint.text = brandString(if (existingWifiLegacyHandshake)
                 R.string.settings_existing_wifi_compatibility_name_hint else R.string.settings_existing_wifi_name_hint)
             legacyPasswordRow.visibility = if (existingWifiLegacyHandshake) View.VISIBLE else View.GONE
