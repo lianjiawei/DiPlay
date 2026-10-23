@@ -41,19 +41,20 @@ internal class GlassMaterialDrawable(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
     private val target = RectF()
+    private val silhouette = Path()
 
     override fun draw(canvas: Canvas) {
         val pill = bounds.height() <= cornerRadius * 2.2f && bounds.width() >= bounds.height() * 1.3f
         val eligible = Color.blue(fill) >= Color.red(fill) && (!primary || androidx.core.graphics.ColorUtils.calculateLuminance(fill) > .20)
         val bitmap = if (pill && eligible) FidelityMaterials.image(if (primary) R.drawable.glass_primary_material else R.drawable.glass_secondary_material) else null
         if (bitmap == null) { super.draw(canvas); return }
-        if(primary) {
-            val glow=Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color=Color.argb(130*alpha/255,20,116,255)
-                setShadowLayer(bounds.height()*.12f,0f,bounds.height()*.05f,Color.argb(190*alpha/255,0,110,255))
-            }
-            canvas.drawRoundRect(RectF(bounds),cornerRadius,cornerRadius,glow)
-        }
+        // The raster includes blue light outside its pill. Keep every slice inside the actual
+        // button silhouette, instead of exposing its rectangular image/shadow bounds at the ends.
+        val checkpoint = canvas.save()
+        target.set(bounds)
+        silhouette.reset()
+        silhouette.addRoundRect(target, cornerRadius, cornerRadius, Path.Direction.CW)
+        canvas.clipPath(silhouette)
         // Preserve the generated round ends while stretching just the straight centre.
         val body = if (primary) Rect(160, 255, 1773, 554) else Rect(117, 230, 1867, 563)
         val cap = body.height() / 2
@@ -68,5 +69,6 @@ internal class GlassMaterialDrawable(
         slice(body.left, body.left + cap, bounds.left.toFloat(), bounds.left + capWidth)
         slice(body.left + cap, body.right - cap, bounds.left + capWidth, bounds.right - capWidth)
         slice(body.right - cap, body.right, bounds.right - capWidth, bounds.right.toFloat())
+        canvas.restoreToCount(checkpoint)
     }
 }

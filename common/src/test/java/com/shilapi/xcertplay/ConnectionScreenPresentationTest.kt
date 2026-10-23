@@ -38,6 +38,9 @@ class ConnectionScreenPresentationTest {
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-mdpi")
     fun compactWaitingScreenWithLargeText() = capture("compact-zh")
 
+    @Test @Config(qualifiers = "zh-rCN-w400dp-h840dp-port-mdpi")
+    fun tallPortraitKeepsActionsNearTheBottom() = capture("portrait-zh")
+
     @Test @Config(qualifiers = "ar-ldrtl-w320dp-h600dp-port-mdpi")
     fun compactWaitingScreenWithLargeRtlText() = capture("compact-ar-rtl")
 
@@ -112,12 +115,13 @@ class ConnectionScreenPresentationTest {
                     startupFailure = WirelessStartupFailure.FIRST_TCP_TIMEOUT)
                 ReflectionHelpers.callInstanceMethod<Unit>(host, "showConnectionHelp",
                     ReflectionHelpers.ClassParameter.from(CarPlayStatus.Failed::class.java, failure))
-                repeat(6) {
+                fun layout() = repeat(6) {
                     descendants(root).forEach { it.forceLayout() }
                     root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                         View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
                     root.layout(0, 0, width, height)
                 }
+                layout()
                 val visibleText = descendants(panel).filterIsInstance<TextView>().filter { it.visibility == View.VISIBLE }.toList()
                 val fullHelp = host.getString(R.string.connection_help_existing_wifi)
                 assertFalse("Detailed troubleshooting stays off the waiting screen", visibleText.any { it.text.toString() == fullHelp })
@@ -147,6 +151,43 @@ class ConnectionScreenPresentationTest {
                 }
                 assertTrue("Headline must clear the brand header", bounds(headline).top >= bounds(title).bottom)
                 assertTrue("Actions stay on screen", bounds(row).bottom <= height + 1)
+                assertEquals("Bottom actions keep their safe margin", height - ConnectionScreenMetrics.BOTTOM_DP * density,
+                    bounds(row).bottom, 1f)
+                val stage = ReflectionHelpers.getField<TextView>(host, "stageStatusView")
+                val instructions = ReflectionHelpers.getField<TextView>(host, "connectionInstructionsView")
+                val ring = ReflectionHelpers.getField<View>(host, "connectionRing")
+                val originalStage = stage.text
+                val originalHint = hint.text
+                val originalStageHeight = stage.height
+                val originalHintHeight = hint.height
+                val headlineTop = bounds(headline).top
+                val ringTop = bounds(ring).top
+                val actionTop = bounds(row).top
+                for (stageId in ConnectionScreenCopy.stages) {
+                    stage.text = VehicleBranding.text(host, stageId)
+                    layout()
+                    assertEquals("Status variants reserve the same height", originalStageHeight, stage.height)
+                    assertEquals("Headline must not jump", headlineTop, bounds(headline).top, 1f)
+                    assertEquals("Ring must not jump", ringTop, bounds(ring).top, 1f)
+                    assertEquals("Footer must not jump", actionTop, bounds(row).top, 1f)
+                }
+                stage.text = originalStage
+                for (hintId in ConnectionScreenCopy.hints) {
+                    hint.text = VehicleBranding.text(host, hintId)
+                    layout()
+                    assertEquals("Hints reserve the same height", originalHintHeight, hint.height)
+                    assertEquals(headlineTop, bounds(headline).top, 1f)
+                    assertEquals(ringTop, bounds(ring).top, 1f)
+                }
+                hint.visibility = View.GONE
+                instructions.visibility = View.VISIBLE
+                layout()
+                assertEquals("Normal and error hints share the same slot", originalHintHeight, instructions.height)
+                assertEquals(headlineTop, bounds(headline).top, 1f)
+                instructions.visibility = View.GONE
+                hint.visibility = View.VISIBLE
+                hint.text = originalHint
+                layout()
                 for (text in visibleText) {
                     val layout = text.layout ?: continue
                     val room = text.height - text.compoundPaddingTop - text.compoundPaddingBottom

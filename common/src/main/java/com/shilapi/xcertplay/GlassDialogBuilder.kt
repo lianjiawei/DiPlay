@@ -41,19 +41,26 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
             dialog.getButton(id)?.apply {
                 val primary=id==AlertDialog.BUTTON_POSITIVE
                 isAllCaps=false;textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
+                minimumHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
                 setSingleLine(false)
-                minWidth=dp(96);setPadding(dp(20),dp(8),dp(20),dp(8))
+                minWidth=dp(FidelitySettingsMetrics.DIALOG_ACTION_MIN_WIDTH_DP)
+                setPadding(dp(FidelitySettingsMetrics.DIALOG_ACTION_HORIZONTAL_PAD_DP),dp(FidelitySettingsMetrics.DIALOG_ACTION_VERTICAL_PAD_DP),
+                    dp(FidelitySettingsMetrics.DIALOG_ACTION_HORIZONTAL_PAD_DP),dp(FidelitySettingsMetrics.DIALOG_ACTION_VERTICAL_PAD_DP))
+                stateListAnimator=null;elevation=0f;backgroundTintList=null
                 setTextColor(GlassChrome.textColors(if(primary)palette.onAccent else palette.primaryText,palette.surface))
                 val fill=if(primary)palette.accent else palette.button
                 val radius=GlassChrome.radius(dp(FidelitySettingsMetrics.DIALOG_ACTION_DP),density)
                 val normal=GlassChrome.surface(fill,palette.outline,density,radius,primary=primary)
                 val disabled=GlassChrome.surface(fill,palette.outline,density,radius,primary=primary).apply { alpha=112 }
+                val rippleMask=android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.WHITE);cornerRadius=radius
+                }
                 background=android.graphics.drawable.StateListDrawable().apply {
                     addState(intArrayOf(-android.R.attr.state_enabled),disabled)
-                    addState(intArrayOf(),RippleDrawable(ColorStateList.valueOf(palette.ripple),normal,null))
+                    addState(intArrayOf(),RippleDrawable(ColorStateList.valueOf(palette.ripple),normal,rippleMask))
                 }
                 addOnLayoutChangeListener { view,_,_,_,_,_,_,_,_ ->
-                    normal.cornerRadius=view.height/2f;disabled.cornerRadius=view.height/2f
+                    normal.cornerRadius=view.height/2f;disabled.cornerRadius=view.height/2f;rippleMask.cornerRadius=view.height/2f
                 }
             }
         }

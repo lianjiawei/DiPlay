@@ -1837,21 +1837,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         root.addView(video, FrameLayout.LayoutParams(-1, -1))
         root.addView(gestureLayer, FrameLayout.LayoutParams(-1, -1))
-        // Measure the preparation content naturally, then fit it inside the safe viewport.
-        val viewport = object : FrameLayout(this) {
-            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-                getChildAt(0)?.measure(
-                    View.MeasureSpec.makeMeasureSpec(
-                        ((measuredWidth - paddingLeft - paddingRight).coerceAtLeast(0) *
-                            if (measuredWidth > measuredHeight * 1.3f) CONNECTION_CONTENT_SHARE else 1f).toInt(),
-                        View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                )
-            }
-        }.apply {
-            isClickable = true
-        }
+        val viewport = ConnectionPreparationLayout(this)
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -1880,12 +1866,12 @@ class CarPlayHostActivity : ComponentActivity() {
             text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=UiTypography.ROW_SP.toFloat();gravity=Gravity.CENTER
         }
         panel.addView(phone)
-        val stage = TextView(this).apply {
+        val stage = StableConnectionTextView(this, ConnectionScreenCopy.stages).apply {
             text = brandString(R.string.getting_carplay_ready)
             gravity = Gravity.CENTER
         }
         panel.addView(stage)
-        val instructions = TextView(this).apply {
+        val instructions = StableConnectionTextView(this, ConnectionScreenCopy.hints).apply {
             text = brandString(when {
                 !wirelessEnabled -> R.string.ui_connection_hint_usb
                 wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI -> R.string.ui_connection_hint_same_wifi
@@ -1893,12 +1879,15 @@ class CarPlayHostActivity : ComponentActivity() {
             })
             gravity = Gravity.CENTER
         }
-        panel.addView(instructions)
-        val help = TextView(this).apply {
+        val help = StableConnectionTextView(this, ConnectionScreenCopy.hints).apply {
             gravity = Gravity.CENTER
             visibility = View.GONE
         }
-        panel.addView(help)
+        val hintArea = FrameLayout(this).apply {
+            addView(instructions, FrameLayout.LayoutParams(-1, -2))
+            addView(help, FrameLayout.LayoutParams(-1, -2))
+        }
+        panel.addView(hintArea, LinearLayout.LayoutParams(-1, -2))
         val recovery = DiPlayButton(this).apply {
             text = brandString(R.string.reset_carplay_wi_fi)
             visibility = View.GONE
@@ -1944,7 +1933,6 @@ class CarPlayHostActivity : ComponentActivity() {
             })
             addView(connectionHelp, LinearLayout.LayoutParams(0, -2, 1f))
         }
-        panel.addView(actions, LinearLayout.LayoutParams(dp(CONNECTION_ACTION_WIDTH_DP), -2))
         val gestureHint = TextView(this).apply {
             text = settingsGestureHintText()
             gravity = Gravity.CENTER
@@ -1953,7 +1941,7 @@ class CarPlayHostActivity : ComponentActivity() {
         panel.addView(gestureHint)
         paintWaitingScreen = {
             // The connection screen is DiPlay chrome: follow the app theme, not the day/night mode sent to CarPlay.
-            viewport.background = SceneBackdrop(this, appNight, quiet = false, readingShare = CONNECTION_CONTENT_SHARE)
+            viewport.background = SceneBackdrop(this, appNight, quiet = false, readingShare = ConnectionScreenMetrics.CONTENT_SHARE)
             ring.appearance(appNight)
             icon.appearance(appNight)
             for (text in listOf(title, headline, phone, stage)) SceneText.apply(text, appNight)
@@ -1965,10 +1953,7 @@ class CarPlayHostActivity : ComponentActivity() {
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
-        viewport.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.LEFT or Gravity.CENTER_VERTICAL))
-        viewport.addView(brandHeader,FrameLayout.LayoutParams(-2,dp(44),Gravity.TOP or Gravity.LEFT).apply {
-            leftMargin=dp(24);topMargin=dp(16)
-        })
+        viewport.bind(panel, brandHeader, actions)
         root.addView(viewport, FrameLayout.LayoutParams(-1, -1))
         // Added after the preparation viewport so the existing video/gesture/viewport order stays stable.
         root.addView(cornerMask, FrameLayout.LayoutParams(0, 0))
@@ -2015,18 +2000,17 @@ class CarPlayHostActivity : ComponentActivity() {
         sidePanel = buildSidePanel().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         sidePanelTab = buildSidePanelTab().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         var preparationHeight = -1
-        var naturalRingSize = dp(120)
         fun updatePreparationLayout() {
-            val height = viewport.height - viewport.paddingTop - viewport.paddingBottom
+            val height = viewport.contentScroll.height
             if (height <= 0) return
             // Interpolate within the short viewport range; keep regular screens at their existing size.
             val fraction = ((height.toFloat() / resources.displayMetrics.density - 240f) / 240f).coerceIn(0f, 1f)
             fun size(short: Float, regular: Float) = short + (regular - short) * fraction
             fun spacing(short: Float, regular: Float) = dp(size(short, regular).toInt())
-            val contentShare = if (viewport.width > viewport.height * 1.3f) CONNECTION_CONTENT_SHARE else 1f
+            val contentShare = if (viewport.width > viewport.height * 1.3f) ConnectionScreenMetrics.CONTENT_SHARE else 1f
             val availableWidth = ((viewport.width - viewport.paddingLeft - viewport.paddingRight) * contentShare).toInt() - dp(48)
-            val buttonWidth = minOf(dp(CONNECTION_ACTION_WIDTH_DP), availableWidth.coerceAtLeast(dp(GlassChrome.MIN_TARGET_DP)))
-            for (button in listOf(actions, recovery, retry)) {
+            val buttonWidth = minOf(dp(ConnectionScreenMetrics.ACTION_WIDTH_DP), availableWidth.coerceAtLeast(dp(GlassChrome.MIN_TARGET_DP)))
+            for (button in listOf(recovery, retry)) {
                 if (button.layoutParams.width != buttonWidth) {
                     button.layoutParams = button.layoutParams.apply { width = buttonWidth }
                 }
@@ -2035,7 +2019,6 @@ class CarPlayHostActivity : ComponentActivity() {
             preparationHeight = height
             panel.setPadding(dp(24), spacing(16f, 32f), dp(24), spacing(16f, 32f))
             val iconSize = spacing(54f, 120f)
-            naturalRingSize = iconSize
             ring.layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
             title.textSize=22f
             headline.textSize=size(22f,UiTypography.COMPACT_PAGE_SP.toFloat())
@@ -2043,8 +2026,8 @@ class CarPlayHostActivity : ComponentActivity() {
             stage.textSize=UiTypography.BODY_SP.toFloat()
             instructions.textSize = size(13f,14f)
             instructions.setPadding(0, spacing(4f,8f),0,spacing(8f,12f))
-            help.textSize = UiTypography.BODY_SP.toFloat()
-            help.setPadding(0, spacing(8f, 14f), 0, spacing(12f, 24f))
+            help.textSize = size(13f,14f)
+            help.setPadding(0, instructions.paddingTop, 0, instructions.paddingBottom)
             for (button in listOf(back, connectionHelp, recovery, retry)) {
                 button.textSize = UiTypography.ACTION_SP.toFloat()
                 button.minHeight=dp(GlassChrome.MIN_TARGET_DP)
@@ -2054,27 +2037,10 @@ class CarPlayHostActivity : ComponentActivity() {
             gestureHint.textSize = size(12.5f, 13f)
             gestureHint.setPadding(0, spacing(10f, 20f), 0, 0)
         }
-        fun fitPreparationContent() {
-            val availableHeight = viewport.height - viewport.paddingTop - viewport.paddingBottom
-            if (panel.height <= 0 || availableHeight <= 0) return
-            // Reserve the brand header in portrait too, including narrow windows with large type.
-            val contentHeight = (availableHeight - dp(CONNECTION_HEADER_RESERVE_DP)).coerceAtLeast(dp(100))
-            val otherHeight = panel.height - ring.height
-            val ringSize = (contentHeight - otherHeight).coerceIn(dp(GlassChrome.MIN_TARGET_DP), naturalRingSize)
-            if (ring.layoutParams.height != ringSize) {
-                ring.layoutParams = ring.layoutParams.apply { width = ringSize; height = ringSize }
-                return
-            }
-            val scale = minOf(1f, contentHeight.toFloat() / panel.height)
-            panel.scaleX = scale
-            panel.scaleY = scale
-            panel.translationY = dp(CONNECTION_HEADER_RESERVE_DP).toFloat() / 2f
-        }
-        panel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitPreparationContent() }
         viewport.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             updatePreparationLayout()
-            fitPreparationContent()
         }
+        viewport.contentScroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updatePreparationLayout() }
         ViewCompat.setOnApplyWindowInsetsListener(viewport) { _, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             viewport.setPadding(safe.left, safe.top, safe.right, safe.bottom)
@@ -6710,9 +6676,6 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private companion object {
-        private const val CONNECTION_CONTENT_SHARE = .60f
-        private const val CONNECTION_ACTION_WIDTH_DP = 360
-        private const val CONNECTION_HEADER_RESERVE_DP = 64
         private const val CONNECTION_VISUAL_POLL_MILLIS = 100L
         const val CLUSTER_SMALL_WINDOW_ON = 1
         const val CLUSTER_SMALL_WINDOW_AUTO = 2

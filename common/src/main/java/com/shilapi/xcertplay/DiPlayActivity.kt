@@ -34,6 +34,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
@@ -234,6 +235,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var settingsSearchExpanded = false
     private var settingsSearchIndexing = false
     private var settingsSearchRestoreFocus = false
+    private var settingsSearchOutsideTouch: EditText? = null
     private var renderedReadiness: SettingsReadiness? = null
     private var renderedPage: String? = null
     private var renderedSettingsCategory: SettingsCategory? = null
@@ -519,6 +521,36 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (updateInterfaceSize(newConfig)) return
         refreshAppearance()
         render()
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            settingsSearchOutsideTouch = settingsSearchBox?.takeIf { box ->
+                page == "settings" && settingsSearchExpanded &&
+                    !box.containsScreenPoint(event.rawX, event.rawY) &&
+                    settingsSearchPopup?.takeIf { it.isShowing }?.contentView
+                        ?.containsScreenPoint(event.rawX, event.rawY) != true
+            }
+        }
+        val outside = settingsSearchOutsideTouch.takeIf { event.actionMasked == MotionEvent.ACTION_UP }
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            settingsSearchOutsideTouch = null
+        }
+        // Complete the tapped control's click before collapsing search. Replacing the page on DOWN
+        // would discard its UP event; rebuilding it afterwards could cancel a newly opened action.
+        val handled = super.dispatchTouchEvent(event)
+        if (outside != null && settingsSearchBox === outside && settingsSearchExpanded) {
+            closeSettingsSearch(restoreFocus = false)
+        }
+        return handled
+    }
+
+    private fun View.containsScreenPoint(x: Float, y: Float): Boolean {
+        if (!isShown) return false
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return x >= location[0] && x < location[0] + width &&
+            y >= location[1] && y < location[1] + height
     }
 
     /** True while a density change is recreating this activity. */
@@ -814,6 +846,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val baseTop = root.paddingTop
         val baseRight = root.paddingRight
         val baseBottom = root.paddingBottom
+        val searchEditor = settingsSearchBox as? SettingsSearchEditText
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(
                 WindowInsetsCompat.Type.displayCutout() or
@@ -821,6 +854,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             )
             view.setPadding(baseLeft + safe.left, baseTop + safe.top,
                 baseRight + safe.right, baseBottom + safe.bottom)
+            if (settingsSearchBox === searchEditor) {
+                searchEditor?.onKeyboardVisibilityChanged(insets.isVisible(WindowInsetsCompat.Type.ime()))
+            }
             insets
         }
         setContentView(root)
@@ -1297,7 +1333,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             content.addView(settingsSummaryCard(item.first,brandString(item.second)),LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(SETTINGS_BLOCK_GAP_DP) })
         }
         content.addView(button(brandString(R.string.setup_guide),false) { openSetupGuide(fromSettings=true) },matchButton())
-        content.addView(label(brandString(R.string.setup_guide_description),14,MUTED))
 
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.OVERVIEW))
     }
@@ -1593,8 +1628,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
      * The index is built before expanding the field, so typing keeps the same editor
      * and keyboard input connection.
      */
-    private fun settingsSearchField(compact: Boolean): EditText = SettingsSearchEditText(this).apply {
+    private fun settingsSearchField(compact: Boolean): EditText = SettingsSearchEditText(this, compact).apply {
         settingsSearchBox = this
+        onDismissSearch = {
+            if (settingsSearchBox === this && settingsSearchExpanded) closeSettingsSearch()
+        }
         setSingleLine()
         hint = brandString(R.string.settings_search_hint)
         contentDescription = brandString(R.string.settings_search)
@@ -1717,7 +1755,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         settingsSearchPopup = PopupWindow(scroll, box.width, 0, false).apply {
             setBackgroundDrawable(rounded(SURFACE, BORDER))
             elevation = dp(8).toFloat()
-            // Tapping elsewhere closes the list and keeps the query; tapping the box reopens it.
+            // Outside touches also reach the activity, which collapses search after the gesture.
             isOutsideTouchable = true
             inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
             // The list is placed in screen coordinates. Android 10 made this call public; before it the
@@ -1777,13 +1815,24 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setOnClickListener { openSearchResult(result) }
     }
 
-    private fun closeSettingsSearch() {
-        val box = settingsSearchBox
-        setSearchKeyboard(box, false)
+    private fun closeSettingsSearch(restoreFocus: Boolean = true) {
+        if (!settingsSearchExpanded) return
+        val box = settingsSearchBox as? SettingsSearchEditText
+        val header = box?.parent as? LinearLayout
+        val parent = header?.parent as? ViewGroup
         clearSettingsSearchState()
+        settingsSearchBox = null
         box?.clearFocus()
-        render()
-        descendants(window.decorView).firstOrNull { it.tag == SETTINGS_SEARCH_BUTTON_TAG }?.requestFocus()
+        setSearchKeyboard(box, false)
+        if (box != null && header != null && parent != null) {
+            val index = parent.indexOfChild(header)
+            val params = header.layoutParams
+            parent.removeViewAt(index)
+            parent.addView(settingsHeader(box.compact), index, params)
+        } else render()
+        if (restoreFocus) {
+            descendants(window.decorView).firstOrNull { it.tag == SETTINGS_SEARCH_BUTTON_TAG }?.requestFocus()
+        }
     }
 
     private fun clearSettingsSearchState() {
@@ -1791,6 +1840,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         settingsSearchExpanded = false
         settingsSearchIndex = null
         settingsSearchRestoreFocus = false
+        settingsSearchOutsideTouch = null
         settingsSearchPopup?.dismiss()
     }
 
@@ -6809,7 +6859,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             refreshAmbient()
         }
         refreshAmbient()
-        val dialog = AlertDialog.Builder(this).setTitle(brandString(R.string.settings_ambient_configuration))
+        val dialog = appDialogBuilder().setTitle(brandString(R.string.settings_ambient_configuration))
             .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton(brandString(R.string.save), null)
             .setNegativeButton(brandString(R.string.cancel), null).create()
@@ -6935,12 +6985,31 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
     private fun row() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
-    private class SettingsSearchEditText(context: android.content.Context) : EditText(context) {
+    private class SettingsSearchEditText(context: android.content.Context, val compact: Boolean) : EditText(context) {
+        var onDismissSearch: (() -> Unit)? = null
+        private var keyboardWasVisible = false
         private val glyphBounds = android.graphics.Rect()
         private var measuredHint: String? = null
         private var measuredHintHeight = -1
         private var measuredHintTextSize = -1f
         private var measuredHintBaseline = 0
+
+        fun onKeyboardVisibilityChanged(visible: Boolean) {
+            val dismissed = keyboardWasVisible && !visible
+            keyboardWasVisible = visible
+            // The first hidden inset belongs to opening search, before the keyboard appears.
+            // Defer removal of the header until the current inset traversal has completed.
+            if (dismissed) post {
+                if (!keyboardWasVisible && isAttachedToWindow) onDismissSearch?.invoke()
+            }
+        }
+
+        override fun onKeyPreIme(keyCode: Int, event: KeyEvent): Boolean {
+            if (keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyPreIme(keyCode, event)
+            // Older keyboards consume Back before the activity's back dispatcher sees it.
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) onDismissSearch?.invoke()
+            return true
+        }
 
         override fun onDraw(canvas: android.graphics.Canvas) {
             val value: CharSequence = if (text.isNullOrEmpty()) hint ?: "" else text
