@@ -1,4 +1,4 @@
-# CorsairPlay
+# CarPlay
 
 林肯/福特车机使用的 CarPlay 接收器，基于 DiPlay 二次开发，支持有线无线 CarPlay。
 
@@ -10,7 +10,7 @@
 - 已重点适配 Android 8.1 车机。
 - 最低支持 Android 7.1。
 - 安装包名：`cn.manstep.phonemirrorBox`（Debug 为 `cn.manstep.phonemirrorBox.hudtest`）
-- 当前版本：`precision.7`
+- 当前版本：`1.1.1`
 
 ## 主要功能
 
@@ -27,7 +27,7 @@
 1. 下载最新 APK。
 2. 在车机上允许安装未知来源应用。
 3. 把 APK 安装到车机，不要安装到 iPhone。
-4. 打开 CorsairPlay，按提示连接 iPhone。
+4. 打开 CarPlay，按提示连接 iPhone。
 5. 基础 CarPlay 不需要 root；部分车机扩展功能可能需要额外权限或 ADB。
 
 ## 升级
