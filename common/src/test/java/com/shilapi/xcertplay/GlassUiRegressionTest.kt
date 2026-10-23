@@ -59,13 +59,13 @@ class GlassUiRegressionTest {
     fun referencePortraitAtTheSelectedDensity()=capture("reference-portrait",1f,true)
 
     @Test @Config(qualifiers = "en-w1200dp-h720dp-land-mdpi")
-    fun expandedControlsWithLargeEnglishText() = capture("expanded-en", 1.3f)
+    fun expandedControlsWithLargeEnglishText() = capture("expanded-en", 1.3f, true)
 
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-mdpi")
     fun compactControlsWithLargeChineseText() = capture("compact-zh", 1.3f)
 
     @Test @Config(qualifiers = "ar-ldrtl-w320dp-h600dp-port-mdpi")
-    fun compactControlsWithLargeRtlText() = capture("compact-ar-rtl", 1.3f)
+    fun compactControlsWithLargeRtlText() = capture("compact-ar-rtl", 1.3f, true)
 
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-mdpi")
     fun portraitReadingSurfaceKeepsSecondaryTextLegibleInBothThemes() {
@@ -149,14 +149,26 @@ class GlassUiRegressionTest {
                 }
             }
             if(paired) {
+                fun landmarks(): List<Pair<Int, Int>> {
+                    val scene = descendants(screen.window.decorView).filterIsInstance<ReferenceHomeScene>().single()
+                    return listOf(ReflectionHelpers.getField<View>(screen,"homeConnectionRing"),
+                        ReflectionHelpers.getField<View>(screen,"status"),scene.getChildAt(1),scene.getChildAt(2),scene.getChildAt(3))
+                        .map { view -> val p=IntArray(2);view.getLocationOnScreen(p);p[0] to p[1] }
+                }
+                val initial = landmarks()
                 previewSession(screen)
                 try {
                     call(screen,"refreshStatus")
                     screenshot(screen,"$name-home-connecting")
+                    assertEquals("Home landmarks stay fixed while connecting", initial, landmarks())
                     val title=ReflectionHelpers.getField<TextView>(screen,"homeHeadline")
                     assertEquals(screen.getString(R.string.ui_glass_connecting_title),title.text.toString())
                     val disconnect=ReflectionHelpers.getField<android.widget.Button>(screen,"disconnectButton")
                     assertEquals(View.VISIBLE,disconnect.visibility)
+                    CarPlayBackgroundSession.active=true
+                    call(screen,"refreshStatus")
+                    screenshot(screen,"$name-home-connected")
+                    assertEquals("Home landmarks stay fixed when connected", initial, landmarks())
                     disconnect.performClick()
                     shadowOf(Looper.getMainLooper()).idle()
                     assertFalse("The existing disconnect callback still stops the session",CarPlayBackgroundSession.hasSession())
@@ -167,6 +179,7 @@ class GlassUiRegressionTest {
                 ReflectionHelpers.setField(screen, "page", "home")
                 call(screen, "render")
                 screenshot(screen, "$name-${if (night) "dark" else "light"}-home")
+                capturePhonePicker(screen, "$name-${if (night) "dark" else "light"}-phone-picker")
                 ReflectionHelpers.setField(screen, "page", "settings")
                 for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.DISPLAY, SettingsCategory.ABOUT)) {
                     CarPlayBackgroundSession.active=paired && category==SettingsCategory.OVERVIEW
@@ -247,7 +260,73 @@ class GlassUiRegressionTest {
             root.layout(0, 0, width, height)
             shadowOf(Looper.getMainLooper()).idle()
         }
+        descendants(root).filterIsInstance<ReferenceHomeScene>().forEach { scene ->
+            val carHome = descendants(root).filterIsInstance<android.widget.Button>()
+                .single { it.text.toString() == screen.getString(R.string.car_home) }
+            val header = carHome.parent as ViewGroup
+            assertTrue("The complete car-home button fits the header",carHome.left >= 0 && carHome.right <= header.width)
+            val hero = scene.getChildAt(0)
+            val firstAction = scene.getChildAt(1)
+            val settings = scene.getChildAt(2)
+            val brand = scene.getChildAt(3)
+            assertEquals("Home footer actions share a row", firstAction.top, settings.top)
+            assertEquals("Home footer actions have equal height", firstAction.height, settings.height)
+            assertTrue("Home footer cannot overlap the main action", firstAction.top >= hero.bottom)
+            assertEquals("Home footer must reach the bottom in either orientation", scene.height,
+                maxOf(firstAction.bottom, settings.bottom, brand.bottom))
+            val scroll = ReflectionHelpers.getField<android.widget.ScrollView>(screen, "rootScroll")
+            val position = IntArray(2).also(scene::getLocationOnScreen)
+            val scrollPosition = IntArray(2).also(scroll::getLocationOnScreen)
+            val expectedBottom = scrollPosition[1] + scroll.height - scroll.paddingBottom -
+                (ReferenceHomeMetrics.BOTTOM_DP * density).toInt()
+            assertEquals("Home footer should sit above the safe viewport bottom", expectedBottom,
+                position[1] + scene.height)
+            for (button in descendants(scene).filterIsInstance<android.widget.Button>().filter { it.visibility == View.VISIBLE }) {
+                val textLayout = button.layout ?: continue
+                assertTrue("Button text fits vertically: ${button.text}", textLayout.height <=
+                    button.height - button.compoundPaddingTop - button.compoundPaddingBottom + 2)
+                if (textLayout.lineCount > 1) {
+                    val offset = ReflectionHelpers.getField<Float>(button, "contentOffsetY")
+                    assertEquals("Wrapped text must not inherit first-line centring", 0f, offset, 0f)
+                }
+            }
+        }
         writeScreenshot(root, name)
+    }
+
+    private fun capturePhonePicker(screen: DiPlayActivity, name: String) {
+        val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        shadowOf(adapter).setEnabled(true)
+        val phone = adapter.getRemoteDevice("00:11:22:33:44:55")
+        shadowOf(phone).setName("测试 iPhone")
+        shadowOf(adapter).setBondedDevices(setOf(phone))
+        call(screen, "choosePhone")
+        shadowOf(Looper.getMainLooper()).idle()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        try {
+            val root = dialog.window!!.decorView
+            val density = screen.resources.displayMetrics.density
+            val config = screen.resources.configuration
+            val width = ((minOf(config.screenWidthDp, 600) - 32) * density).toInt()
+            val height = ((config.screenHeightDp - 32) * density).toInt()
+            repeat(3) {
+                root.forceLayout()
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
+                root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+            }
+            assertEquals(screen.getString(R.string.pair_another), dialog.getButton(AlertDialog.BUTTON_NEUTRAL).text)
+            for (id in listOf(AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE)) {
+                val action = dialog.getButton(id)
+                assertTrue(action.height >= 48 * density)
+                for (line in 0 until action.layout.lineCount) assertEquals(0, action.layout.getEllipsisCount(line))
+            }
+            writeScreenshot(root, name)
+        } finally {
+            dialog.dismiss()
+            shadowOf(adapter).setBondedDevices(emptySet())
+            shadowOf(adapter).setEnabled(false)
+        }
     }
 
     private fun captureWaiting(screen: DiPlayActivity, name: String) {

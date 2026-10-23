@@ -16,11 +16,52 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], qualifiers = "en-w800dp-h480dp-land-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class GlassControlsPresentationTest {
+    @Test fun glassMaterialsStayContinuousAcrossTheirCapsAtFractionalDisplayScales() {
+        FidelityMaterials.install(RuntimeEnvironment.getApplication())
+        val output = File("build/reports/glass-materials").apply { mkdirs() }
+        for (night in listOf(false, true)) for (primary in listOf(false, true))
+        for ((width, height) in listOf(96 to 48, 160 to 56, 320 to 64))
+        for (scale in listOf(1f, 1.5f, 2.625f)) for (opacity in listOf(112, 255)) {
+            val palette = DiPlayPalette.of(night)
+            val material = GlassChrome.surface(if (primary) palette.accent else palette.button,
+                palette.outline, 1f, height / 2f, primary = primary).apply { alpha = opacity }
+            val bitmap = Bitmap.createBitmap(((width + 16) * scale).roundToInt(), ((height + 16) * scale).roundToInt(), Bitmap.Config.ARGB_8888)
+            try {
+                val canvas = Canvas(bitmap)
+                canvas.scale(scale, scale)
+                canvas.translate(.35f, .2f)
+                material.setBounds(8, 8, width + 8, height + 8)
+                material.draw(canvas)
+                if (opacity == 255 && scale == 2.625f) {
+                    File(output, "${if (night) "night" else "day"}-${if (primary) "primary" else "secondary"}-$width.png").outputStream().use {
+                        assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    }
+                }
+                // A narrow dip at either cap is a compositing seam, not the broad glass highlight.
+                for (join in listOf(8 + height / 2f, 8 + width - height / 2f)) {
+                    val center = ((join + .35f) * scale).roundToInt()
+                    val y1 = ((8 + height / 3f) * scale).roundToInt()
+                    val y2 = ((8 + height * 2 / 3f) * scale).roundToInt()
+                    fun alphaAt(x: Int) = (y1 until y2).map { Color.alpha(bitmap.getPixel(x, it)) }.average()
+                    for (x in center - 1..center + 1) {
+                        val surrounding = (alphaAt(x - 2) + alphaAt(x + 2)) / 2
+                        assertTrue("Vertical alpha seam: night=$night primary=$primary width=$width opacity=$opacity scale=$scale x=$x " +
+                            "difference=${abs(alphaAt(x) - surrounding)}",
+                            abs(alphaAt(x) - surrounding) <= 3.0)
+                    }
+                }
+            } finally { bitmap.recycle() }
+        }
+    }
+
     @Test fun glassMaterialsDoNotPaintABoxOutsideTheirRoundedEnds() {
         val app = RuntimeEnvironment.getApplication()
         FidelityMaterials.install(app)
@@ -30,6 +71,8 @@ class GlassControlsPresentationTest {
                 palette.outline, 1f, 24f, primary = primary)
             val bitmap = Bitmap.createBitmap(width + 16, 64, Bitmap.Config.ARGB_8888)
             try {
+                material.draw(Canvas(bitmap)) // Unmeasured/invisible controls have empty bounds.
+                assertEquals(0, Color.alpha(bitmap.getPixel(0, 0)))
                 material.setBounds(8, 8, width + 8, 56)
                 material.draw(Canvas(bitmap))
                 for ((x, y) in listOf(8 to 8, width + 7 to 8, 8 to 55, width + 7 to 55,

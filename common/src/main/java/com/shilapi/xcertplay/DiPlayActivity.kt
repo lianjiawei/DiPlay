@@ -928,6 +928,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if (page == "home") R.drawable.ic_dp_car else R.drawable.ic_dp_back, compact || home) {
             if (page == "home") startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
             else navigateBack()
+        }.apply {
+            // Leave room for the brand and theme control even with a long translated label.
+            maxWidth=dp(((resources.configuration.screenWidthDp-ReferenceHomeMetrics.SIDE_DP*2)*.45f).toInt())
+            ellipsize=android.text.TextUtils.TruncateAt.END
+            TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this,12,16,1,TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(-2, dp(control)))
     }
 
@@ -1062,7 +1067,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val body = column()
         val hero = column().apply { gravity = Gravity.CENTER_HORIZONTAL; clipChildren = false; clipToPadding = false }
         homeCardTitle = label(brandString(R.string.wireless_carplay), 12, ACCENT, true)
-        hero.addView(label(brandString(R.string.ui_glass_home_title), UiTypography.HERO_SP, TEXT, true).apply {
+        hero.addView(StableConnectionTextView(this, intArrayOf(R.string.ui_glass_home_title,
+            R.string.ui_glass_connecting_title, R.string.carplay_connected)).apply {
+            text=brandString(R.string.ui_glass_home_title);textSize=UiTypography.HERO_SP.toFloat()
             homeHeadline=this
             gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif", Typeface.BOLD)
             includeFontPadding = false
@@ -1073,6 +1080,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val phone = actionButton(if (DiPlayPreferences.phoneAddress(this) == null) brandString(R.string.choose_iphone)
             else DiPlayPreferences.phoneName(this), false) { choosePhone() }.apply {
             SceneText.apply(this, appNight); textSize=UiTypography.ROW_SP.toFloat(); includeFontPadding=false
+            setSingleLine(true);ellipsize=android.text.TextUtils.TruncateAt.END
             background=RippleDrawable(ColorStateList.valueOf(RIPPLE), ColorDrawable(Color.TRANSPARENT),null)
             setPadding(dp(8),0,dp(8),0)
             val arrow=android.graphics.drawable.RotateDrawable().apply {
@@ -1085,7 +1093,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         hero.addView(phone,LinearLayout.LayoutParams(-2,-2).apply { topMargin=dp(-8);gravity=Gravity.CENTER_HORIZONTAL })
         phone.minHeight=dp(40)
-        status=label(brandString(R.string.ready_when_you_are),14,MUTED).apply {
+        status=StableConnectionTextView(this, intArrayOf(R.string.setup_needs_attention,
+            R.string.carplay_connected, R.string.ui_glass_connecting_hint,
+            R.string.ui_glass_paired_waiting, R.string.ready_when_you_are)).apply {
+            text=brandString(R.string.ready_when_you_are);textSize=UiTypography.BODY_SP.toFloat()
             gravity=Gravity.CENTER;includeFontPadding=false;SceneText.apply(this, appNight, secondary=true)
         }
         hero.addView(status,LinearLayout.LayoutParams(-1,-2))
@@ -1106,6 +1117,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         homeUsbFooter=usb
         val footerStart=android.widget.FrameLayout(this).apply {
+            setMeasureAllChildren(true)
             addView(usb,android.widget.FrameLayout.LayoutParams(-1,-1))
             addView(disconnectButton,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
@@ -6325,7 +6337,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             running -> R.string.ui_glass_connecting_title
             else -> R.string.ui_glass_home_title
         })
-        homeHeadline?.textSize=if(running && !CarPlayBackgroundSession.active)UiTypography.COMPACT_PAGE_SP.toFloat() else UiTypography.HERO_SP.toFloat()
         homeUsbFooter?.visibility=if(running)View.GONE else View.VISIBLE
         homeUsbConnected?.visibility=if(running)View.VISIBLE else View.GONE
         homeConnectionRing?.state(connecting = running && !CarPlayBackgroundSession.active,
@@ -7078,7 +7089,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun headerIconSize(compact: Boolean) = dp(if (compact) 20 else 24)
 
     private fun headerButton(title: String, icon: Int, compact: Boolean, click: () -> Unit) = button(title, false, click).apply {
-        alignVisibleGlyphs = false
+        alignVisibleGlyphs = true
         if (compact) textSize = 16f
         includeFontPadding = false
         setTextColor(TEXT)
@@ -7092,18 +7103,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         persistentStartIcon=drawable
         setCompoundDrawablesRelative(drawable, null, null, null)
         compoundDrawablePadding = dp(8)
-        doOnLayout {
-            // Use the same text alignment reference as other buttons in this locale.
-            if (baseline >= 0 && text.isNotEmpty()) {
-                val glyphCentre = textAlignmentCentreY()
-                val drawableCentre = paddingTop + (height - paddingTop - paddingBottom) / 2f
-                val offset = (glyphCentre - drawableCentre).roundToInt()
-                drawable?.setBounds(0, offset, iconSize, iconSize + offset)
-                // Move the aligned icon/text group to the button's visual centre.
-                contentOffsetY = drawableCentre - glyphCentre
-                invalidate()
-            }
-        }
+        // SettingButton centres single-line glyphs at draw time and leaves wrapped labels
+        // to TextView. A first-line offset would push the second line outside the button.
     }
 
     private fun layoutCornerRadius(): Float {
@@ -7261,7 +7262,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     val start=(width-groupWidth)/2f
                     val layout=textLayout(content,textWidth,textSize,currentTextColor)
                     val iconX=if(rtl)start+textWidth+compoundDrawablePadding else start
-                    icon.setBounds(iconX.toInt(),(height-iconHeight)/2,iconX.toInt()+iconWidth,(height+iconHeight)/2);icon.draw(canvas)
+                    val iconSave=canvas.save()
+                    canvas.translate(iconX-icon.bounds.left,(height-iconHeight)/2f-icon.bounds.top)
+                    icon.draw(canvas);canvas.restoreToCount(iconSave)
                     val save=canvas.save();canvas.translate(if(rtl)start else start+iconWidth+compoundDrawablePadding,(height-layout.height)/2f)
                     layout.draw(canvas);canvas.restoreToCount(save)
                     return

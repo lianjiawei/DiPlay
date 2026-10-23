@@ -44,6 +44,24 @@ internal class StableConnectionTextView(context: Context, variants: IntArray) : 
 }
 
 internal object ConnectionScreenCopy {
+    private val conciseStages = mapOf(
+        R.string.this_head_unit_may_not_support_wireless_carplay_try_a_usb to R.string.ui_connection_hint_usb_fallback,
+        R.string.your_iphone_isn_t_available_unlock_it_and_check_bluetooth to R.string.ui_connection_hint_wireless,
+        R.string.bluetooth_connections_not_real to R.string.ui_connection_hint_usb_fallback,
+        R.string.bluetooth_cannot_open_connections to R.string.ui_connection_hint_usb_fallback,
+        R.string.a_previous_wi_fi_direct_connection_is_still_running_reset to R.string.ui_connection_hint_reset_wifi,
+        R.string.the_head_unit_couldn_t_start_carplay_wi_fi_check_wi_fi_and to R.string.ui_connection_hint_network,
+        R.string.allow_nearby_devices_for_diplay_in_the_head_unit_s_app_per to R.string.ui_connection_hint_permissions,
+        R.string.allow_precise_location_for_diplay_in_the_head_unit_s_app_p to R.string.ui_connection_hint_permissions,
+        R.string.iphone_usb_mode_rejected to R.string.ui_connection_hint_usb,
+        R.string.vpn_authorization_unavailable to R.string.ui_connection_hint_permissions,
+    )
+
+    fun summary(context: Context, message: String): String {
+        val id = conciseStages.entries.firstOrNull { VehicleBranding.text(context, it.key) == message }?.value
+        return id?.let { VehicleBranding.text(context, it) } ?: message
+    }
+
     val stages = intArrayOf(
         R.string.getting_carplay_ready, R.string.connecting_to_your_iphone,
         R.string.opening_carplay, R.string.reconnecting_to_your_iphone,
@@ -62,7 +80,7 @@ internal object ConnectionScreenCopy {
         R.string.waiting_for_mfi_coprocessor, R.string.requesting_mfi_usb_permission,
         R.string.ui_glass_video_preparing, R.string.ui_connection_waiting_network,
         R.string.ui_connection_network_timeout,
-    )
+    ).map { conciseStages[it] ?: it }.distinct().toIntArray()
     val hints = intArrayOf(
         R.string.ui_connection_hint_usb, R.string.ui_connection_hint_same_wifi,
         R.string.ui_connection_hint_wireless, R.string.ui_connection_hint_reset_wifi,

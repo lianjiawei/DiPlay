@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,10 +49,52 @@ class CarPlayStageTextTest {
         stagesFollowTheConnection()
     }
 
+    @Test fun conciseStagesKeepDetailsAndRecoveryActionsInConnectionHelp() {
+        val root = ReflectionHelpers.callInstanceMethod<android.view.ViewGroup>(activity, "buildContentView")
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "setConnectionStage",
+            ClassParameter.from(String::class.java, "CarPlay configuration request failed"),
+            ClassParameter.from(String::class.java, "CarPlay configuration request failed"))
+        assertEquals(activity.getString(R.string.ui_connection_hint_usb),
+            ReflectionHelpers.getField<TextView>(activity, "stageStatusView").text.toString())
+        fun descendants(view: android.view.View): Sequence<android.view.View> = sequence {
+            yield(view)
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) yieldAll(descendants(view.getChildAt(i)))
+        }
+        val help = descendants(root).filterIsInstance<android.widget.Button>()
+            .single { it.text.toString() == activity.getString(R.string.ui_connection_help) }
+        val back = ReflectionHelpers.getField<android.widget.Button>(activity, "connectionBackButton")
+        assertEquals(activity.getString(R.string.ui_glass_back_home), back.text.toString())
+        back.performClick()
+        val destination = org.robolectric.Shadows.shadowOf(activity).nextStartedActivity
+        assertEquals(DiPlayActivity::class.java.name, destination.component?.className)
+        assertEquals("home", destination.getStringExtra("page"))
+        var retries=0
+        var resets=0
+        ReflectionHelpers.getField<android.widget.Button>(activity,"startupRetryButton").apply {
+            visibility=android.view.View.VISIBLE;setOnClickListener { retries++ }
+        }
+        ReflectionHelpers.getField<android.widget.Button>(activity,"wifiRecoveryButton").apply {
+            visibility=android.view.View.VISIBLE;setOnClickListener { resets++ }
+        }
+        for (action in listOf(android.app.AlertDialog.BUTTON_NEGATIVE, android.app.AlertDialog.BUTTON_NEUTRAL)) {
+            help.performClick()
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            val dialog=org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+            try {
+                assertTrue(dialog.findViewById<TextView>(android.R.id.message).text.toString()
+                    .contains(activity.getString(R.string.iphone_usb_mode_rejected)))
+                dialog.getButton(action).performClick()
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            } finally { dialog.dismiss() }
+        }
+        assertEquals(1,retries)
+        assertEquals(1,resets)
+    }
+
     private fun stagesFollowTheConnection() {
         // A wired Android 7.1 failure (#557) is a retry, not a stage that never ends.
         assertStage(R.string.connection_interrupted_retrying, CarPlayStatus.Failed("Invalid argument"))
-        assertStage(R.string.iphone_usb_mode_rejected,
+        assertStage(R.string.ui_connection_hint_usb,
             CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
         assertStage(R.string.connect_your_iphone_with_a_usb_cable, CarPlayStatus.WaitingForIphone)
         assertStage(R.string.allow_the_connection_permission_to_continue, CarPlayStatus.RequestingIphonePermission)

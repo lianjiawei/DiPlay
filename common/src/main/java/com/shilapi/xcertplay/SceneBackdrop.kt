@@ -14,7 +14,7 @@ import com.shilapi.xcertplay.host.R
 
 /** Decorative app chrome only; never placed on a media surface or an instrument output. */
 internal class SceneBackdrop(context: Context, private val night: Boolean, private val quiet: Boolean,
-    private val readingShare: Float = .50f) :
+    private val readingShare: Float = .50f, private val fullWidthReading: () -> Boolean = { false }) :
     ColorDrawable(DiPlayPalette.of(night).background) {
     init { FidelityMaterials.install(context) }
     private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) image(context, quiet) else null
@@ -31,8 +31,8 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
             bounds.exactCenterX() + width / 2, bounds.exactCenterY() + height / 2)
         paint.shader = null
         canvas.drawBitmap(bitmap, null, destination, paint)
-        if (quiet || bounds.height() > bounds.width()) {
-            val readingVeil = if (bounds.height() > bounds.width()) {
+        if (quiet || bounds.height() > bounds.width() || fullWidthReading()) {
+            val readingVeil = if (bounds.height() > bounds.width() || fullWidthReading()) {
                 if (night) (if(quiet)0xA0 else 0xD0) else 0xF0
             } else if (night) 0x68 else 0xE8
             canvas.drawColor((color and 0x00FFFFFF) or (readingVeil shl 24))

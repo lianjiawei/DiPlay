@@ -20,6 +20,7 @@ internal class ReferenceHomeScene(
     private val landscape get() = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     private fun dp(v: Int) = (v*density).roundToInt()
     private var wantedHeight = 0
+    private var footerStackHeight = 0
     init {
         clipChildren = false; clipToPadding = false
         addView(hero); addView(usb); addView(settings); addView(brand)
@@ -39,24 +40,26 @@ internal class ReferenceHomeScene(
         val brandWidth = if (landscape) (w - footerWidth * 2 - dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP * 2)).coerceAtLeast(0) else w
         brand.measure(MeasureSpec.makeMeasureSpec(brandWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
         wantedHeight = (viewportHeight() - reservedHeight).coerceAtLeast(dp(240))
-        if (landscape) {
-            val budget = wantedHeight - footerHeight - dp(ReferenceHomeMetrics.FOOTER_INSET_DP + ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
-            val reduction = (hero.measuredHeight-budget).coerceAtLeast(0)
-            val ringSize = (naturalRing-reduction).coerceAtLeast(dp(ReferenceHomeMetrics.MIN_RING_DP))
-            ring.layoutParams = (ring.layoutParams as LinearLayout.LayoutParams).apply { width=ringSize; height=ringSize }
-            hero.forceLayout()
-            hero.measure(MeasureSpec.makeMeasureSpec(heroWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
-            setMeasuredDimension(w,maxOf(wantedHeight,hero.measuredHeight+footerHeight+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP+ReferenceHomeMetrics.FOOTER_INSET_DP)))
-        } else setMeasuredDimension(w,maxOf(wantedHeight,hero.measuredHeight+footerHeight+brand.measuredHeight+dp(ReferenceHomeMetrics.PORTRAIT_FOOTER_GAP_DP)))
+        footerStackHeight = if (landscape) maxOf(footerHeight, brand.measuredHeight)
+            else footerHeight + brand.measuredHeight + dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        // Both orientations anchor the complete footer to the same safe viewport bottom.
+        // First reduce the decorative ring on short screens; oversized text may still scroll.
+        val budget = wantedHeight - footerStackHeight - dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        val reduction = (hero.measuredHeight-budget).coerceAtLeast(0)
+        val ringSize = (naturalRing-reduction).coerceAtLeast(dp(ReferenceHomeMetrics.MIN_RING_DP))
+        ring.layoutParams = (ring.layoutParams as LinearLayout.LayoutParams).apply { width=ringSize; height=ringSize }
+        hero.forceLayout()
+        hero.measure(MeasureSpec.makeMeasureSpec(heroWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
+        setMeasuredDimension(w,maxOf(wantedHeight,hero.measuredHeight+footerStackHeight+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)))
     }
     override fun onLayout(changed: Boolean,l: Int,t: Int,r: Int,b: Int) {
         val centre = if (landscape) resources.configuration.screenWidthDp*density*.30f - dp(ReferenceHomeMetrics.SIDE_DP) else width/2f
         val hx=(centre-hero.measuredWidth/2).toInt().coerceAtLeast(0)
         hero.layout(hx,0,hx+hero.measuredWidth,hero.measuredHeight)
-        val footerTop = if (landscape) height-dp(ReferenceHomeMetrics.FOOTER_INSET_DP)-usb.measuredHeight else hero.bottom+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        val footerTop = height-footerStackHeight
         usb.layout(0,footerTop,usb.measuredWidth,footerTop+usb.measuredHeight)
         settings.layout(width-settings.measuredWidth,footerTop,width,footerTop+settings.measuredHeight)
-        val brandY=if (landscape) footerTop+(usb.measuredHeight-brand.measuredHeight)/2 else usb.bottom+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        val brandY=if (landscape) footerTop+(footerStackHeight-brand.measuredHeight)/2 else height-brand.measuredHeight
         brand.layout((width-brand.measuredWidth)/2,brandY,(width+brand.measuredWidth)/2,brandY+brand.measuredHeight)
         // A quiet 40dp picker label keeps the target at least 48dp without changing the drawing.
         hero.touchDelegate=TouchDelegate(Rect(phone.left,phone.top-dp(4),phone.right,phone.bottom+dp(4)),phone)
@@ -70,8 +73,6 @@ internal object ReferenceHomeMetrics {
     const val HEADER_DP=44
     const val HEADER_GAP_DP=4
     const val HERO_FOOTER_GAP_DP=12
-    const val FOOTER_INSET_DP=12
-    const val PORTRAIT_FOOTER_GAP_DP=40
     const val MIN_RING_DP=40
     const val BRAND_TEXT_SP=12f
     const val BRAND_ACTION_GAP_DP=12

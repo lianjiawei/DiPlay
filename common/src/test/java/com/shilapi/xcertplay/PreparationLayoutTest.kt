@@ -10,19 +10,21 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PreparationLayoutTest {
-    @Test fun footerStaysVisibleWhileShortViewportsLetTheContentScroll() {
+    @Test fun fixedConnectionRegionsRemainVisibleWithoutScrolling() {
         // Attach without onCreate: avoid starting sensors, networking or CarPlay sessions.
         val activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
         val method = CarPlayHostActivity::class.java.getDeclaredMethod("buildContentView")
         method.isAccessible = true
         val root = method.invoke(activity) as android.widget.FrameLayout
         val viewport = root.getChildAt(2) as ConnectionPreparationLayout
-        val scroll = viewport.contentScroll
-        val panel = scroll.getChildAt(0) as LinearLayout
+        val body = viewport.contentArea
+        val panel = body.getChildAt(0) as ConnectionContentLayout
         val actions = viewport.getChildAt(2)
         val density = activity.resources.displayMetrics.density
         fun layout(heightDp: Int) {
@@ -46,11 +48,13 @@ class PreparationLayoutTest {
             assertEquals(1f, panel.scaleY, 0f)
             assertEquals(viewport.height - viewport.paddingBottom - (ConnectionScreenMetrics.BOTTOM_DP * density).toInt(), actions.bottom)
             assertTrue(actions.height >= 48 * density)
-            assertTrue(scroll.bottom + ConnectionScreenMetrics.ACTION_GAP_DP * density <= actions.top + 1)
-            if (panel.height > scroll.height) {
-                scroll.scrollTo(0, panel.height)
-                assertTrue("Overflow must remain reachable at height=$heightDp", scroll.scrollY > 0)
-                scroll.scrollTo(0, 0)
+            assertTrue(body.bottom <= actions.top)
+            assertEquals(body.height, panel.height)
+            assertFalse("Waiting content must not be scrollable", body.canScrollVertically(1))
+            for (index in 0 until panel.childCount) {
+                val child = panel.getChildAt(index)
+                assertTrue("Content must fit height=$heightDp: ${child.javaClass.simpleName} bottom=${child.bottom}, panel=${panel.height}",
+                    child.top >= 0 && child.bottom <= panel.height)
             }
         }
         for (height in listOf(200, 240, 320, 400, 479, 480, 720)) layout(height)

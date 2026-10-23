@@ -44,6 +44,12 @@ class ConnectionScreenPresentationTest {
     @Test @Config(qualifiers = "ar-ldrtl-w320dp-h600dp-port-mdpi")
     fun compactWaitingScreenWithLargeRtlText() = capture("compact-ar-rtl")
 
+    @Test @Config(qualifiers = "zh-rCN-w640dp-h240dp-land-mdpi")
+    fun shortLandscapeKeepsAllTextVisible() = capture("short-zh")
+
+    @Test @Config(qualifiers = "ar-ldrtl-w800dp-h360dp-land-xhdpi")
+    fun shortRtlLandscapeWithInsetsAndLongPhoneName() = capture("short-ar-rtl", safeInsets = true)
+
     @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
     fun landscapeReadingAreaKeepsSecondaryTextLegibleInBothThemes() {
         val app = RuntimeEnvironment.getApplication()
@@ -91,7 +97,7 @@ class ConnectionScreenPresentationTest {
         } finally { a.recycle(); b.recycle() }
     }
 
-    private fun capture(name: String) {
+    private fun capture(name: String, safeInsets: Boolean = false) {
         RuntimeEnvironment.setFontScale(1.3f)
         for (night in listOf(true, false)) {
             val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
@@ -105,6 +111,12 @@ class ConnectionScreenPresentationTest {
                 ReflectionHelpers.setField(host, "wirelessHotspotMode", WirelessHotspotMode.EXISTING_WIFI)
                 val root = ReflectionHelpers.callInstanceMethod<ViewGroup>(host, "buildContentView")
                 val panel = ReflectionHelpers.getField<View>(host, "connectionPanel")
+                if (safeInsets) {
+                    val viewport = panel as ConnectionPreparationLayout
+                    viewport.setPadding(24, 20, 24, 32)
+                    val content = viewport.contentArea.getChildAt(0) as ViewGroup
+                    (content.getChildAt(2) as TextView).text = "测试 iPhone — A very long device name for the connection screen"
+                }
                 val config = host.resources.configuration
                 // This presentation-only host is not attached to a decor view, so resolve RTL explicitly.
                 root.layoutDirection = config.layoutDirection
@@ -151,11 +163,13 @@ class ConnectionScreenPresentationTest {
                 }
                 assertTrue("Headline must clear the brand header", bounds(headline).top >= bounds(title).bottom)
                 assertTrue("Actions stay on screen", bounds(row).bottom <= height + 1)
-                assertEquals("Bottom actions keep their safe margin", height - ConnectionScreenMetrics.BOTTOM_DP * density,
+                assertEquals("Bottom actions keep their safe margin", height - panel.paddingBottom - ConnectionScreenMetrics.BOTTOM_DP * density,
                     bounds(row).bottom, 1f)
                 val stage = ReflectionHelpers.getField<TextView>(host, "stageStatusView")
                 val instructions = ReflectionHelpers.getField<TextView>(host, "connectionInstructionsView")
                 val ring = ReflectionHelpers.getField<View>(host, "connectionRing")
+                assertFalse("The connection screen must contain no scroll container",
+                    descendants(panel).any { it is android.widget.ScrollView })
                 val originalStage = stage.text
                 val originalHint = hint.text
                 val originalStageHeight = stage.height
@@ -163,6 +177,9 @@ class ConnectionScreenPresentationTest {
                 val headlineTop = bounds(headline).top
                 val ringTop = bounds(ring).top
                 val actionTop = bounds(row).top
+                val body = (panel as ConnectionPreparationLayout).contentArea
+                val detailsTop = bounds(stage).top
+                val hintTop = bounds(hint).top
                 for (stageId in ConnectionScreenCopy.stages) {
                     stage.text = VehicleBranding.text(host, stageId)
                     layout()
@@ -170,6 +187,12 @@ class ConnectionScreenPresentationTest {
                     assertEquals("Headline must not jump", headlineTop, bounds(headline).top, 1f)
                     assertEquals("Ring must not jump", ringTop, bounds(ring).top, 1f)
                     assertEquals("Footer must not jump", actionTop, bounds(row).top, 1f)
+                    assertEquals("Status must not jump", detailsTop, bounds(stage).top, 1f)
+                    assertEquals("Hint must not jump", hintTop, bounds(hint).top, 1f)
+                    assertTrue("Status must remain fully above the actions", bounds(stage).bottom <= bounds(row).top)
+                    assertTrue("Hint must remain fully above the actions", bounds(hint).bottom <= bounds(row).top)
+                    assertTrue("Status text must not be clipped", stage.layout.getLineBottom(stage.layout.lineCount - 1) <=
+                        stage.height - stage.compoundPaddingTop - stage.compoundPaddingBottom + 2)
                 }
                 stage.text = originalStage
                 for (hintId in ConnectionScreenCopy.hints) {
@@ -178,6 +201,7 @@ class ConnectionScreenPresentationTest {
                     assertEquals("Hints reserve the same height", originalHintHeight, hint.height)
                     assertEquals(headlineTop, bounds(headline).top, 1f)
                     assertEquals(ringTop, bounds(ring).top, 1f)
+                    assertTrue("Every hint must fit", hint.layout.height <= hint.height - hint.compoundPaddingTop - hint.compoundPaddingBottom + 2)
                 }
                 hint.visibility = View.GONE
                 instructions.visibility = View.VISIBLE
@@ -193,8 +217,24 @@ class ConnectionScreenPresentationTest {
                     val room = text.height - text.compoundPaddingTop - text.compoundPaddingBottom
                     assertTrue("Unclipped text: ${text.text}", layout.lineCount == 0 || layout.getLineBottom(layout.lineCount - 1) <= room + 2)
                 }
+                val content = body.getChildAt(0) as ViewGroup
+                for (index in 0 until content.childCount) {
+                    val child = content.getChildAt(index)
+                    assertTrue("Content fits its fixed region: ${child.javaClass.simpleName}, ${child.bottom}/${content.height}",
+                        child.top >= 0 && child.bottom <= content.height)
+                }
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 try {
+                    panel.background.setBounds(0, 0, width, height)
+                    panel.background.draw(Canvas(bitmap))
+                    for (text in listOf(headline, stage, hint)) {
+                        val rect = bounds(text)
+                        for (y in rect.top.toInt() until rect.bottom.toInt() step 16)
+                            for (x in rect.left.toInt() until rect.right.toInt() step 16) {
+                                assertTrue("Reading contrast at $x,$y for $name, night=$night",
+                                    androidx.core.graphics.ColorUtils.calculateContrast(text.currentTextColor, bitmap.getPixel(x,y)) >= 4.5)
+                            }
+                    }
                     root.draw(Canvas(bitmap))
                     val file = File("build/reports/connection-ui/$name-${if (night) "night" else "day"}.png")
                     file.parentFile.mkdirs()
