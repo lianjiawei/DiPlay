@@ -9,4 +9,7 @@
     <string name="settings_wallpaper_choose">Выбрать фото</string>
     <string name="settings_wallpaper_replace">Заменить фото</string>
     <string name="settings_wallpaper_import_failed">Не удалось использовать изображение. Выберите другое.</string>
+    <string name="settings_home_brand">Марка на главном экране</string>
+    <string name="settings_home_brand_lincoln">Lincoln</string>
+    <string name="settings_home_brand_ford">Ford</string>
 </resources>

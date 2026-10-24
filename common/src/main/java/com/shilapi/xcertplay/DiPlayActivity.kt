@@ -176,19 +176,48 @@ internal object SettingsInformationArchitecture {
 }
 
 /** DiAuto's visual language, with a connection flow for an independent CarPlay receiver. */
-class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
+class DiPlayActivity : CarPlayHostActivity() {
+    override val unifiedHome: Boolean get() = true
+    override fun applyHomeWindowAppearance() = applyFullscreenMode()
+    private var openProjectionWhenReady = false
+    private var homeActionWidth = 0
+    // Startup routing tests replace only this media-runtime boundary, never authentication resources.
+    internal var projectionStarter: () -> Boolean = { requestUnifiedProjection() }
+
+    private val mainProjectionReady: Boolean get() = CarPlayBackgroundSession.active &&
+        CarPlayBackgroundSession.mainPictureReady && !projectionNeedsRetry && !projectionNeedsWifiReset
+
+    override fun onProjectionStateChanged() {
+        if (projectionIsVisible && !mainProjectionReady) {
+            // Reuse the visible home when video disappears, including during automatic recovery.
+            openProjectionWhenReady = true
+            revealUnifiedHome(afterConnectionLoss = true)
+            applyHomeWindowAppearance()
+        }
+        refreshStatus()
+        if (openProjectionWhenReady && page == "home" && mainProjectionReady &&
+            lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) &&
+            window.decorView.hasWindowFocus()) {
+            if (showUnifiedProjection()) openProjectionWhenReady = false
+        }
+    }
+
+    override fun showDiPlayHome(page: String) {
+        openProjectionWhenReady = false
+        returnToCarPlay = projectionIsVisible && page == "settings"
+        this.page = if (page == "wireless-recovery") "home" else page
+        render()
+        if (page == "wireless-recovery") confirmWirelessReset()
+    }
+
     private val handler = Handler(Looper.getMainLooper())
-    private var appNight = true
-    override val currentAppNight: Boolean get() = appNight
-    private var palette = DiPlayPalette.DARK
-    private var appearanceObserverRemoval: (() -> Unit)? = null
-    private var appearanceUpdatesResumed = false
-    private var appearanceRenderPending = false
-    private var appearanceButtonFocusPending = false
+    private val appNight = true
+    private val palette = DiPlayPalette.DARK
     private var windowLearning: WindowKeyLearning? = null
     private val windowLearningPresses = WheelKeyPresses()
     private val endWindowLearning = Runnable { cancelKeyLearning() }
     private var page = "home"
+    private var returnToCarPlay = false
     internal var ambientSupportCheck: (Context) -> java.util.concurrent.CompletableFuture<Boolean> = AmbientMusicController::checkSupport
     private var settingsCategory = SettingsCategory.OVERVIEW
     private var connectionSettingsReturnCategory: SettingsCategory? = null
@@ -202,7 +231,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var setupError: String? = null
     private var status: TextView? = null
     private var homeHeadline: TextView?=null
-    private var homeUsbFooter: View?=null
+    private var homeUsbFooter: Button?=null
     private var homeConnectionRing: ConnectionRingView? = null
     private var connectButton: Button? = null
     private var disconnectButton: Button? = null
@@ -253,6 +282,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var adbCheckGeneration = 0
     private var adbStatus: TextView? = null
     private var availableUpdate: UpdateRelease? = null
+    private var updateHistoryDialog: AlertDialog? = null
     private val installedUpdateVersion by lazy { version() }
     private var updatePromptResumed = false
     private var updatePrompt: UpdatePromptDialog? = null
@@ -339,15 +369,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
     private val tick = object : Runnable {
         override fun run() {
-            refreshStatus()
-            refreshUpdateAvailability()
+            if (!projectionIsVisible) {
+                refreshStatus()
+                refreshUpdateAvailability()
+            }
             handler.postDelayed(this, 1000)
-        }
-    }
-    private val appearancePoll = object : Runnable {
-        override fun run() {
-            checkForAppearanceChange()
-            if (appearanceUpdatesResumed) handler.postDelayed(this, APPEARANCE_POLL_MILLIS)
         }
     }
     private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -459,14 +485,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Back on the home page finishes this activity while the session runs on, so the icon lands here.
-        if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            openProjection(); finish(); return
-        }
         scheduleBackgroundUpdateChecks()
         availableUpdate = UpdateAvailability.available(this, version())
         enforceInterfaceSize()
-        refreshAppearance()
         rememberLaunchAppearance()
         languagePreferenceAtCreate = AppLocale.preference(this)
         com.shilapi.xcertplay.hud.BydNavigationOutputs.onAppOpened(applicationContext)
@@ -496,6 +517,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page")
             ?: "home"
+        returnToCarPlay = savedInstanceState?.getBoolean(EXTRA_RETURN_TO_CARPLAY)
+            ?: intent.getBooleanExtra(EXTRA_RETURN_TO_CARPLAY, false)
         UpdateStorage.start(applicationContext)
         render()
         scheduleAutomaticVehicleValidation()
@@ -509,21 +532,46 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (page != "home") navigateBack()
-                else { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true }
+                if (projectionIsVisible) {
+                    openProjectionWhenReady = false
+                    revealUnifiedHome()
+                    if (!projectionIsVisible) { refreshStatus(); applyFullscreenMode() }
+                } else if (page != "home") navigateBack()
+                else showCarLauncher()
             }
         })
+        val openRequested = intent.getBooleanExtra(EXTRA_OPEN_PROJECTION, false) || intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED ||
+            (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession())
+        val restoreConnection = savedInstanceState?.getBoolean("unified_connection_requested") == true
+        if (openRequested || restoreConnection) {
+            intent.removeExtra(EXTRA_OPEN_PROJECTION)
+            handler.post {
+                if (!isFinishing && !isDestroyed) {
+                    openProjectionWhenReady = openRequested || savedInstanceState?.getBoolean("unified_projection_visible") == true
+                    if (!projectionStarter()) openProjectionWhenReady = false
+                    onProjectionStateChanged()
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
         connectionSettingsReturnCategory = null
-        // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
-        // CarPlay carry a "page" extra, which isLauncherIntent rejects.
-        if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            page = "home"; render(); openProjection(); return
+        returnToCarPlay = intent.getBooleanExtra(EXTRA_RETURN_TO_CARPLAY, false)
+        val openRequested = intent.getBooleanExtra(EXTRA_OPEN_PROJECTION, false) || intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED ||
+            (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession())
+        intent.removeExtra(EXTRA_OPEN_PROJECTION)
+        if (openRequested) {
+            if (page != "home") { page = "home"; render() }
+            openProjection()
+            return
         }
-        page = intent.getStringExtra("page") ?: "home"; render()
+        val destination = intent.getStringExtra("page") ?: "home"
+        if (page != destination || destination != "home") {
+            page = destination
+            render()
+        } else refreshStatus()
         automaticVehicleValidationStarted = false
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -543,6 +591,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             !CarPlayBackgroundSession.hasSession()
     }
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(EXTRA_RETURN_TO_CARPLAY, returnToCarPlay)
         outState.putString("page", page)
         outState.putString("settings_category", settingsCategory.name)
         connectionSettingsReturnCategory?.let { outState.putString("connection_settings_return_category", it.name) }
@@ -555,7 +604,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (updateInterfaceSize(newConfig)) return
-        refreshAppearance()
         render()
     }
 
@@ -649,8 +697,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         // Back from the car settings: refresh the car hotspot reminder on the home page.
         if (!initialLaunch && !adbSwitchChangePending && !pausedForAdbSwitchChange &&
-            (page == "home" || page == "settings" || page == "connection" || page == "setup")) render()
-        startAppearanceUpdates()
+            (page == "settings" || page == "connection" || page == "setup")) render()
+        else refreshStatus()
         pausedForAdbSwitchChange = false
         if (initialLaunch) {
             initialLaunch = false
@@ -664,7 +712,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun canAutoConnectOnLaunch(): Boolean =
         !isFinishing && !isDestroyed && setupError == null &&
-            !CarPlayBackgroundSession.hasSession() && DiPlayPreferences.autoConnect(this) &&
+            !CarPlayBackgroundSession.hasSession() && !projectionIsStarting && DiPlayPreferences.autoConnect(this) &&
             !intent.hasExtra("page") && page == "home"
 
     private fun connectAutomaticallyOnLaunch() {
@@ -687,10 +735,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         handler.removeCallbacks(automaticUpdatePrompt)
         updatePrompt?.dismiss()
         updatePrompt = null
-        appearanceUpdatesResumed = false
-        appearanceObserverRemoval?.invoke()
-        appearanceObserverRemoval = null
-        handler.removeCallbacks(appearancePoll)
+        updateHistoryDialog?.dismiss()
+        updateHistoryDialog = null
         cancelKeyLearning()
         pausedForAdbSwitchChange = adbSwitchChangePending
         handler.removeCallbacks(tick)
@@ -704,9 +750,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updatePrompt?.dismiss()
         updatePrompt = null
         settingsSearchPopup?.dismiss()
-        appearanceObserverRemoval?.invoke()
-        appearanceObserverRemoval = null
-        handler.removeCallbacks(appearancePoll)
         hotspotJoinControls?.close()
         cancelUsbPermissionSetup()
         cancelKeyLearning()
@@ -739,12 +782,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) applyFullscreenMode()
+        if (hasFocus) { applyFullscreenMode(); onProjectionStateChanged() }
         // Some head units put their own density back without any other callback.
         if (hasFocus && enforceInterfaceSize()) render()
     }
 
     private fun applyFullscreenMode() {
+        if (projectionIsVisible) { applyProjectionWindowAppearance(); return }
         val multiWindow = Build.VERSION.SDK_INT >= 24 && isInMultiWindowMode
         WindowInsetsControllerCompat(window, window.decorView).apply {
             isAppearanceLightStatusBars = palette.systemBarIconsAreDark
@@ -772,39 +816,23 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val isExpandedSettingsLayout: Boolean
         get() = SettingsLayoutPreferences.isActive(this) || isNaturallyExpandedSettingsLayout
 
-    private data class FocusSnapshot(
-        val tag: Any?,
-        val contentDescription: String?,
-        val label: String?,
-    )
-
-    private fun focusLabel(view: View): String? = when (view) {
-        is TextView -> view.text?.toString()
-        is ViewGroup -> descendants(view).filterIsInstance<TextView>()
-            .firstOrNull { it.text.isNotEmpty() }?.text?.toString()
-        else -> null
-    }
-
-    private fun render() = render(appearanceOnly = false)
-
-    private fun render(appearanceOnly: Boolean, preferredFocusTag: Any? = null) {
+    private fun render() {
+        val keepProjectionVisible = projectionIsVisible && page == "home"
         if (page !in setOf("home", "settings", "connection", "setup", "backup")) page = "home"
+        if (!isUpdatePage()) {
+            handler.removeCallbacks(automaticUpdatePrompt)
+            updatePromptForDownload = false
+            updatePrompt?.dialog?.dismiss()
+            updatePrompt = null
+            updateHistoryDialog?.dismiss()
+            updateHistoryDialog = null
+        }
         enforceInterfaceSize()
-        refreshAppearance()
         applyWindowAppearance()
         // A pending assignment belongs to the widgets being replaced, never to another page.
-        if (!appearanceOnly) cancelKeyLearning()
+        cancelKeyLearning()
         // The backup server lives only while its page is shown, however the driver left it.
         if (page != "backup" && backupServer != null) stopBackupServer()
-        val focusSnapshot = if (appearanceOnly) {
-            currentFocus?.let { focused ->
-                FocusSnapshot(
-                    tag = preferredFocusTag ?: focused.tag,
-                    contentDescription = focused.contentDescription?.toString(),
-                    label = focusLabel(focused),
-                )
-            } ?: preferredFocusTag?.let { FocusSnapshot(it, null, null) }
-        } else null
         // A restore still waiting for layout keeps its target: the old page was never laid out.
         val sameDestination = renderedPage == page &&
             (page != "settings" || renderedSettingsCategory == settingsCategory)
@@ -825,7 +853,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (page != "settings") clearSettingsSearchState()
         status = null; connectButton = null; disconnectButton = null; lastRunning = null; carButtonCard = null
         homeConnectionRing = null
-        homeHeadline=null;homeUsbFooter=null
+        homeHeadline=null;homeUsbFooter=null;homeActionWidth=0
         reconnectBar = null
         readinessCard = null
         exportButton = null
@@ -903,24 +931,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
             insets
         }
-        setContentView(root)
+        installUnifiedHomeContent(root)
+        if (keepProjectionVisible && !showUnifiedProjection()) openProjectionWhenReady = true
         ViewCompat.requestApplyInsets(root)
         renderedPage = page
         renderedSettingsCategory = settingsCategory.takeIf { page == "settings" }
         refreshStatus()
-        focusSnapshot?.let { snapshot ->
-            root.doOnLayout {
-                descendants(root).firstOrNull { candidate ->
-                    candidate.isFocusable && when {
-                        snapshot.tag != null -> candidate.tag == snapshot.tag
-                        snapshot.contentDescription != null ->
-                            candidate.contentDescription?.toString() == snapshot.contentDescription
-                        snapshot.label != null -> focusLabel(candidate) == snapshot.label
-                        else -> false
-                    }
-                }?.requestFocus()
-            }
-        }
         pendingScrollY = previousScrollY
         // A stopped window still dispatches pre-draw but skips layout, so wait for a real layout;
         // the listener stays on this view and goes away with it.
@@ -954,37 +970,39 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         gravity = Gravity.CENTER_VERTICAL
         val home = page == "home"
         val control = if (home) ReferenceHomeMetrics.HEADER_DP else if (compact) 44 else 52
-        val logoSize=dp(if (home) 32 else if (compact) 30 else 36)
-        addView(if (home) BrandMarkView(this@DiPlayActivity,appNight) else ImageView(this@DiPlayActivity).apply {
+        val logoSize=dp(if (home) {
+            if (AirPlayPersistence.loadHomeVehicleBrand(this@DiPlayActivity) == HomeVehicleBrand.FORD)
+                ReferenceHomeMetrics.FORD_MARK_WIDTH_DP else ReferenceHomeMetrics.LINCOLN_MARK_WIDTH_DP
+        } else if (compact) 30 else 36)
+        addView(if (home) BrandMarkView(this@DiPlayActivity,appNight, homeBrand = true) else ImageView(this@DiPlayActivity).apply {
             VehicleBranding.setLogo(this);contentDescription=VehicleBranding.displayName(context)
-        },LinearLayout.LayoutParams(logoSize,if(home) dp(40) else logoSize))
-        val brandTextSize = if (home || compact) 20 else 26
-        val brandLabel = label(VehicleBranding.displayName(this@DiPlayActivity), brandTextSize, TEXT, true,
+        },LinearLayout.LayoutParams(logoSize,if(home) dp(ReferenceHomeMetrics.BRAND_MARK_HEIGHT_DP) else logoSize))
+        val brandTextSize = if (compact) 20 else 26
+        val brandLabel = if (home) null else label(VehicleBranding.displayName(this@DiPlayActivity), brandTextSize, TEXT, true,
             centreGlyphs = resources.configuration.locales[0].language != "zh").apply {
-            setPaddingRelative(if (compact && !home) dp(8) else dp(12), 0, 0, 0)
+            setPaddingRelative(if (compact) dp(8) else dp(12), 0, 0, 0)
             gravity = (if (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) Gravity.RIGHT else Gravity.LEFT) or Gravity.CENTER_VERTICAL
             textAlignment = View.TEXT_ALIGNMENT_GRAVITY
             maxLines = 1
             TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12,
-                if (home) 20 else if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)
+                if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)
         }
-        addView(brandLabel, LinearLayout.LayoutParams(0, dp(control), 1f))
-        addView(appearanceButton(), LinearLayout.LayoutParams(dp(control), dp(control)).apply {
-            marginEnd = dp(if (compact) 8 else 12)
-        })
+        addView(brandLabel ?: Space(this@DiPlayActivity), LinearLayout.LayoutParams(0, dp(control), 1f))
         addView(headerButton(if (page == "home") brandString(R.string.car_home) else brandString(R.string.back),
             if (page == "home") R.drawable.ic_dp_car else R.drawable.ic_dp_back, compact || home) {
-            if (page == "home") startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
+            if (page == "home") showCarLauncher()
             else navigateBack()
         }.apply {
-            // Leave room for the brand and theme control even with a long translated label.
+            // Keep the home logo and the car-home action at the same fixed edges.
             val available=dp(resources.configuration.screenWidthDp-ReferenceHomeMetrics.SIDE_DP*2)
-            val brandPaint=android.text.TextPaint(brandLabel.paint).apply {
-                textSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,brandTextSize.toFloat(),resources.displayMetrics)
-            }
-            val brandWidth=kotlin.math.ceil(brandPaint.measureText(brandLabel.text.toString())).toInt()+
-                brandLabel.compoundPaddingLeft+brandLabel.compoundPaddingRight+dp(2)
-            maxWidth=minOf(available/2,available-logoSize-brandWidth-dp(control+if(compact)8 else 12))
+            val brandWidth=brandLabel?.let { label ->
+                val brandPaint=android.text.TextPaint(label.paint).apply {
+                    textSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,brandTextSize.toFloat(),resources.displayMetrics)
+                }
+                kotlin.math.ceil(brandPaint.measureText(label.text.toString())).toInt()+
+                    label.compoundPaddingLeft+label.compoundPaddingRight+dp(2)
+            } ?: 0
+            maxWidth=minOf(available/2,available-logoSize-brandWidth)
                 .coerceAtLeast(dp(control))
             val label=text.toString()
             contentDescription=label
@@ -1001,6 +1019,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 }
             }
         }, LinearLayout.LayoutParams(-2, dp(control)))
+    }
+
+    private fun showCarLauncher() {
+        openProjectionWhenReady = false
+        startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
+        moveTaskToBack(true)
     }
 
     private fun navigateBack() {
@@ -1029,7 +1053,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             page == "settings" && !isExpandedSettingsLayout && settingsCategory != SettingsCategory.OVERVIEW -> {
                 settingsCategory = SettingsCategory.OVERVIEW
             }
+            page == "settings" && returnToCarPlay && CarPlayBackgroundSession.hasSession() -> {
+                returnToCarPlay = false
+                page = "home"
+                render()
+                openProjection()
+                return
+            }
             else -> {
+                returnToCarPlay = false
                 page = "home"
                 connectionSettingsReturnCategory = null
             }
@@ -1047,8 +1079,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val controlHeight=dp(if (isExpandedSettingsLayout) (FidelitySettingsMetrics.HEADER_DP * resources.configuration.fontScale.coerceAtLeast(1f)).roundToInt() else if(compact)GlassChrome.MIN_TARGET_DP else FidelitySettingsMetrics.HEADER_DP)
         val iconOnlySearch = compact || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         gravity = Gravity.CENTER_VERTICAL
-        addView(headerButton(brandString(if(isExpandedSettingsLayout) R.string.ui_glass_back_home else R.string.settings),R.drawable.ic_dp_back,compact,::navigateBack).apply {
-            contentDescription=brandString(if(isExpandedSettingsLayout)R.string.ui_glass_back_home else R.string.back)
+        addView(headerButton(brandString(if(returnToCarPlay) R.string.back else if(isExpandedSettingsLayout) R.string.ui_glass_back_home else R.string.settings),R.drawable.ic_dp_back,compact,::navigateBack).apply {
+            contentDescription=brandString(if(isExpandedSettingsLayout && !returnToCarPlay)R.string.ui_glass_back_home else R.string.back)
             textSize=UiTypography.ACTION_SP.toFloat()
         },LinearLayout.LayoutParams(-2,controlHeight))
         val settingsTitle = label(if(isExpandedSettingsLayout)brandString(R.string.settings)else "", if (compact) 20 else 26, TEXT, true,
@@ -1071,9 +1103,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val searchGap = dp(if (compact) SETTINGS_HEADER_COMPACT_GAP_DP else SETTINGS_HEADER_GAP_DP)
         if (settingsSearchExpanded) {
             val searchField = settingsSearchField(compact)
-            addView(searchField, LinearLayout.LayoutParams(0, controlHeight, 1f).apply {
-                marginEnd = searchGap
-            })
+            addView(searchField, LinearLayout.LayoutParams(0, controlHeight, 1f))
             searchField.doOnLayout {
                 // Give a squeezed editor the title's space, using the current locale and font scale.
                 val hintWidth = searchField.paint.measureText(searchField.hint.toString())
@@ -1106,26 +1136,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 tag = SETTINGS_SEARCH_BUTTON_TAG
                 contentDescription = brandString(R.string.settings_search)
             }
-            addView(searchButton, LinearLayout.LayoutParams(if (iconOnlySearch) controlHeight else -2, controlHeight).apply {
-                marginEnd = searchGap
-            })
+            addView(searchButton, LinearLayout.LayoutParams(if (iconOnlySearch) controlHeight else -2, controlHeight))
         }
-        addView(appearanceButton(), LinearLayout.LayoutParams(controlHeight, controlHeight))
-    }
-
-    private fun appearanceButton(): ImageButton = iconButton(
-        icon = if (appNight) R.drawable.ic_dp_night else R.drawable.ic_dp_day,
-        description = brandString(if (appNight) R.string.settings_switch_to_light_appearance
-            else R.string.settings_switch_to_dark_appearance),
-    ) {
-        AirPlayPersistence.saveAppAppearance(
-            this,
-            if (appNight) AppAppearance.LIGHT else AppAppearance.DARK,
-        )
-        rememberLaunchAppearance()
-        requestAppearanceRender(focusAppearanceButton = true)
-    }.apply {
-        tag = APPEARANCE_BUTTON_TAG
     }
 
     private fun home(content: LinearLayout) {
@@ -1158,11 +1170,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             gravity=Gravity.CENTER;includeFontPadding=false;SceneText.apply(this, appNight, secondary=true)
         }
         connectButton=button(brandString(R.string.ui_glass_connect_carplay),true) {
-            if (CarPlayBackgroundSession.hasSession()) openProjection() else connect(true)
+            when {
+                projectionNeedsWifiReset -> confirmWirelessReset()
+                projectionNeedsRetry -> { openProjectionWhenReady = true; retryUnifiedProjection() }
+                CarPlayBackgroundSession.hasSession() || projectionIsStarting -> openProjection()
+                else -> connect(true)
+            }
         }.apply { textSize=UiTypography.ACTION_SP.toFloat();includeFontPadding=false;minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
         disconnectButton=button(brandString(R.string.disconnect),false) {
             disconnectButton?.isEnabled=false
-            CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
+            openProjectionWhenReady = false
+            stopUnifiedProjection { runOnUiThread { refreshStatus() } }
         }.apply {
             visibility=View.GONE;textSize=UiTypography.ACTION_SP.toFloat();includeFontPadding=false;minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);centeredIconGroup=true
             persistentStartIcon=getDrawable(R.drawable.ic_dp_usb)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
@@ -1181,42 +1199,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             addView(usb,android.widget.FrameLayout.LayoutParams(-1,-1))
             addView(disconnectButton,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
-        val settings=headerButton(brandString(R.string.settings),R.drawable.ic_glass_settings,true) { page="settings";render() }.apply {
+        val settings=headerButton(brandString(R.string.settings),R.drawable.ic_glass_settings,true) { openProjectionWhenReady = false; page="settings";render() }.apply {
             textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false);centeredIconGroup=true
         }
         val brand=HomeBrandView(this).apply {
-            contentDescription=brandString(R.string.home_public_preview,VehicleBranding.displayName(this@DiPlayActivity),version())
+            contentDescription=brandString(R.string.home_public_preview,AirPlayPersistence.loadHomeVehicleBrand(this@DiPlayActivity).displayName(this@DiPlayActivity),version())
         }
         val reserved=dp(ReferenceHomeMetrics.TOP_DP+ReferenceHomeMetrics.BOTTOM_DP+ReferenceHomeMetrics.HEADER_DP+ReferenceHomeMetrics.HEADER_GAP_DP)
         val viewport = rootScroll as HomeViewportScrollView
         body.addView(ReferenceHomeScene(this,hero,phone,connectButton!!,footerStart,settings,brand,
-            { viewport.availableHeight }, reserved))
-        val right=column()
-        availableUpdate?.let { release ->
-            val message = brandString(R.string.update_available_home)
-            val tint = { alpha: Int -> (WARNING and 0x00FFFFFF) or (alpha shl 24) }
-            val chip = GradientDrawable().apply {
-                setColor(tint(0x26))
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), tint(0x80))
-            }
-            right.addView(label(message, 14, WARNING, true).apply {
-                gravity = Gravity.CENTER
-                minHeight = dp(60)
-                setPadding(dp(12), dp(8), dp(12), dp(8))
-                isClickable = true
-                isFocusable = true
-                contentDescription = message
-                background = RippleDrawable(
-                    ColorStateList.valueOf(RIPPLE),
-                    chip,
-                    GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(16).toFloat() },
-                )
-                foreground = focusRing(radiusDp = 16)
-                setOnClickListener { openAvailableUpdate(release) }
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-        }
-        if (right.childCount>0) body.addView(right)
+            { viewport.availableHeight }, reserved, ::refreshHomeActionLabels))
         content.addView(body)
     }
 
@@ -1911,12 +1903,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
-        if (VehicleBranding.preset(this) == VehicleBrandPreset.LINCOLN) {
-            filteredSection(content, SettingsSection.VEHICLE_APPEARANCE,
-                brandString(R.string.settings_vehicle_appearance), R.drawable.ic_dp_car,
-                showHeading = false) { card ->
-                vehicleWallpaperControl(card)
-            }
+        filteredSection(content, SettingsSection.VEHICLE_APPEARANCE,
+            brandString(R.string.settings_vehicle_appearance), R.drawable.ic_dp_car,
+            showHeading = false) { card ->
+            homeVehicleBrandControl(card)
+            vehicleWallpaperControl(card)
         }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             brandString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
@@ -2050,23 +2041,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (settingsSectionFilter?.contains(SettingsSection.BYD_ADB) != false) bydAdbSettings(content)
         filteredSection(content, SettingsSection.DISPLAY_AND_PERFORMANCE,
             brandString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
-            val appearances = AppAppearance.entries
-            choice(
-                card,
-                brandString(R.string.settings_app_appearance),
-                listOf(
-                    brandString(R.string.settings_app_appearance_dark),
-                    brandString(R.string.settings_app_appearance_light),
-                    brandString(R.string.settings_app_appearance_auto),
-                ),
-                appearances.indexOf(AirPlayPersistence.loadAppAppearance(this)),
-                reconnects = false,
-            ) { index ->
-                AirPlayPersistence.saveAppAppearance(this, appearances[index])
-                rememberLaunchAppearance()
-                handler.post { checkForAppearanceChange() }
-            }
-            card.addView(label(brandString(R.string.settings_app_appearance_description), 14, MUTED))
             val nightModes = CarPlayNightMode.entries
             val nightMode = AirPlayPersistence.loadCarPlayNightMode(this)
             val ambientControls = column().apply {
@@ -2086,7 +2060,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 ambientControls.visibility = if (nightModes[index] == CarPlayNightMode.AMBIENT) View.VISIBLE else View.GONE
                 scheduleControls.visibility = if (nightModes[index] == CarPlayNightMode.SCHEDULE) View.VISIBLE else View.GONE
                 if (page == "settings") polishSettingsRows(card)
-                handler.post(::checkForAppearanceChange)
             }
             val sentenceSeparator = if (resources.configuration.locales[0].language == "zh") "" else " "
             card.addView(label(brandString(R.string.carplay_night_hint) + sentenceSeparator +
@@ -2107,7 +2080,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             scheduleTimeControl(scheduleControls, start = true)
             scheduleTimeControl(scheduleControls, start = false)
             card.addView(button(brandString(R.string.picture_adjustments), false) {
-                startActivity(Intent(this, CarPlayHostActivity::class.java)
+                startActivity(CarPlayEntry.intent(this)
                     .putExtra("picture_controls", true).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }.apply {
                 rowPresentation=true; rowTitle=brandString(R.string.picture_adjustments)
@@ -2804,8 +2777,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         rowIconResource=icon
         if (summary.isNotBlank()) {
             rowDetails=summary
-            rowHelp={ appDialogBuilder().setTitle(title).setMessage(summary).setPositiveButton(android.R.string.ok,null).show() }
-            setOnLongClickListener { rowHelp?.invoke();true }
         }
         textSize=UiTypography.ACTION_SP.toFloat()
         minHeight=dp(FidelitySettingsMetrics.SETTING_ROW_DP)
@@ -3170,6 +3141,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun showHistoryReleasePicker(releases: List<UpdateRelease>) {
+        if (!isUpdatePage()) return
+        updateHistoryDialog?.dismiss()
         val downloadable = releases.filter { it.tagName.isNotBlank() }
         if (downloadable.isEmpty()) {
             historyMessage = brandString(R.string.update_history_empty)
@@ -3179,7 +3152,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val labels = downloadable.map { release ->
             if (release.apkName.isBlank()) release.tagName else "${release.tagName}  ·  ${release.apkName}"
         }.toTypedArray()
-        appDialogBuilder()
+        updateHistoryDialog = appDialogBuilder()
             .setTitle(brandString(R.string.update_history_title))
             .setItems(labels) { _, index -> confirmHistoryDownload(downloadable[index]) }
             .setNegativeButton(android.R.string.cancel, null)
@@ -3187,11 +3160,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun confirmHistoryDownload(release: UpdateRelease) {
+        if (!isUpdatePage()) return
+        updateHistoryDialog?.dismiss()
         val notes = UpdateReleaseNotes.plainText(release.releaseNotes)
             .ifBlank { brandString(R.string.update_history_notes_missing) }
         val message = brandString(R.string.update_history_confirm, release.apkName) +
             "\n\n" + brandString(R.string.update_history_notes_title) + "\n" + notes
-        appDialogBuilder()
+        updateHistoryDialog = appDialogBuilder()
             .setTitle(release.tagName)
             .setMessage(message)
             .setNegativeButton(android.R.string.cancel, null)
@@ -3208,14 +3183,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     downloadHistoryRelease(release)
                 } else {
                     historyMessage = brandString(R.string.update_history_permission_denied)
-                    render()
+                    if (isUpdatePage()) render()
                 }
             }
             runCatching { reportStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) }
                 .onFailure {
                     storagePermissionAction = null
                     historyMessage = brandString(R.string.update_history_permission_denied)
-                    render()
+                    if (isUpdatePage()) render()
                 }
         } else {
             downloadHistoryRelease(release)
@@ -3228,7 +3203,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         historyProgress = null
         historyMessage = null
         val generation = ++historyGeneration
-        render()
+        if (isUpdatePage()) render()
         Thread({
             var attempt: File? = null
             val outcome = runCatching {
@@ -3260,16 +3235,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 outcome.fold(
                     { saved ->
                         historyMessage = brandString(R.string.update_saved_to, saved.path)
-                        render()
-                        appDialogBuilder()
+                        if (isUpdatePage()) {
+                            render()
+                            updateHistoryDialog?.dismiss()
+                            updateHistoryDialog = appDialogBuilder()
                             .setTitle(brandString(R.string.update_history_saved_title))
                             .setMessage(brandString(R.string.update_saved_to, saved.path))
                             .setPositiveButton(android.R.string.ok, null)
                             .show()
+                        }
                     },
                     { failure ->
                         historyMessage = failure.message ?: brandString(R.string.update_failed)
-                        render()
+                        if (isUpdatePage()) render()
                     },
                 )
             }
@@ -3295,27 +3273,33 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     /** The existing foreground tick also picks up results saved by WorkManager. No network I/O. */
+    private fun isUpdatePage() = page == "settings" && settingsCategory == SettingsCategory.ABOUT && !projectionIsVisible
+
     private fun refreshUpdateAvailability() {
         UpdateStorage.start(applicationContext)
         val release = UpdateAvailability.available(this, installedUpdateVersion)
         if (availableUpdate != release) {
             availableUpdate = release
-            if (page == "home") render()
         }
-        // Queue after pending auto-connect work, so the updater never wins the launch race.
-        if (release != null) {
+        if (release != null && (updateStage == UpdateStage.IDLE || updateStage == UpdateStage.AVAILABLE)) {
+            updateRelease = release
+            updateStage = UpdateStage.AVAILABLE
+            if (isUpdatePage()) refreshUpdateRow()
+        }
+        // Offers belong to the update page; background checks never interrupt the home flow.
+        if (release != null && isUpdatePage()) {
             handler.removeCallbacks(automaticUpdatePrompt)
             handler.post(automaticUpdatePrompt)
         }
     }
 
     private fun showUpdatePrompt(release: UpdateRelease? = availableUpdate, automatic: Boolean) {
-        if (release == null || !updatePromptResumed || isFinishing || isDestroyed ||
+        if (release == null || !isUpdatePage() || !updatePromptResumed || isFinishing || isDestroyed ||
             updatePrompt?.isShowing == true || historyStage != HistoryStage.IDLE ||
             updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING ||
             updateStage == UpdateStage.VERIFYING || updateStage == UpdateStage.READY) return
-        if (automatic && (page != "home" || !window.decorView.hasWindowFocus() ||
-                CarPlayBackgroundSession.hasSession() || !UpdateAvailability.shouldPrompt(this, release))) return
+        if (automatic && (!window.decorView.hasWindowFocus() ||
+                projectionIsStarting || CarPlayBackgroundSession.hasSession() || !UpdateAvailability.shouldPrompt(this, release))) return
         val prompt = createUpdatePrompt()
         updatePrompt = prompt
         prompt.show(release, UpdatePromptStage.OFFER, null, null)
@@ -3327,8 +3311,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             onDownload = { displayedRelease ->
                 updateRelease = displayedRelease
                 updateMessage = null
-                page = "settings"
-                settingsCategory = SettingsCategory.ABOUT
                 downloadUpdate()
             },
             onInstall = { if (updateStage == UpdateStage.READY) installUpdate() },
@@ -3339,7 +3321,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun refreshUpdatePrompt() {
-        if (!updatePromptResumed || isFinishing || isDestroyed) return
+        if (!isUpdatePage() || !updatePromptResumed || isFinishing || isDestroyed) return
         val release = updateRelease ?: return
         val state = when (updateStage) {
             UpdateStage.DOWNLOADING -> UpdatePromptStage.DOWNLOADING
@@ -3383,7 +3365,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         updatePromptForDownload = true
         UpdateAvailability.recordPrompt(this, requestedRelease)
         val generation = ++updateGeneration
-        render()
+        if (isUpdatePage()) render()
         refreshUpdatePrompt()
         updateDownloadWorker(Runnable {
             // Each attempt owns its files, including across activity recreation.
@@ -3426,14 +3408,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         updateSavedPath = saved?.path
                         updateSavedUri = saved?.uri
                         updateStage = UpdateStage.READY
-                        render()
+                        if (isUpdatePage()) render()
                         refreshUpdatePrompt()
                     },
                     { failure ->
                         Log.w("DiPlay-Update", "update download failed", failure)
                         updateMessage = failure.message ?: brandString(R.string.update_failed)
                         updateStage = UpdateStage.FAILED
-                        render()
+                        if (isUpdatePage()) render()
                         refreshUpdatePrompt()
                     },
                 )
@@ -3486,7 +3468,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             Log.w("DiPlay-Update", "install failed to start: $outcome", failure)
             UpdateAvailability.recordInstall(applicationContext, System.currentTimeMillis(), "$outcome failed=${failure.javaClass.simpleName}")
             updateMessage = brandString(R.string.update_failed)
-            render()
+            if (isUpdatePage()) render()
         }
     }
 
@@ -4591,7 +4573,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 body.addView(value)
                 (slider.parent as? ViewGroup)?.removeView(slider)
                 slider.visibility = View.VISIBLE
-                body.addView(slider, LinearLayout.LayoutParams(-1, dp(FidelitySettingsMetrics.ROW_HELP_TARGET_DP)))
+                body.addView(slider, LinearLayout.LayoutParams(-1, dp(GlassChrome.MIN_TARGET_DP)))
                 // Keep the original listener and live-save/reconnect semantics. The slider is the
                 // same view, with the same complete step list, every time this dialog opens.
                 appDialogBuilder().setTitle(title).setView(body)
@@ -4600,7 +4582,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         dialogValue = null
                         body.removeView(slider)
                         slider.visibility = View.GONE
-                        addView(slider, LinearLayout.LayoutParams(-1, dp(FidelitySettingsMetrics.ROW_HELP_TARGET_DP)))
+                        addView(slider, LinearLayout.LayoutParams(-1, dp(GlassChrome.MIN_TARGET_DP)))
                     }.show()
             }.also {
                 compactControl = it
@@ -4950,23 +4932,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         assign = button(current(), false) {
             val cancelled = { runOnUiThread {
                 assign.text = current()
-                applyPendingAppearanceRender()
             } }
             val refused = { taken: WheelZoomSettings.Role ->
                 runOnUiThread {
                     assign.text = current()
                     toast(brandString(R.string.wheel_key_in_use, brandString(wheelKeyRoleName(taken))))
-                    applyPendingAppearanceRender()
                 }
             }
             val started = WheelKeyService.learn(role, cancelled, refused) { _, key -> runOnUiThread {
                 assign.text = current(key)
-                applyPendingAppearanceRender()
             } } ||
                 // Without the service the Siri key is learnt from this window, so only keys that reach apps.
                 (role == WheelZoomSettings.Role.SIRI && learnInWindow(role, cancelled, refused) {
                     assign.text = current(it)
-                    applyPendingAppearanceRender()
                 })
             if (started) assign.text = brandString(R.string.wheel_key_press, name)
             else toast(brandString(R.string.wheel_keys_service_off))
@@ -5006,7 +4984,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val cancelled = windowLearning?.cancelled
         windowLearning = null
         cancelled?.invoke()
-        applyPendingAppearanceRender()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -6273,7 +6250,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         else current.copy(endMinute = updatedMinute)
                     AirPlayPersistence.saveCarPlayNightSchedule(this, updated)
                     control.text = labelFor(updatedMinute)
-                    handler.post(::checkForAppearanceChange)
                 }
             }, selected / 60, selected % 60, true).show()
         }
@@ -6318,7 +6294,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else open()
     }
     private fun openProjection() {
-        startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        openProjectionWhenReady = true
+        if (!projectionStarter()) openProjectionWhenReady = false
+        onProjectionStateChanged()
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -6420,32 +6398,62 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun refreshStatus() {
-        val running = CarPlayBackgroundSession.hasSession()
-        homeHeadline?.text=brandString(when {
-            CarPlayBackgroundSession.active -> R.string.carplay_connected
+        val running = CarPlayBackgroundSession.hasSession() || projectionIsStarting
+        val connected = running && mainProjectionReady
+        setHomeText(homeHeadline, brandString(when {
+            projectionNeedsRetry || projectionNeedsWifiReset -> R.string.ui_glass_connection_incomplete
+            connected -> R.string.carplay_connected
             running -> R.string.ui_glass_connecting_title
             else -> R.string.ui_glass_home_title
-        })
+        }))
         homeUsbFooter?.visibility=if(running)View.GONE else View.VISIBLE
-        homeConnectionRing?.state(connecting = running && !CarPlayBackgroundSession.active,
-            completed = CarPlayBackgroundSession.active)
-        status?.text = when {
+        homeConnectionRing?.state(connecting = running && !connected && !projectionNeedsRetry && !projectionNeedsWifiReset,
+            completed = connected)
+        setHomeText(status, when {
             setupError != null -> brandString(R.string.setup_needs_attention)
-            CarPlayBackgroundSession.active -> brandString(R.string.carplay_connected)
-            running -> brandString(R.string.ui_glass_connecting_hint)
+            connected -> ""
+            running -> projectionStatus?.takeIf { it.isNotBlank() } ?: brandString(R.string.ui_glass_connecting_hint)
             DiPlayPreferences.phoneAddress(this) != null -> brandString(R.string.ui_glass_paired_waiting)
             else -> brandString(R.string.ready_when_you_are)
-        }
+        })
+        status?.contentDescription = projectionStatusDetails ?: status?.text
+        refreshHomeActionLabels()
         if (lastRunning != running) {
-            connectButton?.text = if (running) brandString(R.string.open_carplay) else brandString(R.string.ui_glass_connect_carplay)
             disconnectButton?.visibility = if (running) View.VISIBLE else View.GONE
             disconnectButton?.isEnabled = true
             lastRunning = running
         }
-        connectButton?.isEnabled = setupError == null
+        connectButton?.isEnabled = setupError == null && (!running || connected || projectionNeedsRetry || projectionNeedsWifiReset)
         refreshReconnectBar()
         refreshReadiness()
     }
+    private fun refreshHomeActionLabels(width: Int = homeActionWidth) {
+        homeActionWidth = width
+        val compact = width > 0 && ConnectionPageLayout.compactActions(this, width)
+        val running = CarPlayBackgroundSession.hasSession() || projectionIsStarting
+        val connected = running && mainProjectionReady
+        setHomeText(homeUsbFooter, brandString(if (compact) R.string.ui_glass_usb_short else R.string.connect_with_usb))
+        homeUsbFooter?.contentDescription = brandString(R.string.connect_with_usb)
+        connectButton?.contentDescription = brandString(when {
+            projectionNeedsWifiReset -> R.string.reset_carplay_wi_fi
+            projectionNeedsRetry -> R.string.retry_carplay_connection
+            connected -> R.string.open_carplay
+            running -> R.string.ui_glass_connecting_title
+            else -> R.string.ui_glass_connect_carplay
+        })
+        setHomeText(connectButton, brandString(when {
+            projectionNeedsWifiReset -> if (compact) R.string.ui_glass_wifi_reset_short else R.string.reset_carplay_wi_fi
+            projectionNeedsRetry -> if (compact) R.string.ui_glass_retry_short else R.string.retry_carplay_connection
+            connected -> R.string.open_carplay
+            running -> R.string.ui_glass_connecting_action
+            else -> R.string.ui_glass_connect_carplay
+        }))
+    }
+
+    private fun setHomeText(view: TextView?, text: CharSequence) {
+        if (view != null && !android.text.TextUtils.equals(view.text, text)) view.text = text
+    }
+
     private fun authorizeClusterRouting() {
         val app = applicationContext
         Thread({
@@ -6865,28 +6873,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
             row.addView(icon, 0, LinearLayout.LayoutParams(dp(FidelitySettingsMetrics.ROW_START_DP), dp(FidelitySettingsMetrics.ROW_ICON_DP)))
-            if (description.isNotBlank()) {
-                val help = settingsHelpButton(title, description)
-                row.addView(help, row.childCount - 1, LinearLayout.LayoutParams(
-                    dp(FidelitySettingsMetrics.ROW_HELP_TARGET_DP), dp(FidelitySettingsMetrics.ROW_HELP_TARGET_DP)))
-            }
         }
         parent.addView(result.rowView)
         return result.switch
     }
-    private fun settingsHelpButton(title: String, description: String) = ImageButton(this).apply {
-        setImageResource(R.drawable.ic_dp_about)
-        imageTintList = ColorStateList.valueOf(MUTED)
-        scaleType = ImageView.ScaleType.FIT_CENTER
-        background = RippleDrawable(ColorStateList.valueOf(RIPPLE), ColorDrawable(Color.TRANSPARENT), null)
-        val inset = dp((FidelitySettingsMetrics.ROW_HELP_TARGET_DP - FidelitySettingsMetrics.ROW_HELP_ICON_DP) / 2)
-        setPadding(inset, inset, inset, inset)
-        contentDescription = "$title · ${brandString(R.string.ui_glass_details)}"
-        setOnClickListener {
-            appDialogBuilder().setTitle(title).setMessage(description).setPositiveButton(android.R.string.ok, null).show()
-        }
-    }
-
     private fun ambientConfigurationLabel(value: AmbientMusicSettings.Values): String {
         val mode = if (!value.music) brandString(R.string.settings_ambient_static) else when (value.colorMode) {
             AmbientColorMode.ENERGY -> brandString(R.string.settings_ambient_energy)
@@ -7062,6 +7052,26 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
 
+    private fun homeVehicleBrandControl(parent: LinearLayout) {
+        val title = brandString(R.string.settings_home_brand)
+        val current = AirPlayPersistence.loadHomeVehicleBrand(this)
+        parent.addView(button("$title · ${brandString(current.label)}", false) {
+            var pending = current
+            val brands = HomeVehicleBrand.entries
+            appDialogBuilder().setTitle(title)
+                .setSingleChoiceItems(brands.map { brandString(it.label) }.toTypedArray(), brands.indexOf(current)) { _, index ->
+                    pending = brands[index]
+                }
+                .setPositiveButton(R.string.save) { _, _ ->
+                    AirPlayPersistence.saveHomeVehicleBrand(this, pending)
+                    if (pending != current) {
+                        render()
+                    }
+                }
+                .setNegativeButton(R.string.cancel, null).show()
+        }, matchButton(0, FidelitySettingsMetrics.SETTING_ROW_DP))
+    }
+
     private fun vehicleWallpaperControl(parent: LinearLayout) {
         val title = brandString(R.string.settings_vehicle_model)
         val model = AirPlayPersistence.loadVehicleModel(this)
@@ -7151,10 +7161,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val notes=children.drop(index+1).takeWhile { it is TextView && it !is Button }.filterIsInstance<TextView>()
             val detailNotes=(introduction + notes).distinct()
             val full=detailNotes.joinToString("\n\n") { it.text.toString() }
-            // Explanations remain available on demand, not as a second line in the card.
+            // Preserve descriptions for accessibility without a separate help tap target.
             view.rowIconResource=when {
                 view.rowTitle!=null -> view.rowIconResource
-                title==brandString(R.string.settings_app_appearance) -> R.drawable.ic_glass_palette
                 title==brandString(R.string.carplay_night_mode) -> R.drawable.ic_glass_display
                 title==brandString(R.string.carplay_size) -> R.drawable.ic_glass_size
                 title==brandString(R.string.resolution) -> R.drawable.ic_glass_hd
@@ -7162,9 +7171,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
             if(full.isNotBlank()) {
                 notes.forEach { it.visibility=View.GONE }
-                view.rowHelp={ appDialogBuilder().setTitle(title).setMessage(detailNotes.joinToString("\n\n") { it.text.toString() }).setPositiveButton(android.R.string.ok,null).show() }
-                view.setOnLongClickListener { view.rowHelp?.invoke();true }
-                view.rowDetails="${brandString(R.string.ui_glass_details)}: $full"
+                view.rowDetails=full
             }
             view.background=RippleDrawable(ColorStateList.valueOf(RIPPLE),ColorDrawable(Color.TRANSPARENT),null)
             (view.layoutParams as? LinearLayout.LayoutParams)?.apply {
@@ -7420,16 +7427,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private val rowDivider by lazy { SettingsRowDivider(context, muted) }
         var rowReconnects=false
         var rowIconResource=R.drawable.ic_dp_display
-        var rowHelp: (() -> Unit)?=null
         var rowDetails: String?=null
             set(value) { field=value; refreshRowDescription(text) }
         private fun refreshRowDescription(value: CharSequence?) {
             rowDetails?.let { contentDescription="$value. $it" }
         }
-        private var rowDetailsTouch=false
-        private var rowDetailsCancelled=false
-        private var rowDetailsDownX=0f
-        private var rowDetailsDownY=0f
         private var titleLayout: android.text.StaticLayout?=null
         private var valueLayout: android.text.StaticLayout?=null
         private var titleX=0f
@@ -7437,8 +7439,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private var titleWidth=0
         private var rowHeaderTop=0f
         private var rowHeaderHeight=0
-        private val helpIconBounds=android.graphics.Rect()
-        private val helpTouchBounds=android.graphics.RectF()
         private fun px(v:Int)=(v*resources.displayMetrics.density).roundToInt()
         private fun textLayout(value:String,width:Int,size:Float,color:Int):android.text.StaticLayout {
             val p=android.text.TextPaint(paint).apply { textSize=size;this.color=color }
@@ -7455,10 +7455,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val narrow=measuredWidth/resources.displayMetrics.density<420
             val startInset=FidelitySettingsMetrics.ROW_START_DP
             val available=(measuredWidth-px(startInset+FidelitySettingsMetrics.ROW_END_DP)).coerceAtLeast(1)
-            // Help is a trailing accessory beside the value, never a separate summary line.
-            // Reserve its complete touch target before measuring either text column.
-            val helpWidth=if(rowHelp!=null)px(FidelitySettingsMetrics.ROW_HELP_TARGET_DP)else 0
-            val headerAvailable=(available-helpWidth).coerceAtLeast(1)
+            val headerAvailable=available
             val titleText=rowTitle ?: text.substring(0,split)
             val valueText=if(split>0)text.substring(split+VALUE_SEPARATOR.length)else ""
             val valueSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, UiTypography.BODY_SP.toFloat(), resources.displayMetrics)
@@ -7470,7 +7467,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val valueWidth=if(valueText.isBlank())0 else minOf(desiredValueWidth,headerAvailable-gap-titleShare).coerceAtLeast(1)
             titleWidth=(headerAvailable-valueWidth-gap).coerceAtLeast(1)
             titleX=if(rtl)(measuredWidth-px(startInset)-titleWidth).toFloat() else px(startInset).toFloat()
-            valueX=if(rtl)(px(FidelitySettingsMetrics.ROW_END_DP)+helpWidth).toFloat() else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-helpWidth-valueWidth).toFloat()
+            valueX=if(rtl)px(FidelitySettingsMetrics.ROW_END_DP).toFloat() else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-valueWidth).toFloat()
             titleLayout=textLayout(titleText,titleWidth,textSize,currentTextColor)
             valueLayout=if(valueText.isBlank())null else textLayout(valueText,valueWidth,valueSize,muted)
             rowHeaderHeight=maxOf(titleLayout?.height?:0,valueLayout?.height?:0,px(FidelitySettingsMetrics.ROW_ICON_DP))
@@ -7478,42 +7475,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val height=groupHeight+px(FidelitySettingsMetrics.ROW_VERTICAL_DP*2)
             setMeasuredDimension(measuredWidth,resolveSize(maxOf(minHeight,height),heightMeasureSpec))
             rowHeaderTop=(measuredHeight-groupHeight)/2f
-            helpIconBounds.setEmpty()
-            helpTouchBounds.setEmpty()
-            if(helpWidth>0) {
-                val left=if(rtl)px(FidelitySettingsMetrics.ROW_END_DP).toFloat()else (measuredWidth-px(FidelitySettingsMetrics.ROW_END_DP)-helpWidth).toFloat()
-                val centreY=rowHeaderTop+rowHeaderHeight/2f
-                val targetTop=(centreY-helpWidth/2f).coerceIn(0f,(measuredHeight-helpWidth).coerceAtLeast(0).toFloat())
-                helpTouchBounds.set(left,targetTop,left+helpWidth,targetTop+helpWidth)
-                val iconSize=px(FidelitySettingsMetrics.ROW_HELP_ICON_DP)
-                val iconLeft=(left+(helpWidth-iconSize)/2f).roundToInt()
-                val iconTop=(centreY-iconSize/2f).roundToInt()
-                helpIconBounds.set(iconLeft,iconTop,iconLeft+iconSize,iconTop+iconSize)
-            }
-        }
-        private fun isRowDetailsAt(x:Float,y:Float):Boolean = helpTouchBounds.contains(x,y)
-
-        override fun onTouchEvent(event:android.view.MotionEvent):Boolean {
-            if(rowPresentation && rowHelp!=null) {
-                if(event.actionMasked==android.view.MotionEvent.ACTION_DOWN) {
-                    rowDetailsTouch=isRowDetailsAt(event.x,event.y)
-                    rowDetailsCancelled=false
-                    rowDetailsDownX=event.x;rowDetailsDownY=event.y
-                }
-                if(rowDetailsTouch) {
-                    if(event.actionMasked==android.view.MotionEvent.ACTION_MOVE) {
-                        val slop=android.view.ViewConfiguration.get(context).scaledTouchSlop
-                        if(kotlin.math.abs(event.x-rowDetailsDownX)>slop || kotlin.math.abs(event.y-rowDetailsDownY)>slop)rowDetailsCancelled=true
-                    }
-                    if(event.actionMasked==android.view.MotionEvent.ACTION_UP) {
-                        rowDetailsTouch=false
-                        if(!rowDetailsCancelled && isRowDetailsAt(event.x,event.y))rowHelp?.invoke()
-                    }
-                    if(event.actionMasked==android.view.MotionEvent.ACTION_CANCEL)rowDetailsTouch=false
-                    return true
-                }
-            }
-            return super.onTouchEvent(event)
         }
 
         fun textAlignmentCentreY(): Float {
@@ -7547,10 +7508,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     val checkpoint=canvas.save();canvas.translate(x,top);layout.draw(canvas);canvas.restoreToCount(checkpoint)
                 }
                 draw(title,titleX,centreY-title.height/2f)
-                if(rowHelp!=null && !helpIconBounds.isEmpty) context.getDrawable(R.drawable.ic_dp_about)?.mutate()?.apply {
-                    setTint(muted)
-                    bounds=helpIconBounds;draw(canvas)
-                }
                 draw(valueLayout,valueX,centreY-(valueLayout?.height?:0)/2f)
                 val rtl=layoutDirection==View.LAYOUT_DIRECTION_RTL
                 context.getDrawable(rowIconResource)?.mutate()?.apply {
@@ -7705,73 +7662,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     // Rounded, not truncated: below 160 dpi dp(1) became 0 and every border vanished.
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
 
-    private fun startAppearanceUpdates() {
-        appearanceUpdatesResumed = true
-        appearanceObserverRemoval?.invoke()
-        appearanceObserverRemoval = AppAppearanceRuntime.observeHost {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                checkForAppearanceChange()
-            } else {
-                handler.post { if (appearanceUpdatesResumed) checkForAppearanceChange() }
-            }
-        }
-        handler.removeCallbacks(appearancePoll)
-        handler.post(appearancePoll)
-        applyPendingAppearanceRender()
-    }
-
-    private fun checkForAppearanceChange() {
-        if (refreshAppearance()) {
-            requestAppearanceRender()
-        }
-    }
-
-    private fun requestAppearanceRender(focusAppearanceButton: Boolean = false) {
-        appearanceRenderPending = true
-        appearanceButtonFocusPending = appearanceButtonFocusPending || focusAppearanceButton
-        if (!appearanceUpdatesResumed || shouldDeferAppearanceRender(
-                windowKeyLearning = windowLearning != null,
-                serviceKeyLearning = WheelKeyService.isLearning(),
-            )
-        ) return
-        appearanceRenderPending = false
-        val restoreAppearanceButton = appearanceButtonFocusPending
-        appearanceButtonFocusPending = false
-        render(
-            appearanceOnly = true,
-            preferredFocusTag = APPEARANCE_BUTTON_TAG.takeIf { restoreAppearanceButton },
-        )
-    }
-
-    private fun applyPendingAppearanceRender() {
-        if (!appearanceRenderPending) return
-        handler.post {
-            if (appearanceRenderPending && appearanceUpdatesResumed &&
-                !shouldDeferAppearanceRender(
-                    windowKeyLearning = windowLearning != null,
-                    serviceKeyLearning = WheelKeyService.isLearning(),
-                )
-            ) {
-                requestAppearanceRender()
-            }
-        }
-    }
-
-    private fun refreshAppearance(): Boolean {
-        val resolved = resolveAppNightNow()
-        if (resolved == appNight && palette === DiPlayPalette.of(resolved)) return false
-        appNight = resolved
-        palette = DiPlayPalette.of(resolved)
-        return true
-    }
-
-    // The system draws the next launch's starting window before any app code runs. API 33 is the first
-    // release that lets the app choose it; older head units keep the dark frame. Auto stays dark: the time
-    // of the next launch is unknown, and a dark frame in daylight is safer than a bright frame at night.
+    // Reset a previously saved light starting-window theme when upgrading to dark-only UI.
     private fun rememberLaunchAppearance() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val light = AirPlayPersistence.loadAppAppearance(this) == AppAppearance.LIGHT
-        splashScreen.setSplashScreenTheme(if (light) R.style.Theme_Xcertplay_Light else R.style.Theme_Xcertplay)
+        splashScreen.setSplashScreenTheme(R.style.Theme_Xcertplay)
     }
 
     private fun applyWindowAppearance() {
@@ -7801,6 +7695,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val FOCUS_RING get() = palette.focusRing
 
     companion object {
+        internal const val EXTRA_RETURN_TO_CARPLAY = "return_to_carplay"
         private fun alignedTextCentreY(
             view: TextView,
             text: CharSequence,
@@ -7829,8 +7724,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val BYD_VEHICLE_TAG = "DiPlay-BYD13"
         private const val VEHICLE_VALIDATION_RETRY_MILLIS = 500L
         private const val ADB_KEY_SAVE_WAIT_MILLIS = 500L
-        private const val APPEARANCE_POLL_MILLIS = 2_000L
-        private const val APPEARANCE_BUTTON_TAG = "app_appearance_button"
         private const val SETTINGS_SEARCH_BUTTON_TAG = "settings_search_button"
         private const val SETTINGS_HEADER_COMPACT_GAP_DP = 8
         private const val SETTINGS_HEADER_GAP_DP = 12

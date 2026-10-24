@@ -74,6 +74,7 @@ object AirPlayPersistence {
     private const val KEY_OEM_LABEL = "oem_label"
     private const val KEY_VEHICLE_BRAND_PRESET = "vehicle_brand_preset"
     private const val KEY_VEHICLE_MODEL = "vehicle_scene_model"
+    private const val KEY_HOME_VEHICLE_BRAND = "home_vehicle_brand"
     private const val KEY_APP_APPEARANCE = "app_appearance"
     private const val KEY_CARPLAY_NIGHT_MODE = "carplay_night_mode"
     private const val KEY_CARPLAY_NIGHT_START = "carplay_night_start_minute"
@@ -699,6 +700,18 @@ object AirPlayPersistence {
             .putString(KEY_VEHICLE_BRAND_PRESET, preset)
             .apply()
     }
+
+    internal fun loadHomeVehicleBrand(context: Context): HomeVehicleBrand = HomeVehicleBrand.fromKey(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_HOME_VEHICLE_BRAND, null),
+    ) ?: if (VehicleBranding.preset(context) == VehicleBrandPreset.FORD) HomeVehicleBrand.FORD else HomeVehicleBrand.LINCOLN
+
+    internal fun saveHomeVehicleBrand(context: Context, brand: HomeVehicleBrand) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_HOME_VEHICLE_BRAND, brand.key).apply()
+    }
+
+    internal fun hasVehicleModelSelection(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(KEY_VEHICLE_MODEL)
 
     internal fun loadVehicleModel(context: Context): VehicleModel = VehicleModel.fromKey(
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_VEHICLE_MODEL, null),

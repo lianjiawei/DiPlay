@@ -52,11 +52,13 @@ class DefaultConnectionModeTest {
             val activity = controller.get()
             // Source-only test builds have no authentication assets; exercise the startup decision.
             ReflectionHelpers.setField(activity, "setupError", null)
+            var starts = 0
+            activity.projectionStarter = { starts++; ReflectionHelpers.setField(activity, "unifiedConnectionRequested", true); true }
             controller.start().resume()
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals(expectedWireless, AirPlayPersistence.loadWirelessEnabled(app))
-            assertEquals(CarPlayHostActivity::class.java.name,
-                shadowOf(activity).nextStartedActivity?.component?.className)
+            assertEquals(1, starts)
+            assertNull("Startup stays in the launcher", shadowOf(activity).nextStartedActivity)
             assertEquals(mode, DiPlayPreferences.defaultConnectionMode(app))
             controller.pause().stop().destroy()
         }

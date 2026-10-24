@@ -11,6 +11,7 @@ internal object ConnectionPageLayout {
     const val RING_DP = 112
     const val CONTENT_GAP_DP = 8
     const val PHONE_DP = 48
+    const val ACTION_MAX_LINES = 2
     const val SHORT_BODY_DP = 200
     const val COMPACT_BODY_DP = 240
     const val COMPACT_GAP_DP = 4
@@ -28,30 +29,64 @@ internal object ConnectionPageLayout {
         (if (landscape) innerWidth*.287f else (innerWidth-ReferenceHomeMetrics.HERO_FOOTER_GAP_DP*density)/2)
             .toInt().coerceAtLeast(1)
 
-    fun actionHeight(context: Context, width: Int): Int {
-        val metrics = context.resources.displayMetrics
+    const val COMPACT_ACTION_WIDTH_DP = 160
+    private const val MIN_ACTION_TEXT_SP = 12
+    private const val ACTION_SIDE_PAD_DP = 16
+    private const val ACTION_VERTICAL_PAD_DP = 8
+    private const val ACTION_ICON_RESERVE_DP = 28
+    data class ActionMetrics(val height: Int, val textSp: Int)
+    private var actionKey = ""
+    private var cachedActions: ActionMetrics? = null
+
+    fun compactActions(context: Context, width: Int) =
+        width < COMPACT_ACTION_WIDTH_DP * context.resources.displayMetrics.density
+
+    fun actionHeight(context: Context, width: Int): Int = actionMetrics(context, width).height
+
+    fun actionMetrics(context: Context, width: Int): ActionMetrics {
+        val resources = context.resources
+        val metrics = resources.displayMetrics
         val density = metrics.density
+        val key = "$width/${metrics.densityDpi}/${resources.configuration.fontScale}/${resources.configuration.locales.toLanguageTags()}/${resources.configuration.layoutDirection}"
+        cachedActions?.takeIf { actionKey == key }?.let { return it }
+        val compact = compactActions(context, width)
+        val usb = if (compact) R.string.ui_glass_usb_short else R.string.connect_with_usb
+        val icons = setOf(usb, R.string.disconnect, R.string.settings)
+        val labels = icons + setOf(R.string.ui_glass_connect_carplay, R.string.open_carplay,
+            R.string.ui_glass_connecting_action,
+            if (compact) R.string.ui_glass_retry_short else R.string.retry_carplay_connection,
+            if (compact) R.string.ui_glass_wifi_reset_short else R.string.reset_carplay_wi_fi)
         val measure = android.widget.Button(context).apply {
             layoutParams = android.view.ViewGroup.LayoutParams(width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
             isAllCaps = false
+            maxLines = ACTION_MAX_LINES
+            ellipsize = android.text.TextUtils.TruncateAt.END
             background = null
             includeFontPadding = false
-            textSize = UiTypography.ACTION_SP.toFloat()
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             minimumHeight = 0
             minHeight = (ReferenceHomeMetrics.ACTION_HEIGHT_DP*density).roundToInt()
-            layoutDirection = context.resources.configuration.layoutDirection
+            layoutDirection = resources.configuration.layoutDirection
         }
-        val icons = setOf(R.string.connect_with_usb, R.string.disconnect, R.string.settings)
-        val labels = icons + setOf(R.string.ui_glass_connect_carplay, R.string.open_carplay,
-            R.string.ui_glass_back_home, R.string.ui_connection_help)
-        return labels.maxOf { id ->
-            measure.text = context.getString(id)
-            measure.setPadding(((16 + if (id in icons) 28 else 0)*density).roundToInt(),
-                (8*density).roundToInt(), (16*density).roundToInt(), (8*density).roundToInt())
-            measure.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-            measure.measuredHeight
+        for (sp in UiTypography.ACTION_SP downTo MIN_ACTION_TEXT_SP) {
+            measure.textSize = sp.toFloat()
+            var height = 0
+            var fits = true
+            for (id in labels) {
+                measure.text = context.getString(id)
+                measure.setPadding(((ACTION_SIDE_PAD_DP + if (id in icons) ACTION_ICON_RESERVE_DP else 0)*density).roundToInt(),
+                    (ACTION_VERTICAL_PAD_DP*density).roundToInt(), (ACTION_SIDE_PAD_DP*density).roundToInt(), (ACTION_VERTICAL_PAD_DP*density).roundToInt())
+                measure.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                height = maxOf(height, measure.measuredHeight)
+                val layout = measure.layout
+                if (layout != null && (0 until layout.lineCount).any { layout.getEllipsisCount(it) > 0 }) fits = false
+            }
+            if (fits || sp == MIN_ACTION_TEXT_SP) return ActionMetrics(height, sp).also {
+                actionKey = key
+                cachedActions = it
+            }
         }
+        error("No home action typography")
     }
 }

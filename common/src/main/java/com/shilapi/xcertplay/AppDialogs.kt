@@ -6,17 +6,7 @@ import android.content.Context
 import android.view.ContextThemeWrapper
 import com.shilapi.xcertplay.host.R
 
-internal interface AppAppearanceOwner {
-    val currentAppNight: Boolean
-}
-
-internal fun Context.appDialogTheme(): Int = if (
-    (this as? AppAppearanceOwner)?.currentAppNight ?: resolveAppNightNow()
-) {
-    R.style.Theme_Xcertplay_Dialog_Dark
-} else {
-    R.style.Theme_Xcertplay_Dialog_Light
-}
+internal fun Context.appDialogTheme(): Int = R.style.Theme_Xcertplay_Dialog_Dark
 
 internal fun Context.appDialogContext(): Context = ContextThemeWrapper(this, appDialogTheme())
 

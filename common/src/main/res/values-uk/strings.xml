@@ -734,7 +734,7 @@
     <string name="backup_summary">Імпортовано налаштувань: %1$d, пропущено: %2$d.</string>
     <string name="backup_import_invalid">Цей файл не є резервною копією налаштувань Lincoln.</string>
     <string name="settings_background_update_checks">Перевіряти оновлення у фоні</string>
-    <string name="settings_background_update_checks_description">Lincoln перевіряє оновлення на GitHub раз на день. На головному екрані кожна нова версія пропонується один раз з описом змін і кнопкою завантаження. Завантаження починається лише після натискання.</string>
+    <string name="settings_background_update_checks_description">Lincoln перевіряє оновлення раз на день. У Налаштування → Про програму кожна нова версія пропонується один раз з описом змін і кнопкою завантаження. Завантаження починається лише після натискання.</string>
     <string name="setup_guide">Майстер налаштування</string>
     <string name="setup_guide_description">Визначте версію DiLink, оберіть підключення та увімкніть функції, що підходять вашому авто.</string>
     <string name="setup_step_of">КРОК %1$d З %2$d</string>
@@ -931,4 +931,9 @@
     <string name="update_ready_to_install">Завантаження завершено. Натисніть «Установити», щоб відкрити інсталятор Android.</string>
     <string name="update_retry">Повторити</string>
     <string name="update_hide">Згорнути</string>
+    <string name="ui_glass_connection_incomplete">Підключення не завершено</string>
+    <string name="ui_glass_usb_short">USB</string>
+    <string name="ui_glass_connecting_action">Підключення…</string>
+    <string name="ui_glass_retry_short">Повторити</string>
+    <string name="ui_glass_wifi_reset_short">Скинути Wi-Fi</string>
 </resources>

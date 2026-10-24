@@ -38,6 +38,7 @@ internal class ReferenceHomeScene(
     private val phone: View, private val primary: TextView, private val usb: View, private val settings: View,
     private val brand: View, private val viewportHeight: () -> Int,
     private val reservedHeight: Int,
+    private val prepareActions: (Int) -> Unit = {},
 ) : FrameLayout(context) {
     private val density = resources.displayMetrics.density
     private fun dp(v: Int) = (v*density).roundToInt()
@@ -54,7 +55,17 @@ internal class ReferenceHomeScene(
         val fullHeight = viewportHeight()
         landscape = fullWidth > fullHeight * 1.3f
         val footerWidth = ConnectionPageLayout.actionWidth(w, landscape, density)
-        val footerHeight = ConnectionPageLayout.actionHeight(context, footerWidth)
+        prepareActions(footerWidth)
+        val actionMetrics = ConnectionPageLayout.actionMetrics(context, footerWidth)
+        val footerHeight = actionMetrics.height
+        fun constrainAction(view: View) {
+            if (view is TextView) {
+                view.textSize = actionMetrics.textSp.toFloat()
+                if (view.maxLines != ConnectionPageLayout.ACTION_MAX_LINES) view.maxLines = ConnectionPageLayout.ACTION_MAX_LINES
+                view.ellipsize = android.text.TextUtils.TruncateAt.END
+            } else if (view is ViewGroup) for (index in 0 until view.childCount) constrainAction(view.getChildAt(index))
+        }
+        listOf(primary, usb, settings).forEach(::constrainAction)
         for (view in listOf(usb, settings)) view.measure(exact(footerWidth), exact(footerHeight))
         primary.layoutParams = (primary.layoutParams as FrameLayout.LayoutParams).apply {
             width = footerWidth; height = footerHeight
@@ -87,6 +98,9 @@ internal object ReferenceHomeMetrics {
     const val BOTTOM_DP=12
     const val ACTION_HEIGHT_DP=48
     const val HEADER_DP=44
+    const val LINCOLN_MARK_WIDTH_DP=32
+    const val FORD_MARK_WIDTH_DP=56
+    const val BRAND_MARK_HEIGHT_DP=40
     const val HEADER_GAP_DP=4
     const val HERO_FOOTER_GAP_DP=12
     const val MIN_RING_DP=32

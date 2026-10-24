@@ -21,7 +21,9 @@ Connect the iPhone to a USB **data** port with a data-capable cable and choose *
 
 ## Settings
 
-The first-launch DiLink setup guide can be skipped or reopened from Settings. DiPlay checks for official GitHub updates once a day and shows **Update available** on Home; **About** downloads it on your tap and can turn the background check off. Android handles APK installation. **App appearance** selects Light, Dark or Auto for DiPlay itself, separately from CarPlay day/night mode.
+The first-launch DiLink setup guide can be skipped or reopened from Settings. DiPlay checks for official releases once a day through its update mirror, with GitHub as a fallback. Update notices and downloads are confined to **Settings → About**, where background checks can also be disabled. Android handles APK installation. DiPlay uses its dark appearance throughout; CarPlay day/night mode remains a separate setting. Choose a vehicle background or a custom image in **Settings → Vehicle → Vehicle background**; changing the CarPlay icon does not hide that setting or discard the selected background.
+
+Choose **Settings → Vehicle → Home brand** to show the Lincoln or Ford logo on Home. Saving this choice takes effect immediately and keeps the selected background.
 
 Swipe down with the configured finger count in CarPlay to open the quick menu, or return to the home screen. Choose two, three or four fingers, or **Off**, under **Settings → Vehicle → CarPlay controls** or in the quick menu; three remains the default. The quick menu asks before Back or the full-settings link discards changes you have not applied. Icon/text size, resolution and frame rate use **Apply and reconnect** during an active session. A selection alone does not apply; Cancel preserves the old setting. When disconnected, **Save** applies to the next connection. Follow each setting's description: some apply live, while others show **Reconnect now** and take effect at the next connection.
 

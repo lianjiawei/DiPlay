@@ -9,4 +9,7 @@
     <string name="settings_wallpaper_choose">اختيار صورة</string>
     <string name="settings_wallpaper_replace">تغيير الصورة</string>
     <string name="settings_wallpaper_import_failed">تعذر استخدام هذه الصورة. يرجى اختيار صورة أخرى.</string>
+    <string name="settings_home_brand">علامة الصفحة الرئيسية</string>
+    <string name="settings_home_brand_lincoln">لينكولن</string>
+    <string name="settings_home_brand_ford">فورد</string>
 </resources>

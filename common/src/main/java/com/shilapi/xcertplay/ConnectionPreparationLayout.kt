@@ -57,13 +57,19 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         // laid-out bounds. TextView uses that measured height for vertical gravity, so only the
         // word moves upward on the next connection-status traversal while the logo stays put.
         val textHeight = brandLabel.lineHeight + brandLabel.compoundPaddingTop + brandLabel.compoundPaddingBottom
-        val brandHeight = maxOf(textHeight, dp(if (compactHeight) 32 else ReferenceHomeMetrics.HEADER_DP))
+        val brandHeight = maxOf(textHeight, dp(if (compactHeight) GlassChrome.MIN_TARGET_DP else ReferenceHomeMetrics.HEADER_DP))
         headerReserve = brandTopInset + brandHeight + dp(ReferenceHomeMetrics.HEADER_GAP_DP)
         val innerWidth = (availableWidth-dp(ConnectionScreenMetrics.SIDE_DP*2)).coerceAtLeast(1)
         val actionWidth = ConnectionPageLayout.actionWidth(innerWidth, landscape, resources.displayMetrics.density)
-        footerHeight = ConnectionPageLayout.actionHeight(context, actionWidth)
+        val actionMetrics = ConnectionPageLayout.actionMetrics(context, actionWidth)
+        footerHeight = actionMetrics.height
         val row = actions as android.widget.LinearLayout
         for (i in 0 until row.childCount) {
+            (row.getChildAt(i) as? TextView)?.apply {
+                textSize = actionMetrics.textSp.toFloat()
+                if (maxLines != ConnectionPageLayout.ACTION_MAX_LINES) maxLines = ConnectionPageLayout.ACTION_MAX_LINES
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
             row.getChildAt(i).layoutParams = (row.getChildAt(i).layoutParams as android.widget.LinearLayout.LayoutParams).apply {
                 this.width = actionWidth; this.height = footerHeight; weight = 0f
                 marginEnd = if (i == 0) innerWidth-actionWidth*2 else 0
@@ -74,7 +80,7 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         wordmark.measure(exact(wordmarkWidth), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
         footerStackHeight = if (landscape) maxOf(footerHeight,wordmark.measuredHeight)
             else footerHeight+wordmark.measuredHeight+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
-        brand.measure(MeasureSpec.makeMeasureSpec(innerWidth, MeasureSpec.AT_MOST), exact(brandHeight))
+        brand.measure(exact(innerWidth), exact(brandHeight))
         val bodyHeight = (height-paddingTop-paddingBottom-headerReserve-footerStackHeight-
             dp(ConnectionScreenMetrics.BOTTOM_DP + ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)).coerceAtLeast(1)
         contentWidth = ConnectionPageLayout.contentWidth(availableWidth, bodyHeight, landscape, resources.displayMetrics.density)
@@ -142,7 +148,9 @@ internal class ConnectionContentLayout(
         var primaryAction = false
         for (index in 0 until hint.childCount) {
             val child = hint.getChildAt(index)
-            if (child is android.widget.Button) primaryAction = true
+            if (child is android.widget.Button) {
+                if (child.visibility != View.GONE) primaryAction = true
+            }
             else (child as? TextView)?.textSize = hintMeasure.textSize / resources.displayMetrics.scaledDensity
         }
         headline.measure(exact(visualWidth), unspecified())
@@ -152,7 +160,13 @@ internal class ConnectionContentLayout(
         hintMeasure.measure(exact(detailsWidth), unspecified())
         val detailHeight = maxOf(hintMeasure.measuredHeight, if (!compact || primaryAction) actionHeight else 0)
         hint.measure(exact(detailsWidth), exact(detailHeight))
-        detailsHeight = phone.measuredHeight+stage.measuredHeight+hint.measuredHeight+gap*2
+        // On very short windows keep the phone and recovery action usable. The headline already
+        // communicates the connection state; do not squeeze a button under a repeated status line.
+        val showStage = !primaryAction || !compact ||
+            phone.measuredHeight + stage.measuredHeight + detailHeight + gap * 2 <= height
+        stage.visibility = if (showStage) View.VISIBLE else View.GONE
+        if (!showStage) stage.measure(exact(detailsWidth), exact(0))
+        detailsHeight = phone.measuredHeight+stage.measuredHeight+hint.measuredHeight+gap*(if (showStage) 2 else 1)
         val ringRoom = height-headline.measuredHeight-gap-(if (columns) 0 else detailsHeight+gap)
         val ringSize = minOf(dp(ConnectionPageLayout.RING_DP), ringRoom).coerceAtLeast(dp(ReferenceHomeMetrics.MIN_RING_DP))
         ring.measure(exact(ringSize), exact(ringSize))
@@ -167,6 +181,7 @@ internal class ConnectionContentLayout(
         val detailsLeft = if (columns) side+visualWidth+gap else side
         var y = if (columns) 0 else ring.bottom+gap
         for (view in listOf(phone, stage, hint)) {
+            if (view.visibility == View.GONE) continue
             val x = detailsLeft+(detailsWidth-view.measuredWidth)/2
             view.layout(x, y, x+view.measuredWidth, y+view.measuredHeight)
             y += view.measuredHeight+gap

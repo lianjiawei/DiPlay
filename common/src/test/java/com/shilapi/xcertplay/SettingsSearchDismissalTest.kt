@@ -44,7 +44,6 @@ class SettingsSearchDismissalTest {
     @After fun cleanup() {
         controller?.pause()?.stop()?.destroy()
         RuntimeEnvironment.setFontScale(1f)
-        AppAppearanceRuntime.resetForTest()
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
     }

@@ -42,7 +42,6 @@ class UiResolutionRegressionTest {
 
     @After fun cleanup() {
         RuntimeEnvironment.setFontScale(1f)
-        AppAppearanceRuntime.resetForTest()
         CarPlayBackgroundSession.clear()
         UpdateAvailability.clearAllForTest(app)
     }
@@ -61,6 +60,12 @@ class UiResolutionRegressionTest {
 
     @Test @Config(qualifiers = "zh-rCN-w960dp-h360dp-land-xhdpi")
     fun ultraWide1920x720() = matrix("1920x720-xhdpi")
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h720dp-land-mdpi")
+    fun ultraWide1920x720StandardDensity() = matrix("1920x720-mdpi")
+
+    @Test @Config(qualifiers = "zh-rCN-w1280dp-h480dp-land-hdpi")
+    fun ultraWide1920x720MediumDensity() = matrix("1920x720-hdpi")
 
     @Test @Config(qualifiers = "zh-rCN-w512dp-h300dp-land-xhdpi")
     fun smallLandscape1024x600HighDensity() = matrix("1024x600-xhdpi")

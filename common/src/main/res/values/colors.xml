@@ -6,7 +6,5 @@
     dialogs draw over the screen behind them (#640, #617).
     -->
     <color name="window_background_dark">#273E55</color>
-    <color name="window_background_light">#E7EFF6</color>
     <color name="dialog_background_dark">#23394F</color>
-    <color name="dialog_background_light">#F3F7FB</color>
 </resources>

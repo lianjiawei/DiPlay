@@ -70,7 +70,7 @@ class UpdatePromptFlowTest {
         prompt(first.get())!!.dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
         idle()
         assertNull(prompt(first.get()))
-        clickHomeUpdate(first.get())
+        openSettingsOffer(first.get())
         assertNotNull(prompt(first.get()))
         prompt(first.get())!!.dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
         first.pause().stop().destroy()
@@ -84,7 +84,7 @@ class UpdatePromptFlowTest {
         assertFalse(UpdateAvailability.shouldPrompt(app, newer))
     }
 
-    @Test fun backgroundResultIsShownWhileHomeIsAlreadyOpen() {
+    @Test fun backgroundResultIsShownWhileAboutIsAlreadyOpen() {
         val c = screen()
         assertNull(prompt(c.get()))
         UpdateAvailability.save(app, release)
@@ -92,12 +92,12 @@ class UpdatePromptFlowTest {
         assertNotNull(prompt(c.get()))
     }
 
-    @Test fun disabledBackgroundChecksStillAllowExplicitHomeUpdates() {
+    @Test fun disabledBackgroundChecksStillAllowExplicitSettingsUpdates() {
         UpdateAvailability.save(app, release)
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)
         val c = screen()
         assertNull(prompt(c.get()))
-        clickHomeUpdate(c.get())
+        openSettingsOffer(c.get())
         assertNotNull(prompt(c.get()))
     }
 
@@ -113,13 +113,19 @@ class UpdatePromptFlowTest {
         assertNotNull(prompt(c.get()))
     }
 
-    @Test fun settingsDoNotGetAnAutomaticPromptUntilReturningHome() {
+    @Test fun otherSettingsAndHomeDoNotGetAnAutomaticPrompt() {
         val c = screen()
-        ReflectionHelpers.setField(c.get(), "page", "settings")
+        ReflectionHelpers.setField(c.get(), "settingsCategory", SettingsCategory.DISPLAY)
         UpdateAvailability.save(app, release)
         advance()
         assertNull(prompt(c.get()))
         ReflectionHelpers.setField(c.get(), "page", "home")
+        call(c.get(), "render")
+        advance()
+        assertNull(prompt(c.get()))
+        ReflectionHelpers.setField(c.get(), "page", "settings")
+        ReflectionHelpers.setField(c.get(), "settingsCategory", SettingsCategory.ABOUT)
+        call(c.get(), "render")
         advance()
         assertNotNull(prompt(c.get()))
     }
@@ -170,7 +176,7 @@ class UpdatePromptFlowTest {
         UpdateAvailability.save(app, release)
         val c = screen()
         c.get().updateDownloadWorker = {}
-        clickHomeUpdate(c.get())
+        openSettingsOffer(c.get())
         prompt(c.get())!!.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         val scroll = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
         val button = descendants(scroll).filterIsInstance<TextView>()
@@ -223,7 +229,7 @@ class UpdatePromptFlowTest {
         UpdateAvailability.save(app, release)
         val c = screen()
         c.get().updateDownloadWorker = {}
-        clickHomeUpdate(c.get())
+        openSettingsOffer(c.get())
         prompt(c.get())!!.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         val oldScroll = ReflectionHelpers.getField<View>(c.get(), "rootScroll")
         call(c.get(), "render")
@@ -378,13 +384,14 @@ class UpdatePromptFlowTest {
         val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
         c.get().updateConnection = { url ->
             requests += url.toString()
-            if (url.host == "api.github.com") java.net.URL(published.apkUrl.replace("/apk", "/releases")).openConnection()
+            if (url.toString() == com.shilapi.xcertplay.update.UpdateClient.MIRROR_RELEASES_URL)
+                java.net.URL(published.apkUrl.replace("/apk", "/releases")).openConnection()
             else url.openConnection()
         }
 
         val latest = ReflectionHelpers.callInstanceMethod<UpdateRelease?>(c.get(), "latestRelease")
         assertEquals(published.tagName, latest?.tagName)
-        assertEquals("https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30", requests.single())
+        assertEquals(com.shilapi.xcertplay.update.UpdateClient.MIRROR_RELEASES_URL, requests.single())
 
         val connectivity = shadowOf(app.getSystemService(ConnectivityManager::class.java))
         val network = ShadowNetwork.newInstance(99)
@@ -394,7 +401,7 @@ class UpdatePromptFlowTest {
         connectivity.setNetworkCapabilities(network, capabilities)
         call(c.get(), "loadHistoryReleases")
         awaitHistory(c.get())
-        assertEquals(2, requests.count { it.contains("/repos/lianjiawei/DiPlay/releases") })
+        assertEquals(2, requests.count { it == com.shilapi.xcertplay.update.UpdateClient.MIRROR_RELEASES_URL })
         ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "downloadHistoryRelease",
             ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, published))
         awaitHistory(c.get())
@@ -411,10 +418,61 @@ class UpdatePromptFlowTest {
         assertEquals("IDLE", ReflectionHelpers.getField<Any>(screen, "historyStage").toString())
     }
 
+    @Test fun leavingAboutDismissesProgressAndCompletionCannotReopenItOnHome() = verifyCompletionAwayFromAbout(true)
+    @Test fun failedBackgroundDownloadCannotRebuildOrShowAnOfferOnHome() = verifyCompletionAwayFromAbout(false)
+
+    private fun verifyCompletionAwayFromAbout(valid: Boolean) {
+        val published = serveUpdate(validChecksum = { valid })
+        UpdateAvailability.save(app, published)
+        val c = screen()
+        c.get().updateLookup = { published }
+        val queued = mutableListOf<Runnable>()
+        c.get().updateDownloadWorker = queued::add
+        prompt(c.get())!!.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertNotNull(prompt(c.get()))
+        ReflectionHelpers.setField(c.get(), "page", "home")
+        call(c.get(), "render")
+        val homeRoot = c.get().findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        assertNull(prompt(c.get()))
+        queued.single().run()
+        idle()
+        assertEquals(if (valid) "READY" else "FAILED", ReflectionHelpers.getField<Any>(c.get(), "updateStage").toString())
+        assertNull(prompt(c.get()))
+        assertSame(homeRoot, c.get().findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+    }
+
+    @Test fun historyDownloadCompletionNeverRebuildsOrShowsSavedDialogsOnHome() {
+        val published = serveUpdate(validChecksum = { true })
+        val c = screen()
+        ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "downloadHistoryRelease",
+            ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, published))
+        ReflectionHelpers.setField(c.get(), "page", "home")
+        call(c.get(), "render")
+        val home = c.get().findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        awaitHistory(c.get())
+        assertTrue(ReflectionHelpers.getField<String?>(c.get(), "historyMessage")?.isNotEmpty() == true)
+        assertSame(home, c.get().findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+        assertTrue(ReflectionHelpers.getField<AlertDialog?>(c.get(), "updateHistoryDialog")?.isShowing != true)
+        assertNull(prompt(c.get()))
+    }
+
+    @Test fun delayedHistoryPickerCannotAppearAfterReturningHome() {
+        val c = screen()
+        ReflectionHelpers.setField(c.get(), "page", "home")
+        call(c.get(), "render")
+        val home = c.get().findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "showHistoryReleasePicker",
+            ReflectionHelpers.ClassParameter.from(List::class.java, listOf(release)))
+        assertTrue(ReflectionHelpers.getField<AlertDialog?>(c.get(), "updateHistoryDialog")?.isShowing != true)
+        assertSame(home, c.get().findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+    }
+
     private fun screen(): ActivityController<DiPlayActivity> {
-        val intent = Intent(app, DiPlayActivity::class.java).putExtra("page", "home")
+        val intent = Intent(app, DiPlayActivity::class.java).putExtra("page", "settings")
         return Robolectric.buildActivity(DiPlayActivity::class.java, intent).setup().visible().also {
             controllers += it
+            ReflectionHelpers.setField(it.get(), "settingsCategory", SettingsCategory.ABOUT)
+            call(it.get(), "render")
             it.windowFocusChanged(true)
             advance()
         }
@@ -443,8 +501,9 @@ class UpdatePromptFlowTest {
     private fun call(screen: DiPlayActivity, method: String) = ReflectionHelpers.callInstanceMethod<Unit>(screen, method)
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
     private fun advance() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_100))
-    private fun clickHomeUpdate(screen: DiPlayActivity) = descendants(screen.window.decorView).filterIsInstance<TextView>()
-        .single { it.text == screen.getString(R.string.update_available_home) }.performClick()
+    private fun openSettingsOffer(screen: DiPlayActivity) = ReflectionHelpers.callInstanceMethod<Unit>(
+        screen, "openAvailableUpdate", ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java,
+            ReflectionHelpers.getField<UpdateRelease>(screen, "availableUpdate")))
     private fun descendants(view: View): Sequence<View> = sequence {
         yield(view)
         if (view is ViewGroup) for (i in 0 until view.childCount) yieldAll(descendants(view.getChildAt(i)))

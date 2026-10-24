@@ -175,6 +175,36 @@ The retired `build-beta.py` helper is no longer part of the build procedure.
 
 ## Publish an over-the-air update
 
+The app first checks `https://weclaw-agent.cloud/diplay-updates/releases.json`,
+then falls back to this fork's GitHub API if the mirror is unavailable or invalid.
+The mirror catalog uses the GitHub release format, but both APK and checksum URLs
+point to the same HTTPS mirror. Head units do not need GitHub access when the mirror is healthy.
+The existing checksum verification and Android package signature checks still apply.
+
+`scripts/sync_diplay_updates.py` synchronizes up to 30 published releases. It verifies
+each APK before publishing a new catalog, reuses verified local files, and leaves
+the previous catalog available when GitHub is unavailable. Files removed from the
+catalog remain for seven days for cached history lists and active downloads.
+The service, timer and Nginx snippet are in `deploy/diplay-updates/`. The service
+runs as `diplay-updates` and the timer refreshes every 15 minutes. To refresh manually:
+
+```sh
+sudo systemctl start diplay-updates.service
+journalctl -u diplay-updates.service --no-pager -n 20
+```
+
+The mirror needs Python 3.11 or newer. For initial deployment, stage the sync script,
+the `deploy/` files and the verified `public/` output in one directory, then run
+`deploy/diplay-updates/install.sh STAGING NGINX_HTTPS_SITE` as root. The installer
+backs up the existing HTTPS site, tests Nginx before reloading it, and enables the
+sync timer. Slow upstream downloads run in the background while the previous
+verified catalog remains available.
+
+Mirror script regression tests: `python3 -m unittest discover -s scripts -p test_sync_diplay_updates.py`.
+Existing app versions that contain only the GitHub URL need a one-time upgrade to
+a build with the mirror URL. Keep the same release package and signing identity
+when producing that build.
+
 The Lincoln build checks its own fork for releases (see `UpdateClient.RELEASES_URL`). Run the
 release script to build, verify, commit, push and publish in one step:
 
@@ -200,8 +230,24 @@ picker) and install it over the existing app. Once upgraded, normal product-vers
 An in-place install keeps settings when the package name and signing certificate match.
 The first move from the old personal signing key to `precision.10` requires a manual
 uninstall and reinstall, rather than the in-app update flow.
-The driver updates from Settings -> About -> Check for updates, or from the home-screen
-prompt after the daily background check.
+The driver updates from Settings -> About -> Check for updates. Daily background checks
+cache release information; their offer is shown only while that update page is open.
+
+## Home and projection lifecycle
+
+`DiPlayActivity` is the single visible home, settings and projection Activity. Connection startup is lazy: opening home must not initialize the media runtime or request its permissions. Connecting, retrying and first-frame updates change the existing home widgets in place. Keep the video layer attached when replacing home/settings chrome, and preserve visible projection during window relayout.
+
+Use `CarPlayEntry.intent(context)` for current projection entry points. The old `CarPlayHostActivity` component is an invisible compatibility forwarder for older callers; it must not initialize another controller or clear the live Activity’s callbacks when it finishes. USB attachment routes directly to `DiPlayActivity`.
+
+Normal disconnects leave the same home and reusable runtime executors. A connection requested during teardown must wait for teardown completion; cancellation must cancel that pending request. Preserve answered permission decisions and pending permission state across recreation.
+
+Home contains only the connection scene and its normal actions. Do not append update or readiness cards there. Update checks may cache metadata in the background, but update UI belongs only to Settings → About. Download, history lookup, history download, permission and installer callbacks must not rebuild home or show update dialogs after the driver leaves that page. `UpdateHomeAvailabilityTest`, `UpdatePromptFlowTest`, `UnifiedHomeActivityTest` and `UnifiedHomeScreenshotsTest` protect these rules.
+
+Settings → Vehicle → Vehicle background is always available, including after selecting a custom CarPlay icon or migrating a custom OEM name. A saved model or custom wallpaper is independent of the CarPlay brand preset. Brands other than Lincoln keep a neutral default until a background is explicitly selected. `VehicleModelUiTest` covers entry visibility, persistence and large-font screenshots.
+
+Settings → Vehicle → Home brand selects the Lincoln or Ford logo for the home header. Home shows only the logo, with the brand name retained for accessibility. The Ford mark reuses the packaged script with a transparent monochrome treatment matching Lincoln. This appearance choice applies immediately and is independent of the CarPlay vehicle-button identity, wallpaper and pairing; it does not require reconnecting. `HomeVehicleBrandUiTest` covers both brands, persistence, backup and compact/full/ultrawide/RTL screenshots.
+
+The 1920×720 regression matrix covers 160, 240 and 320 dpi with normal and 1.3× fonts: home, connection setup, every setup-guide step, all Settings categories with automatic/full layouts, backup and update dialogs. Home state screenshots also assert unchanged widget positions at each density. Reports are retained in the CI screenshot artifacts.
 
 ## Correct build problems
 

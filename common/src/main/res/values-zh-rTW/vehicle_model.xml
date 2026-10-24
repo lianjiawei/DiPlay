@@ -9,4 +9,7 @@
     <string name="settings_wallpaper_choose">選擇圖片</string>
     <string name="settings_wallpaper_replace">更換圖片</string>
     <string name="settings_wallpaper_import_failed">無法使用這張圖片，請選擇其他圖片。</string>
+    <string name="settings_home_brand">首頁品牌</string>
+    <string name="settings_home_brand_lincoln">林肯</string>
+    <string name="settings_home_brand_ford">福特</string>
 </resources>

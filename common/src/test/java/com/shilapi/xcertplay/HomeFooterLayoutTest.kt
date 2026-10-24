@@ -87,7 +87,7 @@ class HomeFooterLayoutTest {
                 if (name == "bars-hidden") {
                     CarPlayBackgroundSession.store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java),
                         width, height, Any(), CarPlaySessionDisplay(width, height, Surface.ROTATION_0, false, false, width, height)) {}
-                    CarPlayBackgroundSession.active = true
+                    CarPlayBackgroundSession.active = true; CarPlayBackgroundSession.mainPictureReady = true
                     ReflectionHelpers.callInstanceMethod<Unit>(screen, "refreshStatus")
                     root.measure(exact(width), exact(height)); root.layout(0, 0, width, height)
                     root.viewTreeObserver.dispatchOnPreDraw()
@@ -103,7 +103,6 @@ class HomeFooterLayoutTest {
         } finally {
             controller.pause().stop().destroy()
             CarPlayBackgroundSession.clear()
-            AppAppearanceRuntime.resetForTest()
         }
     }
 
@@ -162,7 +161,7 @@ class HomeFooterLayoutTest {
                         when (state) {
                             "connecting" -> CarPlayBackgroundSession.store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java),
                                 width, height, Any(), CarPlaySessionDisplay(width, height, Surface.ROTATION_0, false, false, width, height)) {}
-                            "connected" -> CarPlayBackgroundSession.active = true
+                            "connected" -> { CarPlayBackgroundSession.active = true; CarPlayBackgroundSession.mainPictureReady = true }
                             "disconnected" -> CarPlayBackgroundSession.clear()
                         }
                         ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
@@ -190,7 +189,7 @@ class HomeFooterLayoutTest {
                     comparePreparation(activity, root, width, height, name, headline, ring, status, settings, brand)
                 } finally { CarPlayBackgroundSession.clear(); controller.pause().stop().destroy() }
             }
-        } finally { RuntimeEnvironment.setFontScale(1f); AppAppearanceRuntime.resetForTest() }
+        } finally { RuntimeEnvironment.setFontScale(1f) }
     }
 
     private fun comparePreparation(home: DiPlayActivity, homeRoot: ViewGroup, width: Int, height: Int,

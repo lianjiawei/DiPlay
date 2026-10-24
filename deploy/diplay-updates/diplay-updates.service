@@ -1,0 +1,19 @@
+[Unit]
+Description=Mirror verified DiPlay public releases
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=diplay-updates
+Group=diplay-updates
+ExecStart=/usr/bin/python3 /opt/diplay-updates/sync_diplay_updates.py --destination /var/www/diplay-updates --public-base https://weclaw-agent.cloud/diplay-updates
+TimeoutStartSec=45min
+Nice=10
+MemoryMax=128M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/www/diplay-updates
+UMask=0022

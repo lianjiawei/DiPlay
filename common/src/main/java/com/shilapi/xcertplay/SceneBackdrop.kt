@@ -17,7 +17,9 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
     private val strongReadingVeil: Boolean = false) :
     ColorDrawable(DiPlayPalette.of(night).background) {
     init { FidelityMaterials.install(context) }
-    private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) {
+    // CarPlay icon/brand customization must not discard the driver's chosen background.
+    private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN ||
+        AirPlayPersistence.hasVehicleModelSelection(context)) {
         val model = AirPlayPersistence.loadVehicleModel(context)
         val custom = if (model == VehicleModel.CUSTOM) CustomWallpaper.file(context, quiet) else null
         custom?.let { cachedImage("custom:${it.path}") { BitmapFactory.decodeFile(it.path) } }

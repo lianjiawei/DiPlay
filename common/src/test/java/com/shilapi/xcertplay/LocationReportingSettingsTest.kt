@@ -28,6 +28,7 @@ import org.robolectric.shadows.ShadowAlertDialog
 class LocationReportingSettingsTest {
     private val context get() = RuntimeEnvironment.getApplication()
     private var controller: ActivityController<DiPlayActivity>? = null
+    private val startedWithSettings = mutableListOf<Boolean>()
     private val activity get() = requireNotNull(controller).get()
 
     @Before fun setUp() {
@@ -113,7 +114,8 @@ class LocationReportingSettingsTest {
             shadowOf(Looper.getMainLooper()).idle()
 
             assertEquals(enabled, AirPlayPersistence.loadLocationReportingEnabled(context))
-            assertEquals(CarPlayHostActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
+            assertEquals(enabled, startedWithSettings.last())
+            assertNull(shadowOf(activity).nextStartedActivity)
         }
         assertEquals(listOf(true, false), stoppedWithSettings)
     }
@@ -121,6 +123,7 @@ class LocationReportingSettingsTest {
     private fun openSettings() {
         controller = Robolectric.buildActivity(DiPlayActivity::class.java,
             Intent(context, DiPlayActivity::class.java).putExtra("page", "settings")).setup()
+        activity.projectionStarter = { startedWithSettings += AirPlayPersistence.loadLocationReportingEnabled(context); true }
     }
 
     private fun locationSwitch(): Switch = descendants(activity.window.decorView)

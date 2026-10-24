@@ -139,7 +139,136 @@ import kotlin.math.roundToInt
  *
  * Apple devices are discovered by vendor ID; CH341 uses the configured VID/PID below.
  */
-class CarPlayHostActivity : ComponentActivity() {
+internal const val EXTRA_OPEN_PROJECTION = "open_unified_projection"
+
+open class CarPlayHostActivity : ComponentActivity() {
+    /** The launcher owns the only home UI; the host supplies its persistent video/session layer. */
+    protected open val unifiedHome: Boolean get() = false
+    private var hostInitialized = false
+    private var legacyForwardOnly = false
+    private var pendingHostState: Bundle? = null
+    private var awaitingMicrophonePermission = false
+    private var unifiedConnectionRequested = false
+    private var restartUnifiedAfterStop = false
+    private var unifiedProjectionVisible = false
+    private var unifiedHomeContent: View? = null
+    private var connectionFailureSummary: String? = null
+    private var connectionWifiResetRequired = false
+    protected val projectionIsVisible: Boolean get() = unifiedProjectionVisible
+    protected val projectionIsStarting: Boolean get() = unifiedConnectionRequested && !shuttingDown.get()
+    protected val projectionNeedsRetry: Boolean get() = startupRetryStopped
+    protected val projectionNeedsWifiReset: Boolean get() = connectionWifiResetRequired
+    protected val projectionStatus: CharSequence? get() = connectionFailureSummary ?: stageStatusView?.text
+    protected val projectionStatusDetails: CharSequence? get() = connectionHelpDetail ?: stageStatusView?.contentDescription
+    protected open fun onProjectionStateChanged() = Unit
+    protected open fun applyHomeWindowAppearance() = Unit
+    protected fun applyProjectionWindowAppearance() = applyFullscreenMode()
+
+    /** Replace just Android chrome; never replace or detach a live video surface. */
+    protected fun installUnifiedHomeContent(content: View) {
+        val root = carPlayRootView
+        if (!hostInitialized || root == null) {
+            setContentView(content)
+            return
+        }
+        unifiedHomeContent?.let { root.removeView(it) }
+        (content.parent as? ViewGroup)?.removeView(content)
+        unifiedHomeContent = content
+        unifiedProjectionVisible = false
+        root.addView(content, FrameLayout.LayoutParams(-1, -1))
+        content.bringToFront()
+        releaseCarPlayTouches()
+    }
+
+    protected fun requestUnifiedProjection(): Boolean {
+        check(unifiedHome)
+        unifiedConnectionRequested = true
+        if (shuttingDown.get()) {
+            restartUnifiedAfterStop = true
+            return true
+        }
+        if (!hostInitialized) {
+            val current = findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+            if (!initializeProjectionHost(pendingHostState)) {
+                unifiedConnectionRequested = false
+                onProjectionStateChanged()
+                return false
+            }
+            (current.parent as? ViewGroup)?.removeView(current)
+            setContentView(requireNotNull(carPlayRootView))
+            installUnifiedHomeContent(current)
+            if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) hostStarted()
+        }
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) hostResumed()
+        else loadConnectionSettings()
+        beginConnectionPrerequisites()
+        updateDebugOverlays()
+        return true
+    }
+
+    protected fun showUnifiedProjection(): Boolean {
+        if (!hostInitialized || unifiedHomeContent == null || !CarPlayBackgroundSession.active ||
+            !CarPlayBackgroundSession.mainPictureReady || startupRetryStopped || connectionWifiResetRequired) return false
+        unifiedProjectionVisible = true
+        releaseCarPlayTouches()
+        unifiedHomeContent?.visibility = View.GONE
+        updateCallPopupGuard()
+        if (AirPlayPersistence.loadFpsCounter(this)) fpsCounter?.start()
+        applyFullscreenMode()
+        return true
+    }
+
+    protected fun revealUnifiedHome(afterConnectionLoss: Boolean = false): Boolean {
+        if (!unifiedProjectionVisible) return false
+        if (picturePanel != null) {
+            closePicturePanel()
+            if (!afterConnectionLoss) return true
+        }
+        if (menuOpen) {
+            if (safeAreaEditorActive) closeSafeAreaEditor() else leaveSettingsMenu()
+            if (!afterConnectionLoss) return true
+        }
+        unifiedProjectionVisible = false
+        releaseCarPlayTouches()
+        unifiedHomeContent?.visibility = View.VISIBLE
+        fpsCounter?.stop()
+        updateCallPopupGuard()
+        onProjectionStateChanged()
+        return true
+    }
+
+    protected fun retryUnifiedProjection() {
+        if (connectionWifiResetRequired) { showDiPlayHome("wireless-recovery"); return }
+        if (shuttingDown.get() || handshakeResetInProgress) return
+        if (controller == null) {
+            startupRetryStopped = false
+            connectionFailureSummary = null
+            requestUnifiedProjection()
+            return
+        }
+        if (!CarPlayBackgroundSession.isOwner(this)) return
+        startupRetryBudget.manualRetry()
+        startupRetryStopped = false
+        reconnectAttempts = 0
+        restartCarPlay(brandString(R.string.connecting_to_your_iphone))
+    }
+
+    protected fun stopUnifiedProjection(completion: () -> Unit) {
+        unifiedConnectionRequested = false
+        restartUnifiedAfterStop = false
+        if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop(completion)
+        else {
+            startupRetryStopped = false
+            connectionFailureSummary = null
+            connectionHelpDetail = null
+            connectionWifiResetRequired = false
+            stageStatusView?.text = ""
+            stageStatusView?.contentDescription = null
+            onProjectionStateChanged()
+            completion()
+        }
+    }
+
     private data class SettingsBaseline(
         val safeAreaRects: MutableMap<DisplaySize, SafeAreaRect?>,
         val customIconBytes: ByteArray?,
@@ -244,7 +373,10 @@ class CarPlayHostActivity : ComponentActivity() {
                 },
             )
             updateHotspotStatusBlock()
-            maybeStartCarPlay()
+            if (unifiedHome && !wirelessPermissionsReady) {
+                startupRetryStopped = true
+                setStatus(R.string.allow_the_connection_permission_to_continue)
+            } else maybeStartCarPlay()
         }
     private val wiredPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -261,6 +393,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
     private val microphonePermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            awaitingMicrophonePermission = false
             microphoneAvailable = granted
             microphonePermissionResolved = true
             appendLog(if (granted) "Microphone permission granted" else "Microphone permission denied")
@@ -524,7 +657,7 @@ class CarPlayHostActivity : ComponentActivity() {
             .resources
     }
     private var darkMode = false
-    private var appNight = true
+    private val appNight = true
     private var hostAppearanceResumed = false
     private var callPopupSessionReady = false
     private var hideBydCallPopup = false
@@ -543,8 +676,6 @@ class CarPlayHostActivity : ComponentActivity() {
             initialNight = darkMode,
             onNightChanged = { night ->
                 darkMode = night
-                if (hostAppearanceResumed) AppAppearanceRuntime.publishHost(this, night)
-                refreshAppAppearance()
                 paintWaitingScreen()
                 applyClusterTurnOverlay()
                 appendLog("CarPlay switched to ${if (night) "night" else "day"} mode")
@@ -756,6 +887,32 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (unifiedHome) {
+            pendingHostState = savedInstanceState
+            unifiedConnectionRequested = savedInstanceState?.getBoolean("unified_connection_requested") ?: false
+            awaitingMicrophonePermission = savedInstanceState?.getBoolean("host_awaiting_microphone") ?: false
+            microphonePermissionResolved = savedInstanceState?.getBoolean("host_microphone_resolved") ?: false
+            awaitingVpnConsent = savedInstanceState?.getBoolean("host_awaiting_vpn") ?: false
+            awaitingWirelessPermissions = savedInstanceState?.getBoolean("host_awaiting_wireless") ?: false
+            awaitingWiredPermissions = savedInstanceState?.getBoolean("host_awaiting_wired") ?: false
+            awaitingLocationPermission = savedInstanceState?.getBoolean("host_awaiting_location") ?: false
+        }
+        if (!unifiedHome) {
+            legacyForwardOnly = true
+            // Compatibility for USB receivers, notifications and existing external shortcuts.
+            // There is no second home or connection Activity in the live UI.
+            startActivity(Intent(intent).setClass(this, DiPlayActivity::class.java)
+                .putExtra(EXTRA_OPEN_PROJECTION, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            finish()
+        }
+    }
+
+    private fun initializeProjectionHost(savedInstanceState: Bundle?): Boolean {
+        if (hostInitialized) return true
+        if (runCatching { DiPlayBootstrap.ensure(this, AirPlayPersistence.loadMfiTarget(this)) }.isFailure) {
+            return false
+        }
         NavigationWidgetUpdater.attach(applicationContext)
         com.shilapi.xcertplay.lincoln.LincolnClusterOutput.attach(applicationContext)
         CarPlayCallKeys.install(applicationContext)
@@ -766,10 +923,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (isIphoneUsbAttachment(intent)) {
             AirPlayPersistence.saveWirelessEnabled(this, false)
         }
-        if (runCatching { DiPlayBootstrap.ensure(this, AirPlayPersistence.loadMfiTarget(this)) }.isFailure) {
-            startActivity(Intent(this, DiPlayActivity::class.java))
-            finish(); return
-        }
+        hostInitialized = true
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
@@ -777,7 +931,6 @@ class CarPlayHostActivity : ComponentActivity() {
         lastConfiguration = Configuration(resources.configuration)
         darkMode = savedInstanceState?.getBoolean("carplay_night_active")
             ?: nightModeOrNull(resources.configuration.uiMode) ?: false
-        appNight = resolveAppNightNow(darkMode)
         carThemeNight = nightModeOrNull(resources.configuration.uiMode) ?: true
         logThemeState(ThemeModeDiagnostics.Source.CREATE, resources.configuration)
         advancedAudioChannelMappingSupported =
@@ -785,8 +938,10 @@ class CarPlayHostActivity : ComponentActivity() {
         airPlayIdentity = AirPlayPersistence.loadIdentity(this)
         loadPersistedSettings()
         locationPermissionAvailable = hasFineLocationPermission()
-        setContentView(buildContentView())
+        val projectionRoot = buildContentView()
+        if (!unifiedHome) setContentView(projectionRoot)
         applyFullscreenMode()
+        if (!unifiedHome) {
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
@@ -796,25 +951,37 @@ class CarPlayHostActivity : ComponentActivity() {
                     } else if (menuOpen) {
                         if (safeAreaEditorActive) closeSafeAreaEditor() else leaveSettingsMenu()
                     } else {
-                        showDiPlayHome()
+                        leaveConnectionHome()
                     }
                 }
             },
         )
+        }
 
         appendLog(
             "Host started; MFI target=${mfiTargetLabel(mfiTarget)}; " +
                 "transport=${if (wirelessEnabled) "wireless" else "wired"}",
         )
+        if (!unifiedHome) beginConnectionPrerequisites()
+        return true
+    }
+
+    private fun beginConnectionPrerequisites() {
+        if (unifiedHome && !unifiedConnectionRequested) return
+        if (controller?.isClosed() == false && CarPlayBackgroundSession.isOwner(this)) {
+            updateDebugOverlays()
+            return
+        }
         val reusedBackgroundSession = adoptBackgroundSession()
         microphoneAvailable =
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        microphonePermissionResolved = microphoneAvailable
+        microphonePermissionResolved = microphonePermissionResolved || microphoneAvailable
         if (reusedBackgroundSession) {
             updateDebugOverlays()
         } else if (microphonePermissionResolved) {
             requestStartupPrerequisites()
-        } else {
+        } else if (!awaitingMicrophonePermission) {
+            awaitingMicrophonePermission = true
             microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
@@ -894,6 +1061,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun requestStartupPrerequisites() {
+        if (unifiedHome && !unifiedConnectionRequested) return
         if (locationReportingEnabled && !locationPermissionAvailable) {
             requestLocationPermission()
             return
@@ -971,6 +1139,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (vpnReady) {
             maybeStartCarPlay()
         } else {
+            if (unifiedHome) startupRetryStopped = true
             setStatus(R.string.vpn_consent_was_denied)
         }
     }
@@ -983,6 +1152,7 @@ class CarPlayHostActivity : ComponentActivity() {
             "component=${consent?.component?.flattenToString() ?: "none"}"
         Log.w(TAG, diagnostic, error)
         appendLog(diagnostic)
+        if (unifiedHome) startupRetryStopped = true
         setStatus(R.string.vpn_authorization_unavailable)
         if (!vpnAdbConsentTried) preConsentVpnOverAdb()
     }
@@ -999,6 +1169,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 appendLog("VPN consent over adb access=$access granted=$granted")
                 if (granted && !awaitingVpnConsent && !vpnReady) {
                     vpnReady = true
+                    if (unifiedHome) startupRetryStopped = false
                     maybeStartCarPlay()
                 }
             }
@@ -1037,6 +1208,7 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) return
         if (isIphoneUsbAttachment(intent)) {
             requestHostTaskToFront()
             refreshUsbAttachmentAppearance()
@@ -1077,12 +1249,10 @@ class CarPlayHostActivity : ComponentActivity() {
         // The live host result already includes the light-sensor decision when ambient mode is
         // selected. USB insertion only needs to repaint local chrome; CarPlay's own night update
         // is sent through the normal session lifecycle.
-        AppAppearanceRuntime.publishHost(this, darkMode)
-        refreshAppAppearance()
         applyFullscreenMode()
     }
 
-    private fun isIphoneUsbAttachment(intent: Intent): Boolean {
+    protected fun isIphoneUsbAttachment(intent: Intent): Boolean {
         if (intent.action != UsbManager.ACTION_USB_DEVICE_ATTACHED) return false
         val device = androidx.core.content.IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
         return device?.vendorId == IphoneUsbMatcher.APPLE_VENDOR_ID
@@ -1090,6 +1260,10 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (hostInitialized || (!unifiedHome && !legacyForwardOnly)) hostStarted()
+    }
+
+    private fun hostStarted() {
         isActivityStarted = true
         logThemeState(ThemeModeDiagnostics.Source.START, resources.configuration)
         mainHandler.removeCallbacks(pollConfiguration)
@@ -1098,11 +1272,15 @@ class CarPlayHostActivity : ComponentActivity() {
         homeMonitor?.stop()
         homeScreenVisible = null
         // Read here so a change made in Settings applies when the projection comes back.
-        if (AirPlayPersistence.loadFpsCounter(this)) fpsCounter?.start() else fpsCounter?.stop()
+        if (AirPlayPersistence.loadFpsCounter(this) && (!unifiedHome || unifiedProjectionVisible)) fpsCounter?.start() else fpsCounter?.stop()
     }
 
     override fun onResume() {
         super.onResume()
+        if (hostInitialized || (!unifiedHome && !legacyForwardOnly)) hostResumed()
+    }
+
+    private fun hostResumed() {
         WheelKeyService.restoreIfNeeded(this)
         hostAppearanceResumed = true
         updateDebugOverlays()
@@ -1122,8 +1300,6 @@ class CarPlayHostActivity : ComponentActivity() {
                 nightSchedule)
         }
         nightModeController.resume(systemNight)
-        AppAppearanceRuntime.publishHost(this, darkMode)
-        refreshAppAppearance()
         if (paintedWallpaperKey != CustomWallpaper.appearanceKey(this)) paintWaitingScreen()
         if (!menuOpen) {
             displayScalePercent = AirPlayPersistence.loadDisplayScalePercent(this)
@@ -1153,7 +1329,7 @@ class CarPlayHostActivity : ComponentActivity() {
             val displayName = VehicleBranding.displayName(this)
             connectionIconView?.let { if(it is BrandMarkView)it.refreshLogo()else VehicleBranding.setLogo(it) }
             connectionTitleView?.text = displayName
-            connectionBackButton?.text = brandString(R.string.ui_glass_back_home)
+            connectionBackButton?.text = brandString(R.string.disconnect)
         }
         locationPermissionAvailable = hasFineLocationPermission()
         if (locationReportingEnabled && !locationPermissionAvailable && !menuOpen) {
@@ -1560,6 +1736,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     // Hardware navigation belongs to the iPhone-rendered CarPlay UI, not Android View focus.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (legacyForwardOnly || (unifiedHome && (!hostInitialized || !unifiedProjectionVisible))) return super.dispatchKeyEvent(event)
         val physicalKey = Triple(event.deviceId, event.keyCode, event.scanCode)
         val downOrUp = event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP
         if (downOrUp && physicalKey in legacySiriPresses) {
@@ -1646,6 +1823,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) return
         if (hasFocus) {
             refreshConfiguration(source = ThemeModeDiagnostics.Source.WINDOW_FOCUS)
             applyFullscreenMode()
@@ -1654,23 +1832,32 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("unified_connection_requested", unifiedConnectionRequested)
+        outState.putBoolean("unified_projection_visible", unifiedProjectionVisible)
+        outState.putBoolean("host_awaiting_microphone", awaitingMicrophonePermission)
+        outState.putBoolean("host_microphone_resolved", microphonePermissionResolved)
+        outState.putBoolean("host_awaiting_vpn", awaitingVpnConsent)
+        outState.putBoolean("host_awaiting_wireless", awaitingWirelessPermissions)
+        outState.putBoolean("host_awaiting_wired", awaitingWiredPermissions)
+        outState.putBoolean("host_awaiting_location", awaitingLocationPermission)
         outState.putBoolean("carplay_night_active", darkMode)
         super.onSaveInstanceState(outState)
     }
 
     override fun onPause() {
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) { super.onPause(); return }
         dropHeldTouch()
         mainHandler.removeCallbacks(connectionVisualTick)
         framePresentation?.finish()
         connectionRing?.state(connecting = false)
         hostAppearanceResumed = false
         updateCallPopupGuard()
-        AppAppearanceRuntime.clearHost(this)
         nightModeController.pause()
         super.onPause()
     }
 
     override fun onStop() {
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) { super.onStop(); return }
         fpsCounter?.stop()
         closePicturePanel()
         // The controller, USB/iAP2 link, and VPN attachment intentionally outlive the UI.
@@ -1709,7 +1896,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         if (CenterMapOverlay.shown) return
         val shown = CenterMapOverlay.show(applicationContext, MapMirrors.streamAspect, ::onCenterMapSurface) {
-            startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(CarPlayEntry.intent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         appendLog("Centre map: card ${if (shown) "shown" else "failed"} streamActive=${SCREEN_TYPE_ALT in activeScreenStreamTypes}")
     }
@@ -1744,6 +1931,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) return
         refreshConfiguration(newConfig, ThemeModeDiagnostics.Source.CALLBACK)
         applyFullscreenMode()
         stageStatusView?.maxWidth = (resources.displayMetrics.widthPixels * 0.78f).toInt()
@@ -1757,6 +1945,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) return
         applyFullscreenMode()
         videoView?.post {
             val view = videoView ?: return@post
@@ -1765,6 +1954,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if ((unifiedHome && !hostInitialized) || legacyForwardOnly) { super.onDestroy(); return }
         dropHeldTouch()
         mainHandler.removeCallbacks(connectionVisualTick)
         framePresentation?.finish()
@@ -1774,7 +1964,6 @@ class CarPlayHostActivity : ComponentActivity() {
         releaseSidePanelEffects()
         hostAppearanceResumed = false
         updateCallPopupGuard()
-        AppAppearanceRuntime.clearHost(this)
         nightModeController.pause()
         pictureBinding?.close()
         pictureBinding = null
@@ -1810,6 +1999,10 @@ class CarPlayHostActivity : ComponentActivity() {
         fallbackVideoBounds = null
         sessionLog?.finish("Activity destroyed")
         sessionLog = null
+        if (unifiedHome && !CarPlayBackgroundSession.isOwner(this)) {
+            airPlayCommandExecutor.shutdown()
+            teardownExecutor.shutdown()
+        }
         super.onDestroy()
     }
 
@@ -1853,9 +2046,42 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         root.addView(video, FrameLayout.LayoutParams(-1, -1))
         root.addView(gestureLayer, FrameLayout.LayoutParams(-1, -1))
+        if (!unifiedHome) buildLegacyConnectionPresentation(root, cornerMask)
+        else {
+            root.addView(cornerMask, FrameLayout.LayoutParams(0, 0))
+            stageStatusView = TextView(this)
+        }
+        // Above the video and gesture layer, below the menus.
+        sidePanelBlur = ImageView(this).apply {
+            visibility = View.GONE
+            scaleType = ImageView.ScaleType.FIT_XY
+        }.also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
+        sidePanel = buildSidePanel().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
+        sidePanelTab = buildSidePanelTab().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
+        // Over the picture and the connection panel, under the settings menu.
+        fpsCounter = FpsCounterOverlay(this, mainHandler) { sink?.liveVideoCounters() }.also { counter ->
+            // CarPlay's picture is never mirrored, so the counter stays top-right in right-to-left locales too.
+            root.addView(counter.view, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.RIGHT).apply {
+                setMargins(0, dp(12), dp(12), 0)
+            })
+        }
+        settingsMenu = (if (unifiedHome) FrameLayout(this) else buildSettingsMenu()).apply { visibility = View.GONE }
+        root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
+        safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
+        root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
+        videoView = video
+        smoothVideo = AirPlayPersistence.loadSmoothVideo(this)
+        directVideoOutput = AirPlayPersistence.loadDirectVideoOutput(this)
+        observeVideoWindow(video)
+        gestureOverlay = gestureLayer
+        updateDebugOverlays()
+        return root
+    }
+
+    private fun buildLegacyConnectionPresentation(root: FrameLayout, cornerMask: CarPlayCornerMaskView) {
         val viewport = ConnectionPreparationLayout(this)
         val headline=StableConnectionTextView(this, ConnectionScreenCopy.headlines).apply {
-            text=brandString(R.string.connecting_to_your_iphone);textSize=UiTypography.HERO_SP.toFloat()
+            text=brandString(R.string.ui_glass_connecting_title);textSize=UiTypography.HERO_SP.toFloat()
             gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif",Typeface.BOLD)
         }
         val ring = ConnectionRingView(this).apply { appearance(appNight); state(connecting = true) }
@@ -1864,13 +2090,31 @@ class CarPlayHostActivity : ComponentActivity() {
         connectionIconView = icon
         val title=TextView(this).apply {
             text=VehicleBranding.displayName(context);textSize=20f;includeFontPadding=false
-            gravity=Gravity.CENTER_VERTICAL;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+            gravity=Gravity.CENTER_VERTICAL or Gravity.START;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
         }
         connectionTitleView=title
         val brandHeader=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
             addView(icon,LinearLayout.LayoutParams(dp(32),dp(40)).apply { marginEnd=dp(12) })
-            addView(title,LinearLayout.LayoutParams(-2,-1))
+            title.maxLines = 1
+            title.ellipsize = android.text.TextUtils.TruncateAt.END
+            addView(title,LinearLayout.LayoutParams(0,-1,1f))
+            addView(DiPlayButton(this@CarPlayHostActivity).apply {
+                contentDescription = brandString(R.string.car_home)
+                text = if (resources.configuration.screenWidthDp < ConnectionPageLayout.MIN_READING_WIDTH_DP) ""
+                    else contentDescription
+                textSize = UiTypography.BODY_SP.toFloat()
+                includeFontPadding = false
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setHorizontallyScrolling(false)
+                minWidth = dp(GlassChrome.MIN_TARGET_DP)
+                minimumWidth = dp(GlassChrome.MIN_TARGET_DP)
+                setPadding(dp(GlassChrome.CONTROL_GAP_DP), 0, dp(GlassChrome.CONTROL_GAP_DP), 0)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_dp_car, 0, 0, 0)
+                setOnClickListener { showCarLauncher() }
+                style(DiPlayButtonKind.SECONDARY, DiPlayPalette.DARK, overlay = false)
+            }, LinearLayout.LayoutParams(-2,-1))
         }
         val phone=TextView(this).apply {
             text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=UiTypography.ROW_SP.toFloat();gravity=Gravity.CENTER
@@ -1918,26 +2162,20 @@ class CarPlayHostActivity : ComponentActivity() {
             }
             startupRetryButton = this
         }
+        hintArea.addView(recovery, FrameLayout.LayoutParams(-1, -1))
+        hintArea.addView(retry, FrameLayout.LayoutParams(-1, -1))
         val back = DiPlayButton(this).apply {
-            text = brandString(R.string.ui_glass_back_home)
-            setOnClickListener { showDiPlayHome() }
+            text = brandString(R.string.disconnect)
+            setOnClickListener {
+                isEnabled = false
+                CarPlayBackgroundSession.stop()
+                showDiPlayHome()
+            }
         }
         connectionBackButton = back
         val connectionHelp = DiPlayButton(this).apply {
-            text = brandString(R.string.ui_connection_help)
-            setOnClickListener {
-                val details = connectionHelpDetail ?: brandString(if (wirelessEnabled) {
-                    if (wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) R.string.connection_help_existing_wifi
-                    else R.string.keep_your_iphone_nearby_with_bluetooth_and_wi_fi_on_allow
-                } else R.string.use_a_usb_data_cable_and_unlock_your_iphone_allow_trust_an)
-                val message = listOfNotNull(connectionStageDetail, details).distinct().joinToString("\n\n")
-                val builder = appDialogBuilder().setTitle(brandString(R.string.ui_connection_help))
-                    .setMessage(message + "\n\n" + settingsGestureHintText())
-                    .setPositiveButton(android.R.string.ok, null)
-                if (recovery.visibility == View.VISIBLE) builder.setNeutralButton(recovery.text) { _, _ -> recovery.performClick() }
-                if (retry.visibility == View.VISIBLE) builder.setNegativeButton(retry.text) { _, _ -> retry.performClick() }
-                builder.show()
-            }
+            text = brandString(R.string.settings)
+            setOnClickListener { showDiPlayHome("settings") }
         }
         val actions = GlassActionRow(this).apply {
             addView(back, LinearLayout.LayoutParams(0, -2, 1f).apply {
@@ -1963,7 +2201,7 @@ class CarPlayHostActivity : ComponentActivity() {
             val buttonPalette = DiPlayPalette.of(appNight)
             back.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             connectionHelp.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
-            retry.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
+            retry.style(DiPlayButtonKind.PRIMARY, buttonPalette, overlay = false)
             recovery.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
         }
         paintWaitingScreen()
@@ -2006,13 +2244,6 @@ class CarPlayHostActivity : ComponentActivity() {
             (readyBadge.getChildAt(1) as TextView).setTextColor(palette.primaryText)
             (readyBadge.getChildAt(2) as TextView).setTextColor(palette.secondaryText)
         }
-        // Above the video and gesture layer, below the menus.
-        sidePanelBlur = ImageView(this).apply {
-            visibility = View.GONE
-            scaleType = ImageView.ScaleType.FIT_XY
-        }.also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
-        sidePanel = buildSidePanel().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
-        sidePanelTab = buildSidePanelTab().also { root.addView(it, FrameLayout.LayoutParams(0, 0)) }
         for (button in listOf(back, connectionHelp, recovery, retry)) {
             button.textSize = UiTypography.ACTION_SP.toFloat()
             button.minHeight = dp(GlassChrome.MIN_TARGET_DP)
@@ -2025,29 +2256,11 @@ class CarPlayHostActivity : ComponentActivity() {
             insets
         }
         ViewCompat.requestApplyInsets(viewport)
-        // Over the picture and the connection panel, under the settings menu.
-        fpsCounter = FpsCounterOverlay(this, mainHandler) { sink?.liveVideoCounters() }.also { counter ->
-            // CarPlay's picture is never mirrored, so the counter stays top-right in right-to-left locales too.
-            root.addView(counter.view, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.RIGHT).apply {
-                setMargins(0, dp(12), dp(12), 0)
-            })
-        }
-        settingsMenu = buildSettingsMenu().apply { visibility = View.GONE }
-        root.addView(settingsMenu, FrameLayout.LayoutParams(-1, -1))
-        safeAreaEditor = buildSafeAreaEditor().apply { visibility = View.GONE }
-        root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
-        videoView = video
-        smoothVideo = AirPlayPersistence.loadSmoothVideo(this)
-        directVideoOutput = AirPlayPersistence.loadDirectVideoOutput(this)
-        observeVideoWindow(video)
-        gestureOverlay = gestureLayer
         settingsGestureHint = gestureHint
         stageStatusView = stage
         connectionInstructionsView = instructions
         connectionHelpView = help
         connectionPanel = viewport
-        updateDebugOverlays()
-        return root
     }
 
     // DiPlay's side panel: placed over the part of the stream CarPlay leaves black (placeSidePanel), so it
@@ -2651,57 +2864,6 @@ class CarPlayHostActivity : ComponentActivity() {
     private val MENU_TRACK_OFF: Int get() = overlayPalette.overlayTrackOff
     private val MENU_BUTTON_TEXT: Int get() = overlayPalette.overlayOnAccent
     private val MENU_DANGER: Int get() = overlayPalette.overlayDanger
-
-    private fun refreshAppAppearance() {
-        val nextNight = resolveAppNightNow(darkMode)
-        if (nextNight == appNight) return
-        appNight = nextNight
-        paintWaitingScreen()
-
-        settingsMenu?.let { previous ->
-            val parent = previous.parent as? ViewGroup ?: return@let
-            val index = parent.indexOfChild(previous)
-            val visible = previous.visibility
-            val scrollY = settingsMenuContentScroll?.scrollY ?: 0
-            val focusDescription = previous.findFocus()?.contentDescription?.toString()
-            parent.removeView(previous)
-            val replacement = buildSettingsMenu().apply { visibility = visible }
-            val replacementContentScroll = settingsMenuContentScroll
-            replacementContentScroll?.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
-                override fun onLayoutChange(view: View, left: Int, top: Int, right: Int, bottom: Int,
-                    oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
-                    view.removeOnLayoutChangeListener(this)
-                    replacementContentScroll.scrollTo(0, scrollY)
-                }
-            })
-            settingsMenu = replacement
-            parent.addView(replacement, index, FrameLayout.LayoutParams(-1, -1))
-            replacement.post {
-                if (focusDescription != null) {
-                    findDescendants(replacement).firstOrNull {
-                        it.contentDescription?.toString() == focusDescription
-                    }?.requestFocus()
-                }
-            }
-        }
-
-        safeAreaEditor?.let { overlay ->
-            overlay.setBackgroundColor(MENU_BACKGROUND)
-            safeAreaEditorView?.applyPalette(overlayPalette)
-            (overlay as? ViewGroup)?.let { group ->
-                (group.getChildAt(1) as? TextView)?.setTextColor(MENU_PRIMARY)
-            }
-        }
-        sidePanel?.let { panel ->
-            panel.background = sidePanelBackground()
-            val contents = sidePanelContents ?: return@let
-            (contents.getChildAt(0) as? TextView)?.setTextColor(SIDE_PANEL_PRIMARY)
-            sidePanelBattery?.setTextColor(SIDE_PANEL_SECONDARY)
-            sidePanelTyreTexts.forEach { it.setTextColor(SIDE_PANEL_PRIMARY) }
-            (sidePanelTyres?.getChildAt(0) as? TextView)?.setTextColor(SIDE_PANEL_SECONDARY)
-        }
-        (picturePanel as? CarPlayPicturePanel)?.applyPalette(overlayPalette)
-    }
 
     private inline fun <reified T : View> findDescendant(root: View): T? =
         findDescendants(root).filterIsInstance<T>().firstOrNull()
@@ -5321,6 +5483,7 @@ class CarPlayHostActivity : ComponentActivity() {
         // Keep the actionable tip readable while automatic retries are in progress.
         // Only a working AirPlay session, or a new failure, replaces it.
         if (status is CarPlayStatus.Failed) showConnectionHelp(status)
+        if (status is CarPlayStatus.Failed) connectionWifiResetRequired = status.wifiResetRequired
         when (status) {
             is CarPlayStatus.Failed -> if (status.wifiResetRequired) {
                 wifiRecoveryButton?.visibility = View.VISIBLE
@@ -5334,6 +5497,7 @@ class CarPlayHostActivity : ComponentActivity() {
             }
             else -> Unit
         }
+        updateDebugOverlays()
     }
 
     private fun adoptBackgroundSession(): Boolean {
@@ -5373,7 +5537,7 @@ class CarPlayHostActivity : ComponentActivity() {
             this, snapshot.display) { completion ->
             runOnUiThread {
                 shutdown(false, "DiPlay disconnect", completion)
-                finish()
+                if (!unifiedHome) finish()
             }
         }
         callPopupSessionReady = CarPlayBackgroundSession.callPopupReady
@@ -5418,6 +5582,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun startCarPlay(size: DisplaySize) {
+        if (unifiedHome && !unifiedConnectionRequested) return
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
         if (wirelessEnabled && wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI &&
@@ -5521,7 +5686,7 @@ class CarPlayHostActivity : ComponentActivity() {
         CarPlayBackgroundSession.store(next, renderer, size.width, size.height, this, display) { completion ->
             runOnUiThread {
                 shutdown(terminateProcess = false, reason = "DiPlay disconnect", completion = completion)
-                finish()
+                if (!unifiedHome) finish()
             }
         }
         try {
@@ -5854,6 +6019,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun maybeStartCarPlay() {
+        if (unifiedHome && !unifiedConnectionRequested) return
         if (shuttingDown.get()) return
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) {
             if (!adoptBackgroundSession()) mainHandler.postDelayed({ maybeStartCarPlay() }, 500)
@@ -6008,10 +6174,27 @@ class CarPlayHostActivity : ComponentActivity() {
         }
     }
 
-    private fun showDiPlayHome(page: String = "home") {
+    /** Waiting is already the home state. Back leaves the app instead of opening another home. */
+    private fun leaveConnectionHome() {
+        if (connectionPanel?.visibility == View.VISIBLE) showCarLauncher() else showDiPlayHome()
+    }
+
+    private fun showCarLauncher() {
+        releaseCarPlayTouches()
+        startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
+        moveTaskToBack(true)
+    }
+
+    protected open fun showDiPlayHome(page: String = "home") {
         releaseCarPlayTouches()
         startActivity(Intent(this, DiPlayActivity::class.java)
-            .putExtra("page", page).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            .putExtra("page", page)
+                .putExtra(DiPlayActivity.EXTRA_RETURN_TO_CARPLAY, page == "settings").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        // The projection has its own task affinity. REORDER_TO_FRONT alone creates a home
+        // inside that task, so Back can reveal projection and open yet another home. Reuse
+        // the launcher task and leave projection behind it without stopping the session.
+        moveTaskToBack(true)
     }
 
     /** Keep a timed-out sink visible to surface teardown until its codecs have actually been released. */
@@ -6024,6 +6207,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun openSettingsMenu() {
+        if (unifiedHome) { showDiPlayHome("settings"); return }
         if (menuOpen) return
         loadPersistedSettings()
         releaseCarPlayTouches()
@@ -6103,7 +6287,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (!menuOpen) return
         if (menuSettingsSignature?.let { it != menuSettingsSignature() } == true) {
             // Follow the menu's light or dark palette, like DiPlay's other dialogs.
-            AlertDialog.Builder(this, if (appNight) R.style.Theme_Xcertplay_Dialog_Dark else R.style.Theme_Xcertplay_Dialog_Light)
+            AlertDialog.Builder(this, R.style.Theme_Xcertplay_Dialog_Dark)
                 .setTitle(brandString(R.string.settings_discard_pending_title))
                 .setMessage(brandString(R.string.settings_discard_pending_message))
                 .setPositiveButton(brandString(R.string.save_and_reconnect)) { _, _ -> saveSettingsAndReconnect() }
@@ -6165,6 +6349,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun shutdown(terminateProcess: Boolean, reason: String, completion: () -> Unit = {}) {
         if (!shuttingDown.compareAndSet(false, true)) { completion(); return }
+        unifiedConnectionRequested = false
         callPopupSessionReady = false
         updateCallPopupGuard()
         resetSidePanel()
@@ -6186,14 +6371,36 @@ class CarPlayHostActivity : ComponentActivity() {
             oldController?.close()
             val clean = oldController?.awaitClosed(CONTROLLER_CLOSE_TIMEOUT_MILLIS) ?: true
             oldSink?.let(::closeRetiringSink)
-            airPlayCommandExecutor.shutdown()
+            if (!unifiedHome || terminateProcess) airPlayCommandExecutor.shutdown()
             if (terminateProcess) {
                 applicationContext.stopService(Intent(applicationContext, CarPlayVpnService::class.java))
             }
             Log.i(TAG, "shutdown complete clean=$clean")
             applicationContext.stopService(Intent(applicationContext, DiPlaySessionService::class.java))
-            teardownExecutor.shutdown()
-            mainHandler.post { completion() }
+            if (!unifiedHome || terminateProcess) teardownExecutor.shutdown()
+            mainHandler.post {
+                if (unifiedHome && !terminateProcess) {
+                    activeAirPlaySession = null
+                    activeScreenStreamTypes.clear()
+                    startupRetryStopped = false
+                    connectionFailureSummary = null
+                    connectionHelpDetail = null
+                    connectionWifiResetRequired = false
+                    stageStatusView?.text = ""
+                    stageStatusView?.contentDescription = null
+                    reconnectScheduled = false
+                    shuttingDown.set(false)
+                    unifiedProjectionVisible = false
+                    unifiedHomeContent?.visibility = View.VISIBLE
+                    onProjectionStateChanged()
+                }
+                val restart = unifiedHome && restartUnifiedAfterStop && unifiedConnectionRequested
+                restartUnifiedAfterStop = false
+                completion()
+                if (restart && !isDestroyed) mainHandler.post {
+                    if (unifiedConnectionRequested && !isDestroyed) requestUnifiedProjection()
+                }
+            }
             if (terminateProcess) {
                 val drained = AsyncDiagnosticLog.flush(AsyncDiagnosticLog.FLUSH_TIMEOUT_MILLIS)
                 Log.i(TAG, "shutdown diagnostics pendingCompleted=$drained")
@@ -6525,7 +6732,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun shouldHideBydCallPopup(): Boolean =
-        hostAppearanceResumed && callPopupSessionReady && !menuOpen && !shuttingDown.get() &&
+        hostAppearanceResumed && (!unifiedHome || unifiedProjectionVisible) && callPopupSessionReady && !menuOpen && !shuttingDown.get() &&
             !handshakeResetInProgress && !reconnectScheduled && CarPlayBackgroundSession.active &&
             CarPlayBackgroundSession.isOwner(this) && AirPlayPersistence.loadHideBydCallPopup(this)
 
@@ -6549,6 +6756,8 @@ class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(brandString(stringId), englishResources.getString(stringId))
 
     private fun showConnectionHelp(failure: CarPlayStatus.Failed?) {
+        if (failure == null) connectionWifiResetRequired = false
+        connectionFailureSummary = failure?.let { brandString(ConnectionFailureGuidance.summary(it, wirelessEnabled, wirelessHotspotMode)) }
         connectionHelpDetail = failure?.let {
             brandString(ConnectionFailureGuidance.message(it, wirelessEnabled, wirelessHotspotMode))
         }
@@ -6567,7 +6776,9 @@ class CarPlayHostActivity : ComponentActivity() {
         val fullStage = friendlyStage(message, englishMessage)
         val summary = ConnectionScreenCopy.summary(this, fullStage)
         connectionStageDetail = fullStage.takeIf { it != summary }
-        stageStatusView?.text = summary
+        stageStatusView?.contentDescription = fullStage
+        stageStatusView?.text = if (summary == brandString(R.string.connecting_to_your_iphone) ||
+            summary == brandString(R.string.ui_glass_connecting_title)) brandString(R.string.getting_carplay_ready) else summary
         updateDebugOverlays()
     }
 
@@ -6575,11 +6786,19 @@ class CarPlayHostActivity : ComponentActivity() {
         statusScrollView?.visibility = View.GONE
         mainHandler.removeCallbacks(connectionVisualTick)
         if (shuttingDown.get() || isDestroyed) return
+        val recoveryVisible = wifiRecoveryButton?.visibility == View.VISIBLE
+        startupRetryButton?.visibility = if (startupRetryStopped && !recoveryVisible) View.VISIBLE else View.GONE
+        val actionVisible = recoveryVisible || startupRetryStopped
+        connectionInstructionsView?.visibility = if (!actionVisible && connectionHelpDetail == null) View.VISIBLE else View.GONE
+        connectionHelpView?.visibility = if (!actionVisible && connectionHelpDetail != null) View.VISIBLE else View.GONE
         val session = activeAirPlaySession
         // The controller's first-frame notification can belong to the instrument stream.
         // Observe main-screen counters only; the media engine and its callbacks remain unchanged.
         val mainPictureReady = session != null && SCREEN_TYPE_MAIN in activeScreenStreamTypes &&
             (sink?.liveVideoCounters()?.rendered ?: 0L) > 0L
+        if (CarPlayBackgroundSession.isOwner(this)) {
+            CarPlayBackgroundSession.mainPictureReady = mainPictureReady
+        }
         if (mainPictureReady && (presentedFrameGeneration != restartGeneration || presentedFrameSession !== session)) {
             presentedFrameGeneration = restartGeneration
             presentedFrameSession = session
@@ -6591,7 +6810,9 @@ class CarPlayHostActivity : ComponentActivity() {
             framePresentation?.waiting()
             connectionRing?.state(connecting = !startupRetryStopped && !menuOpen && hostAppearanceResumed)
         }
-        if (connectionPanel?.visibility == View.VISIBLE && hostAppearanceResumed && !startupRetryStopped) {
+        onProjectionStateChanged()
+        if ((connectionPanel?.visibility == View.VISIBLE ||
+                (unifiedHome && unifiedConnectionRequested && !mainPictureReady)) && hostAppearanceResumed && !startupRetryStopped) {
             mainHandler.postDelayed(connectionVisualTick, CONNECTION_VISUAL_POLL_MILLIS)
         }
     }
@@ -6664,6 +6885,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun applyFullscreenMode() {
+        if (unifiedHome && !unifiedProjectionVisible) { applyHomeWindowAppearance(); return }
         val multiWindow = isMultiWindowActive()
         if (harmanFullscreenEnabled) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -6824,6 +7046,7 @@ internal fun statusBarHiddenByAnotherWindow(display: CarPlaySessionDisplay, widt
 /** Process-local hand-off for keeping the CarPlay session alive while no Activity is visible. */
 internal object CarPlayBackgroundSession {
     @Volatile var active = false
+    @Volatile var mainPictureReady = false
     @Volatile var callPopupReady = false
     private var stopAction: (((() -> Unit)) -> Unit)? = null
     private var stopping = false
@@ -6874,7 +7097,10 @@ internal object CarPlayBackgroundSession {
     @Synchronized
     fun store(controller: CarPlayController, sink: AndroidMediaSink, width: Int, height: Int,
         owner: Any, display: CarPlaySessionDisplay, stop: (() -> Unit) -> Unit) {
-        if (this.controller !== controller) callPopupReady = false
+        if (this.controller !== controller) {
+            callPopupReady = false
+            mainPictureReady = false
+        }
         this.stopAction = stop
         this.owner = owner
         this.controller = controller
@@ -6891,6 +7117,7 @@ internal object CarPlayBackgroundSession {
         sink = null
         if (!keepOwner) { stopAction = null; owner = null }
         active = false
+        mainPictureReady = false
         callPopupReady = false
         width = 0
         height = 0

@@ -27,7 +27,7 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
         FidelityMaterials.install(owner)
         val density=owner.resources.displayMetrics.density
         fun dp(value:Int)=(value*density).roundToInt()
-        val palette=DiPlayPalette.of((owner as? AppAppearanceOwner)?.currentAppNight ?: owner.resolveAppNightNow())
+        val palette=DiPlayPalette.DARK
         dialog.window?.setBackgroundDrawable(InsetDrawable(GlassChrome.surface(palette.surface,palette.outline,density,
             dp(GlassChrome.DIALOG_RADIUS_DP).toFloat(),opacity=224),dp(GlassChrome.CONTROL_GAP_DP)))
         fun descendants(view: View): List<View> = listOf(view) + if(view is ViewGroup)

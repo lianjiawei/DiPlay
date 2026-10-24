@@ -35,7 +35,6 @@ class CarHotspotNameTextTest {
 
     @After fun tearDown() {
         activity?.finish()
-        AppAppearanceRuntime.resetForTest()
         clearSettings()
     }
 

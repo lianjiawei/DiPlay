@@ -20,15 +20,14 @@ class AppDialogsTest {
 
     @Before fun clearPreferences() {
         context.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
-        AppAppearanceRuntime.resetForTest()
     }
 
-    @Test fun dialogThemesUseTheResolvedAppAppearance() {
+    @Test fun dialogThemesStayDarkForLegacyAppearancePreferences() {
         AirPlayPersistence.saveAppAppearance(context, AppAppearance.DARK)
         assertDialogColors(context.appDialogContext(), DiPlayPalette.DARK)
 
         AirPlayPersistence.saveAppAppearance(context, AppAppearance.LIGHT)
-        assertDialogColors(context.appDialogContext(), DiPlayPalette.LIGHT)
+        assertDialogColors(context.appDialogContext(), DiPlayPalette.DARK)
     }
 
     @Test fun anExistingDialogContextKeepsItsAppearanceAfterThePreferenceChanges() {
@@ -37,24 +36,20 @@ class AppDialogsTest {
 
         AirPlayPersistence.saveAppAppearance(context, AppAppearance.DARK)
 
-        assertDialogColors(existingContext, DiPlayPalette.LIGHT)
+        assertDialogColors(existingContext, DiPlayPalette.DARK)
         assertDialogColors(context.appDialogBuilder().context, DiPlayPalette.DARK)
     }
 
-    @Test fun dialogUsesTheOwnersCurrentAppearanceInsteadOfResolvingItAgain() {
-        AirPlayPersistence.saveAppAppearance(context, AppAppearance.DARK)
-        val lightOwner = object : ContextWrapper(context), AppAppearanceOwner {
-            override val currentAppNight = false
-        }
-
-        assertDialogColors(lightOwner.appDialogContext(), DiPlayPalette.LIGHT)
+    @Test fun wrappedContextsAlsoUseDarkDialogs() {
+        AirPlayPersistence.saveAppAppearance(context, AppAppearance.LIGHT)
+        assertDialogColors(ContextWrapper(context).appDialogContext(), DiPlayPalette.DARK)
     }
 
     /** Android 9 and older drop a literal colour here, and dialogs showed through (#640, #617). */
     @Test fun windowBackgroundsAreResourcesThatAndroid9CanLoad() {
         for (theme in listOf(
-            R.style.Theme_Xcertplay, R.style.Theme_Xcertplay_Light,
-            R.style.Theme_Xcertplay_Dialog_Dark, R.style.Theme_Xcertplay_Dialog_Light,
+            R.style.Theme_Xcertplay,
+            R.style.Theme_Xcertplay_Dialog_Dark,
         )) {
             val attributes = android.view.ContextThemeWrapper(context, theme).theme
                 .obtainStyledAttributes(intArrayOf(android.R.attr.windowBackground))
@@ -73,8 +68,7 @@ class AppDialogsTest {
         )
         try {
             assertEquals(palette.accent, attributes.getColor(0, 0))
-            assertEquals(if (palette == DiPlayPalette.DARK) R.drawable.glass_dialog_dark
-                else R.drawable.glass_dialog_light, attributes.getResourceId(1, 0))
+            assertEquals(R.drawable.glass_dialog_dark, attributes.getResourceId(1, 0))
             assertTrue(attributes.getDrawable(1) is GradientDrawable)
         } finally {
             attributes.recycle()

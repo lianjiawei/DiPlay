@@ -86,14 +86,14 @@ class ClusterMapPresentationTest {
         assertEquals(android.view.View.VISIBLE, label.visibility)
     }
 
-    @Test fun legacyPlaceholderFollowsALightAppTheme() {
+    @Test fun legacyPlaceholderStaysDarkDespiteAnOldLightPreference() {
         val appearance = AirPlayPersistence.loadAppAppearance(context)
         AirPlayPersistence.saveAppAppearance(context, AppAppearance.LIGHT)
         try {
             withPresentation { presentation ->
                 val label: android.view.View = org.robolectric.util.ReflectionHelpers.getField(presentation, "waitingLabel")
-                assertEquals(android.graphics.Color.rgb(233, 238, 246), (label.background as android.graphics.drawable.ColorDrawable).color)
-                assertEquals(android.graphics.Color.DKGRAY, spinner(label).indeterminateTintList?.defaultColor)
+                assertEquals(android.graphics.Color.BLACK, (label.background as android.graphics.drawable.ColorDrawable).color)
+                assertEquals(android.graphics.Color.WHITE, spinner(label).indeterminateTintList?.defaultColor)
             }
         } finally {
             AirPlayPersistence.saveAppAppearance(context, appearance)

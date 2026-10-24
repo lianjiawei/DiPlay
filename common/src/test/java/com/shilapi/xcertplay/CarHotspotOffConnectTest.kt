@@ -45,7 +45,6 @@ class CarHotspotOffConnectTest {
 
     @After fun tearDown() {
         opened.forEach { runCatching { it.finish() } }
-        AppAppearanceRuntime.resetForTest()
         HotspotState.on = false
         clearSettings()
     }

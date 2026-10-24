@@ -9,6 +9,8 @@
 .android-sdk/
 build/
 local.properties
+__pycache__/
+*.py[cod]
 
 # Native build output
 .cxx/

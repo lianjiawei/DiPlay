@@ -57,7 +57,6 @@ class HomeHotspotAccessTest {
 
     @After fun tearDown() {
         controllers.forEach { runCatching { it.get().finish() } }
-        AppAppearanceRuntime.resetForTest()
         CarHotspotSettings.setEnabled(context, false)
         WritePermission.allowed = false
         HotspotState.on = false

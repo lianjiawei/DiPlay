@@ -9,4 +9,7 @@
     <string name="settings_wallpaper_choose">Choose image</string>
     <string name="settings_wallpaper_replace">Change image</string>
     <string name="settings_wallpaper_import_failed">Could not use this image. Please choose another image.</string>
+    <string name="settings_home_brand">Home brand</string>
+    <string name="settings_home_brand_lincoln">Lincoln</string>
+    <string name="settings_home_brand_ford">Ford</string>
 </resources>

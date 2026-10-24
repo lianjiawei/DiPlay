@@ -204,7 +204,7 @@ class CarPlayHostSettingsTest {
 
     @Test
     @Config(qualifiers = "en-w1920dp-h1080dp-mdpi")
-    fun appearanceChangeRestoresContentScrollRatherThanCategoryRail() {
+    fun legacyAppearancePreferenceKeepsContentScrollAndCategoryRail() {
         setField("settingsMenuCategoryKey", "display")
         invoke("openSettingsMenu")
         fun layoutMenu() {
@@ -218,7 +218,6 @@ class CarPlayHostSettingsTest {
         (field("settingsMenuContentScroll") as ScrollView).scrollTo(0, 180)
         assertEquals(180, (field("settingsMenuContentScroll") as ScrollView).scrollY)
         AirPlayPersistence.saveAppAppearance(activity, AppAppearance.LIGHT)
-        invoke("refreshAppAppearance")
         layoutMenu()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("display", field("settingsMenuCategoryKey"))
@@ -459,19 +458,18 @@ class CarPlayHostSettingsTest {
         scroll.scrollTo(0, 120)
 
         AirPlayPersistence.saveAppAppearance(activity, AppAppearance.LIGHT)
-        invoke("refreshAppAppearance")
         shadowOf(android.os.Looper.getMainLooper()).idle()
 
-        assertNotSame(oldMenu, menu())
+        assertSame(oldMenu, menu())
         assertEquals("Unsaved hotspot", field("manualHotspotSsid"))
-        assertEquals(false, field("appNight"))
+        assertEquals(true, field("appNight"))
         assertEquals(
             0xB3000000.toInt(),
             (menu().background as android.graphics.drawable.ColorDrawable).color,
         )
         val heading = views(menu()).filterIsInstance<TextView>()
             .first { it.text == activity.getString(R.string.carplay_settings) }
-        assertEquals(DiPlayPalette.LIGHT.overlayPrimaryText, heading.currentTextColor)
+        assertEquals(DiPlayPalette.DARK.overlayPrimaryText, heading.currentTextColor)
     }
 
     @Test fun savingPersistsSettingsAndRestartsOnce() {
@@ -782,8 +780,7 @@ class CarPlayHostSettingsTest {
         activity.resources.updateConfiguration(config, activity.resources.displayMetrics)
         if (name.contains("light")) {
             AirPlayPersistence.saveAppAppearance(activity, AppAppearance.LIGHT)
-            invoke("refreshAppAppearance")
-        }
+            }
         if (name.contains("grouped")) setField("settingsMenuCategoryKey", "display")
         invoke("openSettingsMenu")
         val root = menu()

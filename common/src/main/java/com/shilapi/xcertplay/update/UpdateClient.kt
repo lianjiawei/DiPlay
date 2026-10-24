@@ -9,7 +9,10 @@ import java.net.URL
 import java.net.URLConnection
 
 internal object UpdateClient {
+    internal const val MIRROR_RELEASES_URL =
+        "https://weclaw-agent.cloud/diplay-updates/releases.json"
     // Personal releases retain their own signing key and must stay on this fork's update channel.
+    // Keep the channel ID stable for cached availability when changing its delivery source.
     internal const val RELEASES_URL =
         "https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30"
     private const val CONNECT_TIMEOUT_MILLIS = 10_000

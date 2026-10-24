@@ -896,7 +896,7 @@
     <string name="backup_summary">Imported %1$d settings, skipped %2$d.</string>
     <string name="backup_import_invalid">This file is not a Lincoln settings backup.</string>
     <string name="settings_background_update_checks">Check for updates in the background</string>
-    <string name="settings_background_update_checks_description">Once a day, Lincoln checks GitHub for updates. On the home screen, each new version is offered once with release notes and a download button. Downloads start only when you tap.</string>
+    <string name="settings_background_update_checks_description">Lincoln checks for updates once a day. In Settings → About, each new version is offered once with release notes and a download button. Downloads start only when you tap.</string>
     <string name="setup_guide">Setup guide</string>
     <string name="setup_guide_description">Find your DiLink version, choose a connection and turn on the features that suit your car.</string>
     <string name="setup_step_of">STEP %1$d OF %2$d</string>
@@ -1035,4 +1035,9 @@
     <string name="update_ready_to_install">Download complete. Tap Install now to open the Android installer.</string>
     <string name="update_retry">Retry</string>
     <string name="update_hide">Hide</string>
+    <string name="ui_glass_connection_incomplete">Connection incomplete</string>
+    <string name="ui_glass_usb_short">USB</string>
+    <string name="ui_glass_connecting_action">Connecting…</string>
+    <string name="ui_glass_retry_short">Retry</string>
+    <string name="ui_glass_wifi_reset_short">Reset Wi-Fi</string>
 </resources>

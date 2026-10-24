@@ -24,6 +24,7 @@ import org.robolectric.util.ReflectionHelpers
 @LooperMode(LooperMode.Mode.PAUSED)
 class FirstLaunchHomeTest {
     private val app get() = RuntimeEnvironment.getApplication()
+    private var starts = 0
     private val activities = mutableListOf<ActivityController<DiPlayActivity>>()
 
     @Before fun freshInstall() {
@@ -53,8 +54,8 @@ class FirstLaunchHomeTest {
         val screen = open().get()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("home", page(screen))
-        assertEquals(CarPlayHostActivity::class.java.name,
-            shadowOf(screen).nextStartedActivity?.component?.className)
+        assertEquals(1, starts)
+        assertNull(shadowOf(screen).nextStartedActivity)
         assertFalse(AirPlayPersistence.loadWirelessEnabled(app))
         assertFalse(SetupGuide.seen(app))
     }
@@ -83,7 +84,9 @@ class FirstLaunchHomeTest {
     private fun open(saved: Bundle? = null): ActivityController<DiPlayActivity> =
         Robolectric.buildActivity(DiPlayActivity::class.java,
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER))
-            .create(saved).start().resume().also { activities += it }
+            .create(saved).also { c ->
+                c.get().projectionStarter = { starts++; ReflectionHelpers.setField(c.get(), "unifiedConnectionRequested", true); true }
+            }.start().resume().also { activities += it }
 
     private fun page(screen: DiPlayActivity): String = ReflectionHelpers.getField(screen, "page")
 }

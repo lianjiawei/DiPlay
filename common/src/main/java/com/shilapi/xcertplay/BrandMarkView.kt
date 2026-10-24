@@ -6,16 +6,26 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.widget.ImageView
+import androidx.core.content.ContextCompat
 
 /** Uses the existing vehicle artwork, with a transparent mark for the supplied Lincoln tile. */
-internal class BrandMarkView(context: Context, private var night: Boolean=context.resolveAppNightNow()) : ImageView(context) {
+internal class BrandMarkView(context: Context, private var night: Boolean=context.resolveAppNightNow(),
+    private val homeBrand: Boolean = false) : ImageView(context) {
     private var lincoln=false
     init { refreshLogo() }
     fun appearance(night: Boolean) { this.night=night;refreshLogo() }
     fun refreshLogo() {
-        lincoln=VehicleBranding.preset(context)==VehicleBrandPreset.LINCOLN
-        VehicleBranding.setLogo(this)
-        contentDescription=VehicleBranding.displayName(context)
+        if (homeBrand) {
+            val brand = AirPlayPersistence.loadHomeVehicleBrand(context)
+            lincoln = brand == HomeVehicleBrand.LINCOLN
+            setImageDrawable(if (brand == HomeVehicleBrand.FORD) FordHomeMarkDrawable(context, DiPlayPalette.of(night).primaryText)
+                else ContextCompat.getDrawable(context, brand.logo))
+            contentDescription = brand.displayName(context)
+        } else {
+            lincoln=VehicleBranding.preset(context)==VehicleBrandPreset.LINCOLN
+            VehicleBranding.setLogo(this)
+            contentDescription=VehicleBranding.displayName(context)
+        }
         if(lincoln) {
             scaleType=ScaleType.MATRIX
             val tint=DiPlayPalette.of(night).primaryText

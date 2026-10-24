@@ -49,46 +49,34 @@ class CarPlayStageTextTest {
         stagesFollowTheConnection()
     }
 
-    @Test fun conciseStagesKeepDetailsAndRecoveryActionsInConnectionHelp() {
-        val root = ReflectionHelpers.callInstanceMethod<android.view.ViewGroup>(activity, "buildContentView")
+    @Test fun conciseStagesKeepAccessibleDetailsAndDirectRecoveryActions() {
+        ReflectionHelpers.callInstanceMethod<android.view.ViewGroup>(activity, "buildContentView")
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "setConnectionStage",
             ClassParameter.from(String::class.java, "CarPlay configuration request failed"),
             ClassParameter.from(String::class.java, "CarPlay configuration request failed"))
-        assertEquals(activity.getString(R.string.ui_connection_hint_usb),
-            ReflectionHelpers.getField<TextView>(activity, "stageStatusView").text.toString())
-        fun descendants(view: android.view.View): Sequence<android.view.View> = sequence {
-            yield(view)
-            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) yieldAll(descendants(view.getChildAt(i)))
-        }
-        val help = descendants(root).filterIsInstance<android.widget.Button>()
-            .single { it.text.toString() == activity.getString(R.string.ui_connection_help) }
+        val stage = ReflectionHelpers.getField<TextView>(activity, "stageStatusView")
+        assertEquals(activity.getString(R.string.ui_connection_hint_usb), stage.text.toString())
+        assertEquals(activity.getString(R.string.iphone_usb_mode_rejected), stage.contentDescription)
         val back = ReflectionHelpers.getField<android.widget.Button>(activity, "connectionBackButton")
-        assertEquals(activity.getString(R.string.ui_glass_back_home), back.text.toString())
-        back.performClick()
-        val destination = org.robolectric.Shadows.shadowOf(activity).nextStartedActivity
-        assertEquals(DiPlayActivity::class.java.name, destination.component?.className)
-        assertEquals("home", destination.getStringExtra("page"))
-        var retries=0
-        var resets=0
-        ReflectionHelpers.getField<android.widget.Button>(activity,"startupRetryButton").apply {
-            visibility=android.view.View.VISIBLE;setOnClickListener { retries++ }
-        }
-        ReflectionHelpers.getField<android.widget.Button>(activity,"wifiRecoveryButton").apply {
-            visibility=android.view.View.VISIBLE;setOnClickListener { resets++ }
-        }
-        for (action in listOf(android.app.AlertDialog.BUTTON_NEGATIVE, android.app.AlertDialog.BUTTON_NEUTRAL)) {
-            help.performClick()
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            val dialog=org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-            try {
-                assertTrue(dialog.findViewById<TextView>(android.R.id.message).text.toString()
-                    .contains(activity.getString(R.string.iphone_usb_mode_rejected)))
-                dialog.getButton(action).performClick()
-                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            } finally { dialog.dismiss() }
-        }
-        assertEquals(1,retries)
-        assertEquals(1,resets)
+        assertEquals(activity.getString(R.string.disconnect), back.text.toString())
+        var retries = 0
+        var resets = 0
+        val retry = ReflectionHelpers.getField<android.widget.Button>(activity, "startupRetryButton")
+        val reset = ReflectionHelpers.getField<android.widget.Button>(activity, "wifiRecoveryButton")
+        retry.setOnClickListener { retries++ }
+        reset.setOnClickListener { resets++ }
+        ReflectionHelpers.setField(activity, "startupRetryStopped", true)
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "updateDebugOverlays")
+        assertEquals(android.view.View.VISIBLE, retry.visibility)
+        assertTrue(retry.parent is android.view.ViewGroup)
+        retry.performClick()
+        reset.visibility = android.view.View.VISIBLE
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "updateDebugOverlays")
+        assertEquals(android.view.View.GONE, retry.visibility)
+        assertTrue(reset.parent is android.view.ViewGroup)
+        reset.performClick()
+        assertEquals(1, retries)
+        assertEquals(1, resets)
     }
 
     private fun stagesFollowTheConnection() {
@@ -99,7 +87,7 @@ class CarPlayStageTextTest {
         assertStage(R.string.connect_your_iphone_with_a_usb_cable, CarPlayStatus.WaitingForIphone)
         assertStage(R.string.allow_the_connection_permission_to_continue, CarPlayStatus.RequestingIphonePermission)
         assertStage(R.string.looking_for_your_paired_iphone, CarPlayStatus.WaitingForPairedIphone)
-        assertStage(R.string.connecting_to_your_iphone, CarPlayStatus.ConnectingBluetooth)
+        assertStage(R.string.getting_carplay_ready, CarPlayStatus.ConnectingBluetooth)
         assertStage(R.string.ui_connection_waiting_network, CarPlayStatus.RunningWireless)
         assertStage(R.string.opening_carplay, CarPlayStatus.RunningControl)
         assertStage(R.string.reconnecting_to_your_iphone, CarPlayStatus.ControlEnded)

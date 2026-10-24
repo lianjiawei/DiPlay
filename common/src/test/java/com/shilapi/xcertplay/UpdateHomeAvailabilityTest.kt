@@ -25,40 +25,54 @@ class UpdateHomeAvailabilityTest {
 
     @After fun clear() = UpdateAvailability.clearAllForTest(application)
 
-    @Test fun cachedUpdateAppearsBelowTheVersionAndOpensTheExistingDownloadFlow() {
-        val release = release()
-        UpdateAvailability.save(application, release)
-        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
-        val activity = controller.get()
-        val text = activity.getString(R.string.update_available_home)
-        val update = descendants(activity.window.decorView).filterIsInstance<TextView>()
-            .single { it.text == text }
-
-        assertTrue(update.isClickable)
-        assertTrue(update.isFocusable)
-        assertEquals(DiPlayPalette.DARK.warning, update.currentTextColor)
-        update.performClick()
-
-        assertEquals(SettingsCategory.ABOUT, ReflectionHelpers.getField<SettingsCategory>(activity, "settingsCategory"))
-        assertTrue(descendants(activity.window.decorView).filterIsInstance<TextView>().any {
-            it.text == activity.getString(R.string.update_download)
-        })
-        controller.pause().stop().destroy()
-    }
+    @Test fun cachedAndNewBackgroundUpdatesNeverAddHomeCardsOrPrompts() = verifyHome()
 
     @Config(sdk = [29], qualifiers = "en-w400dp-h900dp-port")
-    @Test fun cachedUpdateKeepsAnArmLengthTargetInCompactHome() {
-        val release = release()
-        UpdateAvailability.save(application, release)
-        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup()
-        val activity = controller.get()
-        val update = descendants(activity.window.decorView).filterIsInstance<TextView>().single {
-            it.text == activity.getString(R.string.update_available_home)
-        }
+    @Test fun compactHomeAlsoKeepsUpdatesInsideSettings() = verifyHome()
 
-        assertTrue(update.minHeight >= (48 * activity.resources.displayMetrics.density).toInt())
-        assertTrue(update.isClickable)
-        controller.pause().stop().destroy()
+    private fun verifyHome() {
+        UpdateAvailability.save(application, release())
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup().visible()
+        try {
+            val activity = controller.get()
+            controller.windowFocusChanged(true)
+            val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+            UpdateAvailability.save(application, release().copy(tagName = "v100.0.0"))
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                .idleFor(java.time.Duration.ofMillis(1100))
+            assertTrue(root === activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+            assertTrue(descendants(activity.window.decorView).filterIsInstance<TextView>().none {
+                it.text == activity.getString(R.string.update_available_home)
+            })
+            assertEquals(null, ReflectionHelpers.getField<UpdatePromptDialog?>(activity, "updatePrompt"))
+            ReflectionHelpers.setField(activity, "page", "settings")
+            ReflectionHelpers.setField(activity, "settingsCategory", SettingsCategory.ABOUT)
+            ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
+            assertTrue(descendants(activity.window.decorView).filterIsInstance<TextView>().any {
+                it.text == activity.getString(R.string.update_download)
+            })
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun everyUpdaterStageKeepsHomeToOneSceneWithoutExtraCards() {
+        UpdateAvailability.save(application, release())
+        val c = Robolectric.buildActivity(DiPlayActivity::class.java).setup().visible()
+        try {
+            val a = c.get()
+            val initialStage = ReflectionHelpers.getField<Any>(a, "updateStage")
+            for (stage in initialStage.javaClass.enumConstants) {
+                ReflectionHelpers.setField(a, "updateStage", stage)
+                ReflectionHelpers.callInstanceMethod<Unit>(a, "render")
+                val root = a.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+                val scene = descendants(root).filterIsInstance<ReferenceHomeScene>().single()
+                assertEquals("$stage must not append a home card", 1, (scene.parent as ViewGroup).childCount)
+                ReflectionHelpers.setField(a, "updatePromptForDownload", true)
+                ReflectionHelpers.callInstanceMethod<Unit>(a, "refreshUpdatePrompt")
+                ReflectionHelpers.callInstanceMethod<Unit>(a, "refreshUpdateAvailability")
+                assertTrue("$stage must not replace home", root === a.findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+                assertEquals(null, ReflectionHelpers.getField<UpdatePromptDialog?>(a, "updatePrompt"))
+            }
+        } finally { c.pause().stop().destroy() }
     }
 
     private fun release() = UpdateRelease(

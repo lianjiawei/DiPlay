@@ -53,7 +53,7 @@ class ConnectionScreenPresentationTest {
     @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
     fun landscapeReadingAreaKeepsSecondaryTextLegibleInBothThemes() {
         val app = RuntimeEnvironment.getApplication()
-        for (night in listOf(true, false)) {
+        for (night in listOf(true)) {
             val text = TextView(app)
             SceneText.apply(text, night, secondary = true)
             val bitmap = Bitmap.createBitmap(800, 480, Bitmap.Config.ARGB_8888)
@@ -97,9 +97,44 @@ class ConnectionScreenPresentationTest {
         } finally { a.recycle(); b.recycle() }
     }
 
+    @Test @Config(qualifiers = "zh-rCN-w640dp-h240dp-land-mdpi")
+    fun retryAndWifiRecoveryStayDirectlyUsableInShortWindows() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        try {
+            val root = ReflectionHelpers.callInstanceMethod<ViewGroup>(host, "buildContentView")
+            val panel = ReflectionHelpers.getField<ConnectionPreparationLayout>(host, "connectionPanel")
+            for (field in listOf("startupRetryButton", "wifiRecoveryButton")) {
+                ReflectionHelpers.setField(host, "startupRetryStopped", field == "startupRetryButton")
+                val recovery = ReflectionHelpers.getField<View>(host, "wifiRecoveryButton")
+                recovery.visibility = if (field == "wifiRecoveryButton") View.VISIBLE else View.GONE
+                ReflectionHelpers.callInstanceMethod<Unit>(host, "updateDebugOverlays")
+                repeat(3) {
+                    root.measure(View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(240, View.MeasureSpec.EXACTLY))
+                    root.layout(0, 0, 640, 240)
+                }
+                val action = ReflectionHelpers.getField<View>(host, field)
+                assertEquals(View.VISIBLE, action.visibility)
+                assertTrue(action.parent is ViewGroup)
+                assertTrue(action.height >= GlassChrome.MIN_TARGET_DP)
+                val bounds = android.graphics.Rect(0, 0, action.width, action.height)
+                panel.offsetDescendantRectToMyCoords(action, bounds)
+                val footer = descendants(panel).filterIsInstance<GlassActionRow>().single()
+                assertTrue("Recovery action clears footer", bounds.bottom <= footer.top)
+                assertTrue(bounds.top >= 0 && bounds.right <= panel.width)
+            }
+        } finally {
+            ReflectionHelpers.getField<AtomicBoolean>(host, "shuttingDown").set(true)
+            ReflectionHelpers.getField<android.os.Handler>(host, "mainHandler").removeCallbacksAndMessages(null)
+            for (field in listOf("teardownExecutor", "airPlayCommandExecutor"))
+                ReflectionHelpers.getField<ExecutorService>(host, field).shutdownNow()
+        }
+    }
+
     private fun capture(name: String, safeInsets: Boolean = false) {
         RuntimeEnvironment.setFontScale(1.3f)
-        for (night in listOf(true, false)) {
+        for (night in listOf(true)) {
             val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
             try {
                 // The library test manifest does not inherit mobile's android:supportsRtl="true".
@@ -149,7 +184,7 @@ class ConnectionScreenPresentationTest {
                 }
                 assertEquals(buttons[0].height, buttons[1].height)
                 assertTrue(buttons.all { it.height >= 48 * density })
-                val headline = visibleText.first { it.text.toString() == host.getString(R.string.connecting_to_your_iphone) }
+                val headline = visibleText.first { it.text.toString() == host.getString(R.string.ui_glass_connecting_title) }
                 val title = ReflectionHelpers.getField<TextView>(host, "connectionTitleView")
                 fun bounds(view: View): android.graphics.RectF {
                     val rect = android.graphics.RectF(0f, 0f, view.width.toFloat(), view.height.toFloat())
@@ -215,7 +250,7 @@ class ConnectionScreenPresentationTest {
                 for (text in visibleText) {
                     val layout = text.layout ?: continue
                     val room = text.height - text.compoundPaddingTop - text.compoundPaddingBottom
-                    assertTrue("Unclipped text: ${text.text}", layout.lineCount == 0 || layout.getLineBottom(layout.lineCount - 1) <= room + 2)
+                    assertTrue("Unclipped text: ${text.text} bounds=${text.width}x${text.height} padding=${text.compoundPaddingTop}/${text.compoundPaddingBottom} lines=${layout.lineCount} bottom=${layout.getLineBottom(layout.lineCount - 1)}", layout.lineCount == 0 || layout.getLineBottom(layout.lineCount - 1) <= room + 2)
                 }
                 val content = body.getChildAt(0) as ViewGroup
                 for (index in 0 until content.childCount) {
@@ -235,6 +270,7 @@ class ConnectionScreenPresentationTest {
                                     androidx.core.graphics.ColorUtils.calculateContrast(text.currentTextColor, bitmap.getPixel(x,y)) >= 4.5)
                             }
                     }
+                    root.viewTreeObserver.dispatchOnPreDraw()
                     root.draw(Canvas(bitmap))
                     val file = File("build/reports/connection-ui/$name-${if (night) "night" else "day"}.png")
                     file.parentFile.mkdirs()

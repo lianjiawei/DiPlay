@@ -59,7 +59,6 @@ class VehicleModelUiTest {
         RuntimeEnvironment.setFontScale(1f)
         CarPlayBackgroundSession.clear()
         PendingReconnect.clear()
-        AppAppearanceRuntime.resetForTest()
         prefs.edit().clear().commit()
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
     }
@@ -168,6 +167,55 @@ class VehicleModelUiTest {
         assertEquals(VehicleModel.NAUTILUS, AirPlayPersistence.loadVehicleModel(app))
     }
 
+    @Test @Config(sdk = [25, 29, 33])
+    fun backgroundEntrySurvivesBrandChangesOldCustomIdentityAndReopeningSettings() {
+        // An old custom name (or a cropped CarPlay icon) migrates the brand to CUSTOM.
+        AirPlayPersistence.saveOemLabel(app, "My car")
+        assertEquals(VehicleBrandPreset.CUSTOM, VehicleBranding.preset(app))
+        val screen = open()
+        assertTrue(modelChoiceButton(screen).isShown)
+        for (brand in VehicleBrandPreset.entries) {
+            VehicleBranding.setPreset(app, brand)
+            ReflectionHelpers.setField(screen, "page", "home")
+            render(screen)
+            ReflectionHelpers.setField(screen, "page", "settings")
+            ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.VEHICLE)
+            render(screen)
+            assertTrue("Background entry missing for $brand", modelChoiceButton(screen).isShown)
+            val dialog = picker(screen)
+            select(dialog, 1)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(VehicleModel.NAUTILUS, AirPlayPersistence.loadVehicleModel(app))
+            assertTrue(modelChoiceButton(open()).isShown)
+        }
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun chosenModelAndCustomImageAreIndependentOfCarPlayBrandOrIcon() {
+        fun photo(): Bitmap? = ReflectionHelpers.getField(SceneBackdrop(app, true, false), "photo")
+        // Preserve the neutral default for other brands until the driver chooses an image.
+        VehicleBranding.setPreset(app, VehicleBrandPreset.FORD)
+        assertNull(photo())
+        AirPlayPersistence.saveVehicleModel(app, VehicleModel.NAUTILUS)
+        val modelImage = requireNotNull(photo())
+        for (brand in VehicleBrandPreset.entries) {
+            VehicleBranding.setPreset(app, brand)
+            assertSame("The saved model must stay visible for $brand", modelImage, photo())
+        }
+        installCustomFixture()
+        val customImage = requireNotNull(photo())
+        assertNotSame(modelImage, customImage)
+        val customId = AirPlayPersistence.loadCustomWallpaperId(app)
+        for (brand in VehicleBrandPreset.entries) {
+            VehicleBranding.setPreset(app, brand)
+            assertSame("The custom image must stay visible for $brand", customImage, photo())
+            assertEquals(customId, AirPlayPersistence.loadCustomWallpaperId(app))
+            assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
+            assertTrue(modelChoiceButton(open()).isShown)
+        }
+    }
+
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
     fun landscapeModelsKeepTheSameLayout() = capture("landscape", 1f)
@@ -187,6 +235,14 @@ class VehicleModelUiTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "ar-ldrtl-w1280dp-h720dp-land-mdpi")
     fun rtlSettingsWithLargeText() = capture("rtl-large", 1.3f)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "zh-rCN-w1920dp-h720dp-land-mdpi")
+    fun ultraWideModelsAndPickerWithLargeText() = capture("1920x720-mdpi-large", 1.3f)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "zh-rCN-w960dp-h360dp-land-xhdpi")
+    fun ultraWideHighDensityModelsAndPickerWithLargeText() = capture("1920x720-xhdpi-large", 1.3f)
 
     private fun capture(name: String, fontScale: Float) {
         RuntimeEnvironment.setFontScale(fontScale)

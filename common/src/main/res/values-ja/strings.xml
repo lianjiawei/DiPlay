@@ -897,7 +897,7 @@
     <string name="backup_summary">%1$d件の設定を取り込み、%2$d件をスキップしました。</string>
     <string name="backup_import_invalid">Lincolnの設定バックアップファイルではありません。</string>
     <string name="settings_background_update_checks">バックグラウンドで更新を確認</string>
-    <string name="settings_background_update_checks_description">Lincoln は GitHub の更新を毎日確認します。ホーム画面では、新しいバージョンごとに一度、更新内容とダウンロードボタンを表示します。タップするまでダウンロードは開始しません。</string>
+    <string name="settings_background_update_checks_description">Lincoln は更新を毎日確認します。設定の「情報」画面で、新しいバージョンごとに一度、更新内容とダウンロードボタンを表示します。タップするまでダウンロードは開始しません。</string>
     <string name="setup_guide">初期設定ガイド</string>
     <string name="setup_guide_description">DiLinkのバージョンを確認し、接続方法と車に合う機能を選択します。</string>
     <string name="setup_step_of">ステップ %1$d／%2$d</string>
@@ -1034,4 +1034,9 @@
     <string name="update_ready_to_install">ダウンロードが完了しました。「今すぐインストール」をタップすると Android のインストーラーが開きます。</string>
     <string name="update_retry">再試行</string>
     <string name="update_hide">閉じる</string>
+    <string name="ui_glass_connection_incomplete">接続が完了していません</string>
+    <string name="ui_glass_usb_short">USB</string>
+    <string name="ui_glass_connecting_action">接続中…</string>
+    <string name="ui_glass_retry_short">再試行</string>
+    <string name="ui_glass_wifi_reset_short">Wi-Fi をリセット</string>
 </resources>

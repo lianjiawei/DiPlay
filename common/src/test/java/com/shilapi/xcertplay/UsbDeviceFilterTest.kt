@@ -43,7 +43,7 @@ class UsbDeviceFilterTest {
     private fun matchesAttachFilter(vendorId: Int, productId: Int): Boolean {
         val context = RuntimeEnvironment.getApplication()
         val activity = context.packageManager.getActivityInfo(
-            ComponentName(context, CarPlayHostActivity::class.java),
+            ComponentName(context, DiPlayActivity::class.java),
             PackageManager.GET_META_DATA,
         )
         val device = Mockito.mock(UsbDevice::class.java)

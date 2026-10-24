@@ -33,6 +33,7 @@ class ClusterSettingsConsentTest {
     private lateinit var activity: ActivityController<DiPlayActivity>
     private lateinit var session: CarPlayController
     private val routeOwner = Any()
+    private var starts = 0
     private val events = mutableListOf<String>()
 
     @Before fun setUp() {
@@ -46,6 +47,7 @@ class ClusterSettingsConsentTest {
         ClusterActivityOutput.stopForSettings()
         activity = Robolectric.buildActivity(DiPlayActivity::class.java)
         screen = activity.get()
+        screen.projectionStarter = { starts++; true }
         screen.setTheme(android.R.style.Theme_Material_NoActionBar)
         activity.setup().visible()
         ReflectionHelpers.setField(screen, "setupError", null)
@@ -120,8 +122,8 @@ class ClusterSettingsConsentTest {
         assertTrue(AirPlayPersistence.loadClusterMapEnabled(screen))
         assertEquals(listOf("release-cluster-surface", "stop-session"), events)
         assertNull(CarPlayBackgroundSession.snapshot())
-        assertEquals(CarPlayHostActivity::class.java.name,
-            shadowOf(screen).nextStartedActivity?.component?.className)
+        assertEquals(1, starts)
+        assertNull(shadowOf(screen).nextStartedActivity)
     }
 
     @Test fun applyingClusterMapOffReconnectsOnlyAfterConsent() {
@@ -137,8 +139,8 @@ class ClusterSettingsConsentTest {
         assertFalse(AirPlayPersistence.loadClusterMapEnabled(screen))
         assertEquals(listOf("stop-session", "release-cluster-surface"), events)
         assertNull(CarPlayBackgroundSession.snapshot())
-        assertEquals(CarPlayHostActivity::class.java.name,
-            shadowOf(screen).nextStartedActivity?.component?.className)
+        assertEquals(1, starts)
+        assertNull(shadowOf(screen).nextStartedActivity)
     }
 
     private fun assertCurrentSessionUnchanged() {

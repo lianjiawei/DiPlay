@@ -36,6 +36,7 @@ class PreattachedIphoneStartupTest {
     private var lifecycle: ActivityController<DiPlayActivity>? = null
     private lateinit var activity: DiPlayActivity
     private var stops = 0
+    private var starts = 0
 
     @Before fun prepare() {
         ShadowUsbManager.reset()
@@ -52,6 +53,7 @@ class PreattachedIphoneStartupTest {
         // These startup routing tests use a fully configured LAN connection.
         AirPlayPersistence.saveExistingWifiCredentials(app, "Router", "router-password")
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
+        activity.projectionStarter = { starts++; ReflectionHelpers.setField(activity, "unifiedConnectionRequested", true); true }
         ReflectionHelpers.setField(activity, "page", "home")
     }
 
@@ -69,10 +71,12 @@ class PreattachedIphoneStartupTest {
         SetupGuide.markSeen(app)
         val launch = bootLaunch()!!
         assertEquals(DiPlayActivity::class.java.name, launch.component?.className)
-        lifecycle = Robolectric.buildActivity(DiPlayActivity::class.java, launch).create().start().resume()
+        lifecycle = Robolectric.buildActivity(DiPlayActivity::class.java, launch).create()
         activity = lifecycle!!.get()
+        activity.projectionStarter = { starts++; ReflectionHelpers.setField(activity, "unifiedConnectionRequested", true); true }
+        lifecycle!!.start().resume()
         idle()
-        assertHostStarted(wireless = false)
+        assertConnectionRequested(wireless = false)
         assertEquals(DefaultConnectionMode.WIRELESS, DiPlayPreferences.defaultConnectionMode(app))
     }
 
@@ -96,14 +100,14 @@ class PreattachedIphoneStartupTest {
         attach(0x1234)
         launchAutomatically()
         idle()
-        assertHostStarted(wireless = true)
+        assertConnectionRequested(wireless = true)
     }
 
     @Test fun noPhonePreservesTheConfiguredWiredDefault() {
         DiPlayPreferences.saveDefaultConnectionMode(app, DefaultConnectionMode.USB)
         launchAutomatically()
         idle()
-        assertHostStarted(wireless = false)
+        assertConnectionRequested(wireless = false)
     }
 
     @Test fun attachedIphoneUsesUsbEvenWhenLanCredentialsHaveNotBeenConfigured() {
@@ -111,7 +115,7 @@ class PreattachedIphoneStartupTest {
         attachApple()
         launchAutomatically()
         idle()
-        assertHostStarted(wireless = false)
+        assertConnectionRequested(wireless = false)
     }
 
     @Test fun permissionIsRequestedByTheExistingHostNotByTheStartupScan() {
@@ -119,7 +123,7 @@ class PreattachedIphoneStartupTest {
         assertFalse(usb.hasPermission(phone))
         launchAutomatically()
         idle()
-        assertHostStarted(wireless = false)
+        assertConnectionRequested(wireless = false)
         assertFalse(usb.hasPermission(phone))
     }
 
@@ -176,7 +180,7 @@ class PreattachedIphoneStartupTest {
         launchAutomatically()
         shadowOf(usb).removeUsbDevice(phone)
         idle()
-        assertHostStarted(wireless = true)
+        assertConnectionRequested(wireless = true)
     }
 
     @Test fun finishingTheActivityCancelsAQueuedAutomaticConnection() {
@@ -188,11 +192,11 @@ class PreattachedIphoneStartupTest {
         assertTrue(AirPlayPersistence.loadWirelessEnabled(app))
     }
 
-    @Test fun repeatedSchedulingStartsOnlyOneProjectionActivity() {
+    @Test fun repeatedSchedulingRequestsOnlyOneConnectionInTheSameActivity() {
         attachApple()
         repeat(2) { launchAutomatically() }
         idle()
-        assertHostStarted(wireless = false)
+        assertConnectionRequested(wireless = false)
     }
 
     @Test fun missingOrDeniedUsbServiceDoesNotCrashStartupDetection() {
@@ -235,9 +239,8 @@ class PreattachedIphoneStartupTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
-    private fun assertHostStarted(wireless: Boolean) {
-        assertEquals(CarPlayHostActivity::class.java.name,
-            shadowOf(activity).nextStartedActivity?.component?.className)
+    private fun assertConnectionRequested(wireless: Boolean) {
+        assertEquals(1, starts)
         assertNull(shadowOf(activity).nextStartedActivity)
         assertEquals(wireless, AirPlayPersistence.loadWirelessEnabled(app))
         assertEquals(0, stops)

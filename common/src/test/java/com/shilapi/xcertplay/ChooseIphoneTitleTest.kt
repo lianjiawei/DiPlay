@@ -31,7 +31,6 @@ class ChooseIphoneTitleTest {
 
     @After fun tearDown() {
         opened.forEach { it.finish() }
-        AppAppearanceRuntime.resetForTest()
         clearSettings()
     }
 

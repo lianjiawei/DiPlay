@@ -10,15 +10,6 @@
         <item name="android:windowSplashScreenBackground" tools:targetApi="31">#273E55</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
-    <style name="Theme.Xcertplay.Light">
-        <item name="android:colorAccent">#1A609F</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:navigationBarColor">#E7EFF6</item>
-        <item name="android:statusBarColor">#E7EFF6</item>
-        <item name="android:windowBackground">@color/window_background_light</item>
-        <item name="android:windowSplashScreenBackground" tools:targetApi="31">#E7EFF6</item>
-    </style>
     <style name="Theme.Xcertplay.Dialog.Dark" parent="android:Theme.Material.Dialog.Alert">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#66C8FF</item>
@@ -26,14 +17,6 @@
         <item name="android:buttonBarPositiveButtonStyle">@style/Widget.Xcertplay.Glass.Primary.Dark</item>
         <item name="android:buttonBarNegativeButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Dark</item>
         <item name="android:buttonBarNeutralButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Dark</item>
-    </style>
-    <style name="Theme.Xcertplay.Dialog.Light" parent="android:Theme.Material.Light.Dialog.Alert">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#1A609F</item>
-        <item name="android:windowBackground">@drawable/glass_dialog_light</item>
-        <item name="android:buttonBarPositiveButtonStyle">@style/Widget.Xcertplay.Glass.Primary.Light</item>
-        <item name="android:buttonBarNegativeButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Light</item>
-        <item name="android:buttonBarNeutralButtonStyle">@style/Widget.Xcertplay.Glass.Secondary.Light</item>
     </style>
     <style name="Theme.AdbCluster" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
@@ -58,12 +41,8 @@
         <item name="android:background">@drawable/glass_action_secondary_dark</item>
         <item name="android:textColor">@color/glass_action_secondary_dark</item>
     </style>
-    <style name="Widget.Xcertplay.Glass.Primary.Light" parent="Widget.Xcertplay.Glass">
-        <item name="android:background">@drawable/glass_action_primary_light</item>
-        <item name="android:textColor">@color/glass_action_primary_light</item>
-    </style>
-    <style name="Widget.Xcertplay.Glass.Secondary.Light" parent="Widget.Xcertplay.Glass">
-        <item name="android:background">@drawable/glass_action_secondary_light</item>
-        <item name="android:textColor">@color/glass_action_secondary_light</item>
+    <style name="Theme.Xcertplay.LegacyEntry" parent="Theme.Xcertplay">
+        <item name="android:windowNoDisplay">true</item>
+        <item name="android:windowDisablePreview">true</item>
     </style>
 </resources>

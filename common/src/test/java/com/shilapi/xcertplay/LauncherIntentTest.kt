@@ -50,12 +50,11 @@ class LauncherIntentTest {
         assertFalse(DiPlayActivity.isLauncherIntent(Intent().putExtra("page", "connection")))
     }
 
-    @Test fun freshLauncherReturnsToTheExistingHostWithoutStoppingTheSession() {
+    @Test fun freshLauncherKeepsTheSameActivityAndExistingSession() {
         controller = Robolectric.buildActivity(DiPlayActivity::class.java, launcher()).create()
         val activity = controller!!.get()
-        assertTrue(activity.isFinishing)
-        assertEquals(CarPlayHostActivity::class.java.name,
-            shadowOf(activity).nextStartedActivity?.component?.className)
+        assertFalse(activity.isFinishing)
+        assertNull("The launcher itself owns the connection", shadowOf(activity).nextStartedActivity)
         assertTrue(CarPlayBackgroundSession.hasSession())
         assertEquals(0, stops)
     }
@@ -69,8 +68,7 @@ class LauncherIntentTest {
             ReflectionHelpers.ClassParameter(Intent::class.java, launcher()))
         assertEquals("home", ReflectionHelpers.getField<String>(activity, "page"))
         assertNull(ReflectionHelpers.getField<SettingsCategory?>(activity, "connectionSettingsReturnCategory"))
-        assertEquals(CarPlayHostActivity::class.java.name,
-            shadowOf(activity).nextStartedActivity?.component?.className)
+        assertNull("Projection is entered inside the existing Activity", shadowOf(activity).nextStartedActivity)
         assertEquals(0, stops)
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "onNewIntent",
             ReflectionHelpers.ClassParameter(Intent::class.java, launcher().putExtra("page", "settings")))

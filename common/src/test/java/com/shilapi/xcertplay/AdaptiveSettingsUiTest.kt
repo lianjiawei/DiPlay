@@ -111,7 +111,6 @@ class AdaptiveSettingsUiTest {
     @After fun tearDown() {
         activity?.finish()
         RuntimeEnvironment.setFontScale(1f)
-        AppAppearanceRuntime.resetForTest()
         context.getSharedPreferences("diplay", 0).edit().clear().commit()
         context.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
     }
@@ -123,133 +122,66 @@ class AdaptiveSettingsUiTest {
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_quick_settings) })
     }
 
-    @Test fun savedLightAppearanceThemesTheSettingsCanvasAndSystemBars() {
+    @Test fun legacyLightPreferenceStillUsesDarkCanvasAndSystemBars() {
         AirPlayPersistence.saveAppAppearance(context, AppAppearance.LIGHT)
         val screen = openSettings()
-        val palette = ReflectionHelpers.getField<DiPlayPalette>(screen, "palette")
-        val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
-
-        assertSame(DiPlayPalette.LIGHT, palette)
-        assertEquals(DiPlayPalette.LIGHT.background, (scroll.background as ColorDrawable).color)
-        assertEquals(
-            DiPlayPalette.LIGHT.background,
-            (screen.window.decorView.background as ColorDrawable).color,
-        )
-        assertEquals(DiPlayPalette.LIGHT.systemBar, screen.window.navigationBarColor)
-    }
-
-    @Test fun headerShortcutTogglesAppearanceAndReturnsFocusToItself() {
-        val screen = openSettings()
-        val switchToLight = screen.getString(R.string.settings_switch_to_light_appearance)
-        val button = descendants(screen.window.decorView).single {
-            it.contentDescription == switchToLight
-        }
-        assertEquals(Math.round(52 * screen.resources.displayMetrics.density), button.layoutParams.width)
-        assertTrue(button.requestFocus())
-
-        button.performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        layoutRoot(screen)
-
-        assertEquals(AppAppearance.LIGHT, AirPlayPersistence.loadAppAppearance(screen))
-        assertSame(DiPlayPalette.LIGHT, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
-        val replacement = descendants(screen.window.decorView).single {
-            it.contentDescription == screen.getString(R.string.settings_switch_to_dark_appearance)
-        }
-        assertTrue(replacement.isFocused)
-    }
-
-    @Test fun autoAppearanceRepaintsWhenTheCarPlayPolicyChanges() {
-        AirPlayPersistence.saveAppAppearance(context, AppAppearance.AUTO)
-        AirPlayPersistence.saveCarPlayNightMode(context, CarPlayNightMode.DAY)
-        val screen = openSettings()
-        assertSame(DiPlayPalette.LIGHT, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
-
-        AirPlayPersistence.saveCarPlayNightMode(screen, CarPlayNightMode.NIGHT)
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
-
         assertSame(DiPlayPalette.DARK, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
-        val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
-        assertEquals(DiPlayPalette.DARK.background, (scroll.background as ColorDrawable).color)
+        assertEquals(DiPlayPalette.DARK.background, (screen.window.decorView.background as ColorDrawable).color)
+        assertEquals(DiPlayPalette.DARK.systemBar, screen.window.navigationBarColor)
     }
 
-    @Test fun hostAppearancePublishedOffMainRepaintsOnMain() {
-        AirPlayPersistence.saveAppAppearance(context, AppAppearance.AUTO)
-        AirPlayPersistence.saveCarPlayNightMode(context, CarPlayNightMode.DAY)
+    @Test fun appearanceShortcutsAreRemovedAndCarPlayDayNightStillSavesIndependently() {
         val screen = openSettings()
-        assertSame(DiPlayPalette.LIGHT, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
-        val owner = Any()
-        val failure = AtomicReference<Throwable?>()
-
-        val publisher = Thread {
-            try {
-                AppAppearanceRuntime.publishHost(owner, true)
-            } catch (throwable: Throwable) {
-                failure.set(throwable)
-            }
-        }
-        publisher.start()
-        publisher.join()
-
-        assertNull(failure.get())
-        shadowOf(Looper.getMainLooper()).idle()
-        assertSame(DiPlayPalette.DARK, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
-        AppAppearanceRuntime.clearHost(owner)
-    }
-
-    @Test
-    @Config(sdk = [29], qualifiers = "en-w500dp-h400dp")
-    fun appearanceRepaintKeepsTheCurrentSettingsPageAndScrollPosition() {
-        val screen = openSettings()
-        descendants(screen.window.decorView).single {
-            it.contentDescription == screen.getString(
-                R.string.settings_open_category,
-                screen.getString(R.string.settings_display),
-            )
+        assertFalse(descendants(screen.window.decorView).any { it.tag == "app_appearance_button" })
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.DISPLAY)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        assertFalse(texts(screen).any { it.text.startsWith(screen.getString(R.string.settings_app_appearance) + " · ") })
+        texts(screen).filterIsInstance<Button>().single {
+            it.text.startsWith(screen.getString(R.string.carplay_night_mode) + " · ")
         }.performClick()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        val index = CarPlayNightMode.entries.indexOf(CarPlayNightMode.DAY)
+        shadowOf(dialog).clickOnItem(index)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(CarPlayNightMode.DAY, AirPlayPersistence.loadCarPlayNightMode(screen))
+        assertSame(DiPlayPalette.DARK, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
+    }
+
+    @Test @Config(sdk = [29], qualifiers = "en-w500dp-h400dp")
+    fun legacyAppearanceAndCarPlayChangesDoNotRebuildThePageOrResetScroll() {
+        val screen = openSettings()
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.DISPLAY)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
         layoutRoot(screen)
-        val oldScroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
-        oldScroll.scrollTo(0, oldScroll.getChildAt(0).height)
-        val previousY = oldScroll.scrollY
+        val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+        scroll.scrollTo(0, scroll.getChildAt(0).height)
+        val previousY = scroll.scrollY
         assertTrue(previousY > 0)
-
-        descendants(screen.window.decorView).single {
-            it.contentDescription == screen.getString(R.string.settings_switch_to_light_appearance)
-        }.performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        layoutRoot(screen)
-
-        assertEquals(SettingsCategory.DISPLAY, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
-        assertEquals(previousY, ReflectionHelpers.getField<ScrollView>(screen, "rootScroll").scrollY)
+        for (legacy in AppAppearance.entries) {
+            AirPlayPersistence.saveAppAppearance(screen, legacy)
+            AirPlayPersistence.saveCarPlayNightMode(screen, CarPlayNightMode.DAY)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+            assertSame(scroll, ReflectionHelpers.getField<ScrollView>(screen, "rootScroll"))
+            assertEquals(previousY, scroll.scrollY)
+            assertSame(DiPlayPalette.DARK, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
+        }
     }
 
-    @Test fun openDialogKeepsItsAppearanceAndEditsWhileTheScreenRepaints() {
+    @Test fun darkDialogPreservesEditsWhenLegacyAppearancePreferencesChange() {
         AirPlayPersistence.saveAppAppearance(context, AppAppearance.LIGHT)
         val screen = openSettings()
-        // Search is an inline box now; any themed text dialog shows the same behaviour.
         DiPlayActivity::class.java.getDeclaredMethod("textInput", String::class.java, String::class.java,
             Boolean::class.javaPrimitiveType, Function1::class.java).apply { isAccessible = true }
             .invoke(screen, screen.getString(R.string.settings_search), "", false, { _: String -> })
         val dialog = ShadowAlertDialog.getLatestAlertDialog()
         val input = descendants(dialog.window!!.decorView).filterIsInstance<EditText>().single()
         input.setText("display")
-        val dialogAccent = dialog.context.theme.obtainStyledAttributes(
-            intArrayOf(android.R.attr.colorAccent),
-        ).let { attributes ->
-            try {
-                attributes.getColor(0, 0)
-            } finally {
-                attributes.recycle()
-            }
-        }
-
-        AirPlayPersistence.saveAppAppearance(screen, AppAppearance.DARK)
-        ReflectionHelpers.callInstanceMethod<Unit>(screen, "checkForAppearanceChange")
-
+        AirPlayPersistence.saveAppAppearance(screen, AppAppearance.AUTO)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
         assertTrue(dialog.isShowing)
         assertEquals("display", input.text.toString())
-        assertEquals(DiPlayPalette.LIGHT.accent, dialogAccent)
-        assertSame(DiPlayPalette.DARK, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
+        assertEquals(R.style.Theme_Xcertplay_Dialog_Dark, screen.appDialogTheme())
     }
 
     @Config(qualifiers = "en-w700dp-h400dp-land")
@@ -453,15 +385,14 @@ class AdaptiveSettingsUiTest {
 
     @Test
     @Config(qualifiers = "en-w500dp-h400dp-land")
-    fun compactSearchUsesAnIconTheSameSizeAsAppearanceAndCollapsesAfterBack() {
+    fun compactSearchHasALargeSquareTargetAndCollapsesAfterBack() {
         val screen = openSettings()
         fun search() = descendants(screen.window.decorView).single {
             it.contentDescription == screen.getString(R.string.settings_search)
         }
-        val appearance = descendants(screen.window.decorView).single { it.tag == "app_appearance_button" }
         assertTrue(search() is android.widget.ImageButton)
-        assertEquals(appearance.layoutParams.width, search().layoutParams.width)
-        assertEquals(appearance.layoutParams.height, search().layoutParams.height)
+        assertEquals(search().layoutParams.width, search().layoutParams.height)
+        assertTrue(search().layoutParams.height >= GlassChrome.MIN_TARGET_DP * screen.resources.displayMetrics.density)
         search().performClick()
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(search() is EditText)
@@ -729,6 +660,10 @@ class AdaptiveSettingsUiTest {
 
         assertTrue(vehicle.any { it.startsWith(text(R.string.settings_vehicle_model)) })
         assertFalse(display.any { it.startsWith(text(R.string.settings_vehicle_model)) })
+        assertTrue(vehicle.any { it.startsWith(text(R.string.settings_home_brand)) })
+        listOf(display, audio, advanced, connection).forEach { category ->
+            assertFalse(category.any { it.startsWith(text(R.string.settings_home_brand)) })
+        }
 
         assertTrue(display.any { it.startsWith(text(R.string.carplay_dock)) })
         assertFalse(vehicle.any { it.startsWith(text(R.string.carplay_dock)) })
@@ -757,7 +692,7 @@ class AdaptiveSettingsUiTest {
         assertTrue(text(R.string.settings_home_card_media) in advanced)
         assertFalse(text(R.string.settings_home_card_media) in display)
         assertTrue(text(R.string.side_panel) in advanced)
-        assertTrue(display.any { it.startsWith(text(R.string.settings_app_appearance)) })
+        assertFalse(display.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(audio.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(vehicle.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(advanced.any { it.startsWith(text(R.string.settings_app_appearance)) })
@@ -1119,12 +1054,12 @@ class AdaptiveSettingsUiTest {
 
     private fun assertHeaderActionsShareOneHeight() {
         val screen = openSettings()
-        val appearance = descendants(screen.window.decorView).single { it.tag == "app_appearance_button" }
-        val actions = (appearance.parent as ViewGroup).let { header ->
+        val search = descendants(screen.window.decorView).single { it.contentDescription == screen.getString(R.string.settings_search) }
+        val actions = (search.parent as ViewGroup).let { header ->
             (0 until header.childCount).map(header::getChildAt)
                 .filter { it is android.widget.Button || it is android.widget.ImageButton || it is EditText }
         }
-        assertTrue(actions.size >= 3)
+        assertTrue(actions.size >= 2)
         assertEquals(1, actions.map { it.layoutParams.height }.toSet().size)
     }
 

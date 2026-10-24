@@ -722,7 +722,7 @@
     <string name="backup_summary">تم استيراد %1$d من الإعدادات، وتجاهل %2$d.</string>
     <string name="backup_import_invalid">هذا الملف ليس نسخة احتياطية لإعدادات Lincoln.</string>
     <string name="settings_background_update_checks">التحقق من التحديثات في الخلفية</string>
-    <string name="settings_background_update_checks_description">يتحقق Lincoln من تحديثات GitHub مرة يوميًا. تعرض الشاشة الرئيسية كل إصدار جديد مرة واحدة مع ملاحظات الإصدار وزر التنزيل. لا يبدأ التنزيل إلا عند الضغط على الزر.</string>
+    <string name="settings_background_update_checks_description">يتحقق Lincoln من وجود تحديثات مرة يوميًا. في الإعدادات ← حول، يعرض كل إصدار جديد مرة واحدة مع ملاحظات الإصدار وزر التنزيل. لا يبدأ التنزيل إلا عند الضغط على الزر.</string>
     <string name="setup_guide">دليل الإعداد</string>
     <string name="setup_guide_description">اعرف إصدار DiLink، واختر طريقة الاتصال، وفعّل الميزات المناسبة لسيارتك.</string>
     <string name="setup_step_of">الخطوة %1$d من %2$d</string>
@@ -968,4 +968,9 @@
     <string name="update_ready_to_install">اكتمل التنزيل. اضغط على التثبيت الآن لفتح أداة تثبيت Android.</string>
     <string name="update_retry">إعادة المحاولة</string>
     <string name="update_hide">إخفاء</string>
+    <string name="ui_glass_connection_incomplete">لم يكتمل الاتصال</string>
+    <string name="ui_glass_usb_short">USB</string>
+    <string name="ui_glass_connecting_action">جارٍ الاتصال…</string>
+    <string name="ui_glass_retry_short">إعادة المحاولة</string>
+    <string name="ui_glass_wifi_reset_short">إعادة ضبط واي فاي</string>
 </resources>

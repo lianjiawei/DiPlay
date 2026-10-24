@@ -16,9 +16,8 @@ import org.robolectric.annotation.Implements
 import org.robolectric.annotation.Implementation
 
 /**
- * The connection settings screen lives in [DiPlayActivity] and comes back to the projection screen
- * with FLAG_ACTIVITY_REORDER_TO_FRONT, so the projection screen is resumed, not recreated.
- * Settings saved while it was in the background must reach the next handshake.
+ * Settings and projection live in the same Activity. Saved connection settings must be reloaded
+ * when returning from settings, before the next handshake, without recreating the home.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE, shadows = [HostConnectionSettingsRefreshTest.Bootstrap::class])
@@ -32,7 +31,8 @@ class HostConnectionSettingsRefreshTest {
     @Test fun projectionScreenUsesConnectionSettingsSavedWhileItWasInTheBackground() {
         AirPlayPersistence.saveWirelessHotspotMode(app, WirelessHotspotMode.MANUAL)
         AirPlayPersistence.saveManualHotspotSsid(app, "Old car")
-        val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).setup()
+        val host = Robolectric.buildActivity(DiPlayActivity::class.java)
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Unit>(host.get(), "loadPersistedSettings")
         assertEquals(WirelessHotspotMode.MANUAL, runtimeConfig(host.get()).wirelessHotspotMode)
 
         // The user switches to a car hotspot with another name while the projection screen lives on.
@@ -40,7 +40,8 @@ class HostConnectionSettingsRefreshTest {
         AirPlayPersistence.saveManualHotspotSsid(app, "New car")
         AirPlayPersistence.saveWifiP2pPreferredChannel(app, 149)
 
-        host.pause().resume()
+        // The same Activity reloads connection settings before revealing its existing video layer.
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod<Unit>(host.get(), "loadConnectionSettings")
 
         val config = runtimeConfig(host.get())
         assertEquals(WirelessHotspotMode.WIFI_P2P, config.wirelessHotspotMode)

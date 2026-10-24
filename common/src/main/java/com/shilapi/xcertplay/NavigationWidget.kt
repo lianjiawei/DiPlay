@@ -66,11 +66,11 @@ internal object NavigationWidgetUpdater {
 
     fun views(context: Context, glance: CarPlayGlance.Snapshot): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_navigation)
-        val target = if (glance.connected) CarPlayHostActivity::class.java else DiPlayActivity::class.java
+        val target = if (glance.connected) CarPlayEntry.intent(context) else Intent(context, DiPlayActivity::class.java)
         views.setOnClickPendingIntent(
             R.id.widget_root,
             PendingIntent.getActivity(
-                context, 0, Intent(context, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                context, 0, target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             ),
         )

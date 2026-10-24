@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.os.Looper
@@ -13,7 +12,6 @@ import android.text.StaticLayout
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -67,44 +65,44 @@ class SettingsInlineHelpTest {
         ShadowAlertDialog.getLatestAlertDialog()?.dismiss()
         controller?.pause()?.stop()?.destroy()
         RuntimeEnvironment.setFontScale(1f)
-        AppAppearanceRuntime.resetForTest()
         CarPlayBackgroundSession.clear()
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
     }
 
     @Test @Config(sdk = [25, 27, 29])
-    fun inlineHelpAndTheSettingHaveSeparateActionsAndDraggingDoesNotOpenHelp() {
+    fun formerHelpAreaOpensTheSettingAndCancelDoesNotClick() = verifyFormerChoiceArea()
+
+    @Test @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
+    fun rtlFormerHelpAreaOpensTheSetting() = verifyFormerChoiceArea()
+
+    private fun verifyFormerChoiceArea() {
         val screen = open()
         render(screen, SettingsCategory.VEHICLE)
         val row = gestureRow(screen)
-        // Robolectric's pre-28 legacy StaticLayout does not return real glyph line ends.
-        // Those SDKs exercise hit testing; the native capture cases check complete text.
         verifyRow(row, checkTextMetrics = Build.VERSION.SDK_INT >= 28)
-        val icon = field<Rect>(row, "helpIconBounds")
-        val target = field<RectF>(row, "helpTouchBounds")
-        tap(row, icon.exactCenterX(), icon.exactCenterY())
-        assertHelp(screen)
-
-        val value = field<StaticLayout>(row, "valueLayout")
-        tap(row, field<Float>(row, "valueX") + value.width / 2f,
-            field<Float>(row, "rowHeaderTop") + field<Int>(row, "rowHeaderHeight") / 2f)
+        val x = formerHelpX(row)
+        tap(row, x, row.height / 2f)
         val choices = ShadowAlertDialog.getLatestAlertDialog()
-        assertTrue("Tapping the value still opens the setting", choices.listView.count > 0)
+        assertTrue("The old help position opens the choice picker", choices.listView.count > 0)
         choices.dismiss()
-
-        val slop = ViewConfiguration.get(screen).scaledTouchSlop * 2f
-        touch(row, MotionEvent.ACTION_DOWN, target.centerX(), target.centerY())
-        touch(row, MotionEvent.ACTION_MOVE, target.centerX() - slop, target.centerY())
-        touch(row, MotionEvent.ACTION_UP, target.centerX(), target.centerY())
+        touch(row, MotionEvent.ACTION_DOWN, x, row.height / 2f)
+        touch(row, MotionEvent.ACTION_CANCEL, x, row.height / 2f)
+        touch(row, MotionEvent.ACTION_UP, x, row.height / 2f)
         shadowOf(Looper.getMainLooper()).idle()
-        assertFalse("A drag must not open a help dialog", ShadowAlertDialog.getLatestAlertDialog().isShowing)
-        touch(row, MotionEvent.ACTION_DOWN, target.centerX(), target.centerY())
-        touch(row, MotionEvent.ACTION_CANCEL, target.centerX(), target.centerY())
         assertFalse(ShadowAlertDialog.getLatestAlertDialog().isShowing)
+        assertFalse("Rows no longer have a separate long-press help action", row.isLongClickable)
+    }
 
-        assertTrue(row.performLongClick())
-        assertHelp(screen)
+    @Test @Config(sdk = [25, 27, 29])
+    fun formerHelpAreaOnDestinationRowsOpensTheBackupPage() {
+        val screen = open()
+        render(screen, SettingsCategory.ABOUT)
+        val row = descendants(root(screen)).filterIsInstance<Button>().single {
+            it.text == screen.getString(R.string.backup_open)
+        }
+        tap(row, formerHelpX(row), row.height / 2f)
+        assertEquals("backup", ReflectionHelpers.getField<String>(screen, "page"))
     }
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -133,7 +131,7 @@ class SettingsInlineHelpTest {
     @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
     fun arabicLargeTextAllCategories() = capture("rtl-large", 1.3f)
 
-    @Test fun longValuesUseSpareTitleSpaceAndHelpIsIndependentOfDescriptions() {
+    @Test fun longValuesUseTheSpaceFreedByRemovedHelpTargets() {
         val screen = open()
         render(screen, SettingsCategory.VEHICLE)
         val row = gestureRow(screen)
@@ -144,15 +142,15 @@ class SettingsInlineHelpTest {
         verifyRow(row)
         assertEquals(1, field<StaticLayout>(row, "titleLayout").lineCount)
         assertEquals("A short title must leave room for the value", 1, field<StaticLayout>(row, "valueLayout").lineCount)
-        assertFalse("Help remains discoverable without a second-line description", field<Rect>(row, "helpIconBounds").isEmpty)
-        ReflectionHelpers.setField(row, "rowHelp", null)
-        row.forceLayout()
-        row.measure(exact(row.width), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        assertTrue("Only rows with explanations reserve a help target", field<Rect>(row, "helpIconBounds").isEmpty)
     }
 
     @Test @Config(sdk = [25, 27, 29])
-    fun compactSwitchHelpDoesNotToggleAndTheWholeRowStillSaves() {
+    fun formerSwitchHelpAreaTogglesAndSavesTheSetting() = verifyFormerSwitchArea()
+
+    @Test @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
+    fun rtlFormerSwitchHelpAreaTogglesAndSaves() = verifyFormerSwitchArea()
+
+    private fun verifyFormerSwitchArea() {
         val screen = open()
         render(screen, SettingsCategory.VEHICLE)
         val toggle = descendants(root(screen)).filterIsInstance<Switch>().single {
@@ -164,13 +162,10 @@ class SettingsInlineHelpTest {
         }
         assertEquals(View.GONE, note.visibility)
         val initial = toggle.isChecked
-        descendants(row).filterIsInstance<ImageButton>().single().performClick()
-        val help = ShadowAlertDialog.getLatestAlertDialog()
-        assertTrue(help.isShowing)
-        assertEquals(initial, toggle.isChecked)
-        assertTrue(descendants(help.window!!.decorView).filterIsInstance<TextView>().any { it.text == note.text })
-        help.dismiss()
-        row.performClick()
+        assertFalse(descendants(row).any { it is ImageButton })
+        val halfTarget = GlassChrome.MIN_TARGET_DP * row.resources.displayMetrics.density / 2f
+        val x = if (row.layoutDirection == View.LAYOUT_DIRECTION_RTL) toggle.right + halfTarget else toggle.left - halfTarget
+        tap(row, x, row.height / 2f)
         assertEquals(!initial, toggle.isChecked)
         assertEquals(!initial, AirPlayPersistence.loadRightHandDrive(screen))
     }
@@ -310,7 +305,7 @@ class SettingsInlineHelpTest {
         val screen = open()
         // Presentation fixtures: source-only tests intentionally lack the signed build's identity.
         ReflectionHelpers.setField(screen, "setupError", null)
-        var rowsWithHelp = 0
+        var rowsWithDescriptions = 0
         for (category in SettingsCategory.entries) {
             render(screen, category)
             val rows = descendants(root(screen)).filterIsInstance<Button>().filter {
@@ -318,19 +313,11 @@ class SettingsInlineHelpTest {
             }.toList()
             rows.forEach { row ->
                 verifyRow(row)
-                if (!field<Rect>(row, "helpIconBounds").isEmpty) rowsWithHelp++
+                if (!row.contentDescription.isNullOrBlank()) rowsWithDescriptions++
             }
             descendants(root(screen)).filterIsInstance<Switch>().filter(::visible).forEach { toggle ->
                 val row = toggle.parent as ViewGroup
-                val help = descendants(row).filterIsInstance<ImageButton>().singleOrNull()
-                help?.let {
-                    val density = row.resources.displayMetrics.density
-                    assertTrue(it.width >= FidelitySettingsMetrics.ROW_HELP_TARGET_DP * density - 1)
-                    assertTrue(it.height >= FidelitySettingsMetrics.ROW_HELP_TARGET_DP * density - 1)
-                    val drawing = RectF(0f, 0f, it.drawable.intrinsicWidth.toFloat(), it.drawable.intrinsicHeight.toFloat())
-                    it.imageMatrix.mapRect(drawing)
-                    assertTrue("Switch help matches the choice-row marker size", drawing.width() <= FidelitySettingsMetrics.ROW_HELP_ICON_DP * density + 1)
-                }
+                assertFalse("No category retains a separate help button", descendants(row).any { it is ImageButton })
             }
             val folder = File("build/reports/settings-inline-help/$name")
             screenshot(root(screen), File(folder, "${category.name.lowercase()}.png"))
@@ -349,7 +336,7 @@ class SettingsInlineHelpTest {
         decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
         screenshot(decor, File("build/reports/settings-inline-help/$name/corner-adjustment.png"))
         dialog.dismiss()
-        assertTrue("Audit must exercise help markers across categories", rowsWithHelp >= 5)
+        assertTrue("Descriptions remain available to accessibility across categories", rowsWithDescriptions >= 5)
     }
 
     private fun verifyRow(row: Button, checkTextMetrics: Boolean = true) {
@@ -358,8 +345,6 @@ class SettingsInlineHelpTest {
         val headerTop = field<Float>(row, "rowHeaderTop")
         val headerHeight = field<Int>(row, "rowHeaderHeight")
         val centre = headerTop + headerHeight / 2f
-        val icon = field<Rect>(row, "helpIconBounds")
-        val target = field<RectF>(row, "helpTouchBounds")
         val density = row.resources.displayMetrics.density
         fun rect(layout: StaticLayout, x: Float) = RectF(x, centre - layout.height / 2f, x + layout.width, centre + layout.height / 2f)
         val titleBounds = rect(title, field(row, "titleX"))
@@ -368,7 +353,6 @@ class SettingsInlineHelpTest {
             val valueBounds = rect(it, field(row, "valueX"))
             assertFalse("Title and value cannot overlap: ${row.text}", RectF.intersects(titleBounds, valueBounds))
             assertTrue(valueBounds.left >= 0 && valueBounds.right <= row.width + 1)
-            if (!icon.isEmpty) assertFalse("Value cannot overlap the help target", RectF.intersects(valueBounds, target))
         }
         for (layout in if (checkTextMetrics) listOfNotNull(title, value) else emptyList()) {
             assertEquals("All text must be laid out", layout.text.length, layout.getLineEnd(layout.lineCount - 1))
@@ -377,27 +361,14 @@ class SettingsInlineHelpTest {
                 assertTrue("Text must fit its column: ${layout.text}", layout.getLineMax(line) <= layout.width + 2)
             }
         }
-        if (!icon.isEmpty) {
-            assertEquals("The marker shares the title/value line", centre, icon.exactCenterY(), 1f)
-            assertTrue("The icon must fit the help touch target", target.contains(RectF(icon)))
-            assertTrue("Help retains a 48dp target", target.width() >= 48 * density - 1 && target.height() >= 48 * density - 1)
-            assertFalse("Help cannot overlap the title", RectF.intersects(titleBounds, target))
-            assertTrue("Help stays inside the row", target.left >= 0 && target.right <= row.width && target.top >= 0 && target.bottom <= row.height)
-        }
         assertEquals("Only the title/value header and shared row padding determine height",
             maxOf((FidelitySettingsMetrics.SETTING_ROW_DP * density).toInt(), headerHeight + (FidelitySettingsMetrics.ROW_VERTICAL_DP * 2 * density).toInt()), row.height)
 
     }
 
-    private fun assertHelp(screen: DiPlayActivity) {
-        shadowOf(Looper.getMainLooper()).idle()
-        val dialog: AlertDialog = ShadowAlertDialog.getLatestAlertDialog()
-        assertTrue(dialog.isShowing)
-        assertNull("Help must not open the choice picker", dialog.listView)
-        assertTrue(descendants(dialog.window!!.decorView).filterIsInstance<TextView>().any {
-            it.text.toString().contains(screen.getString(R.string.settings_gesture_fingers_hint))
-        })
-        dialog.dismiss()
+    private fun formerHelpX(row: View): Float {
+        val inset = (FidelitySettingsMetrics.ROW_END_DP + GlassChrome.MIN_TARGET_DP / 2f) * row.resources.displayMetrics.density
+        return if (row.layoutDirection == View.LAYOUT_DIRECTION_RTL) inset else row.width - inset
     }
 
     private fun open(): DiPlayActivity {
@@ -423,12 +394,12 @@ class SettingsInlineHelpTest {
         }
     }
 
-    private fun tap(row: Button, x: Float, y: Float) {
+    private fun tap(row: View, x: Float, y: Float) {
         touch(row, MotionEvent.ACTION_DOWN, x, y)
         touch(row, MotionEvent.ACTION_UP, x, y)
         shadowOf(Looper.getMainLooper()).idle()
     }
-    private fun touch(row: Button, action: Int, x: Float, y: Float) {
+    private fun touch(row: View, action: Int, x: Float, y: Float) {
         MotionEvent.obtain(0, 20, action, x, y, 0).let { event ->
             try { row.dispatchTouchEvent(event) } finally { event.recycle() }
         }

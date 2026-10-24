@@ -853,7 +853,7 @@
     <string name="backup_summary">已导入 %1$d 项设置，跳过 %2$d 项。</string>
     <string name="backup_import_invalid">这不是 Lincoln 设置备份文件。</string>
     <string name="settings_background_update_checks">在后台检查更新</string>
-    <string name="settings_background_update_checks_description">Lincoln 每天在 GitHub 检查一次更新。回到首页后，每个新版本会弹窗提示一次，显示更新说明和下载按钮；只有你点击后才会下载。</string>
+    <string name="settings_background_update_checks_description">Lincoln 每天检查一次更新。在设置的“关于”页面，每个新版本提示一次，显示更新说明和下载按钮；只有你点击后才会下载。</string>
     <string name="setup_guide">设置向导</string>
     <string name="setup_guide_description">识别 DiLink 版本，选择连接方式，并开启适合你车辆的功能。</string>
     <string name="setup_step_of">第 %1$d 步，共 %2$d 步</string>
@@ -992,4 +992,9 @@
     <string name="update_ready_to_install">下载完成。点击“立即安装”打开系统安装界面。</string>
     <string name="update_retry">重试</string>
     <string name="update_hide">收起</string>
+    <string name="ui_glass_connection_incomplete">连接未完成</string>
+    <string name="ui_glass_usb_short">USB</string>
+    <string name="ui_glass_connecting_action">连接中…</string>
+    <string name="ui_glass_retry_short">重试</string>
+    <string name="ui_glass_wifi_reset_short">重置 Wi-Fi</string>
 </resources>

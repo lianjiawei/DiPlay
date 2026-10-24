@@ -37,7 +37,6 @@ class UiPolishPresentationTest {
 
     @After fun cleanup() {
         RuntimeEnvironment.setFontScale(1f)
-        AppAppearanceRuntime.resetForTest()
         CarPlayBackgroundSession.clear()
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()

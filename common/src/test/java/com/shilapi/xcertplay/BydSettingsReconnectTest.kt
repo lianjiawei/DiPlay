@@ -28,6 +28,7 @@ class BydSettingsReconnectTest {
     private lateinit var activity: DiPlayActivity
     private lateinit var backend: DeferredBackend
     private var reconnects = 0
+    private var starts = 0
 
     @Before fun setUp() {
         val app = RuntimeEnvironment.getApplication()
@@ -39,6 +40,7 @@ class BydSettingsReconnectTest {
         backend = DeferredBackend()
         BydVehicleSettingsBackendProvider.current = backend
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
+        activity.projectionStarter = { starts++; true }
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)
         ReflectionHelpers.setField(activity, "page", "settings")
         ReflectionHelpers.setField(activity, "bydVehicleAdvancedExpanded", true)
@@ -58,7 +60,8 @@ class BydSettingsReconnectTest {
         backend.complete()
         assertEquals(1, reconnects)
         assertFalse(ReflectionHelpers.getField<Boolean>(activity, "adbCheckInProgress"))
-        assertEquals(CarPlayHostActivity::class.java.name, shadowOf(activity).nextStartedActivity?.component?.className)
+        assertEquals(1, starts)
+        assertNull(shadowOf(activity).nextStartedActivity)
     }
 
     @Test fun aLateHotspotEligibilityResultDoesNotCancelTheVehiclePreflight() {

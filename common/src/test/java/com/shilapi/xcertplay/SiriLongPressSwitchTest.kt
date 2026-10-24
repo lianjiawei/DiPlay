@@ -33,7 +33,6 @@ class SiriLongPressSwitchTest {
 
     @After fun tearDown() {
         opened.forEach { it.finish() }
-        AppAppearanceRuntime.resetForTest()
         WheelZoomSettings.setSiriLongPressOnly(context, false)
     }
 

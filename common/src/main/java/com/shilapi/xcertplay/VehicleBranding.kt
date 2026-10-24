@@ -24,6 +24,8 @@ internal object VehicleBranding {
     private val brandToken = Regex("Lincoln/Ford|林肯/福特|Lincoln|林肯")
     private val literalBrandResources = setOf(
         R.string.car_button_brand_lincoln,
+        R.string.settings_home_brand_lincoln,
+        R.string.settings_home_brand_ford,
         // This is a filesystem path, not the current vehicle's display name.
         R.string.reports_save_to_downloads_diplay,
     )

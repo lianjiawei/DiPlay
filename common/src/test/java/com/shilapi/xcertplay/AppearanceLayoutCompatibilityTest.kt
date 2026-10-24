@@ -18,7 +18,7 @@ import org.robolectric.util.ReflectionHelpers
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [25, 28, 33], qualifiers = "en-w700dp-h400dp-land")
 class AppearanceLayoutCompatibilityTest {
-    @Test fun appearanceChangesKeepNavigationAndVisibleSystemBarsOnOlderAndroid() {
+    @Test fun legacyAppearancePreferencesKeepDarkNavigationAndVisibleSystemBars() {
         val context = RuntimeEnvironment.getApplication() as Context
         AirPlayPersistence.saveHideTopBar(context, false)
         AirPlayPersistence.saveHideBottomBar(context, false)
@@ -29,7 +29,7 @@ class AppearanceLayoutCompatibilityTest {
         try {
             for (appearance in AppAppearance.entries) {
                 AirPlayPersistence.saveAppAppearance(activity, appearance)
-                ReflectionHelpers.callInstanceMethod<Unit>(activity, "checkForAppearanceChange")
+                ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
                 shadowOf(Looper.getMainLooper()).idle()
                 for (category in SettingsCategory.entries) {
                     ReflectionHelpers.setField(activity, "page", "settings")
@@ -37,6 +37,7 @@ class AppearanceLayoutCompatibilityTest {
                         ReflectionHelpers.ClassParameter(SettingsCategory::class.java, category))
                     assertEquals("settings", ReflectionHelpers.getField<String>(activity, "page"))
                 }
+                assertTrue(ReflectionHelpers.getField<Boolean>(activity, "appNight"))
                 assertTrue(SettingsLayoutPreferences.isActive(activity))
                 assertFalse(AirPlayPersistence.loadHideTopBar(activity))
                 assertFalse(AirPlayPersistence.loadHideBottomBar(activity))
@@ -48,7 +49,6 @@ class AppearanceLayoutCompatibilityTest {
             }
         } finally {
             controller.pause().stop().destroy()
-            AppAppearanceRuntime.resetForTest()
         }
     }
 }

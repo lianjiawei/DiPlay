@@ -117,7 +117,6 @@ class ExistingWifiScreenshotsTest {
             RuntimeEnvironment.setQualifiers("en")
             app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
             app.getSharedPreferences("diplay", 0).edit().clear().commit()
-            AppAppearanceRuntime.resetForTest()
         }
     }
 

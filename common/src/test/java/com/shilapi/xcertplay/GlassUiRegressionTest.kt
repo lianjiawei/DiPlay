@@ -38,7 +38,6 @@ class GlassUiRegressionTest {
 
     @After fun cleanup() {
         RuntimeEnvironment.setFontScale(1f)
-        AppAppearanceRuntime.resetForTest()
         CarPlayBackgroundSession.clear()
         UpdateAvailability.clearAllForTest(app)
     }
@@ -48,6 +47,12 @@ class GlassUiRegressionTest {
 
     @Test @Config(qualifiers = "zh-rCN-w960dp-h360dp-land-xhdpi")
     fun shortWideHomeKeepsActionsInTheInitialViewport() = capture("short-wide-zh", 1f)
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h720dp-land-mdpi")
+    fun ultraWideCarHomeAndCommonDialogsWithLargeText() = capture("1920x720-mdpi", 1.3f, true)
+
+    @Test @Config(qualifiers = "zh-rCN-w960dp-h360dp-land-xhdpi")
+    fun ultraWideHighDensityHomeAndCommonDialogsWithLargeText() = capture("1920x720-xhdpi", 1.3f, true)
 
     @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-xhdpi")
     fun referenceHomeInThePairedState() = capture("reference-home",1f,true)
@@ -138,9 +143,11 @@ class GlassUiRegressionTest {
             val texts = descendants(screen.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }.toList()
             for (id in listOf(R.string.ui_glass_connect_carplay, R.string.choose_iphone, R.string.connect_with_usb, R.string.settings)) {
                 if(paired && id==R.string.choose_iphone)continue
-                assertTrue("Existing home action remains available", screen.getString(id) in texts)
+                val label = screen.getString(id)
                 val action = descendants(screen.window.decorView).filterIsInstance<TextView>()
-                    .first { it.text.toString() == screen.getString(id) }
+                    .firstOrNull { it.text.toString() == label || it.contentDescription?.toString() == label }
+                assertNotNull("Existing home action remains available with its full spoken label", action)
+                requireNotNull(action)
                 assertTrue("Home action must have a usable measured height", action.height >= 40 * screen.resources.displayMetrics.density)
                 if (name in listOf("landscape-zh", "short-wide-zh")) {
                     val bounds = android.graphics.Rect()
@@ -266,11 +273,10 @@ class GlassUiRegressionTest {
             val header = carHome.parent as ViewGroup
             assertTrue("The complete car-home button fits the header",carHome.left >= 0 && carHome.right <= header.width)
             for (line in 0 until carHome.layout.lineCount) assertEquals("Header actions must not ellipsize",0,carHome.layout.getEllipsisCount(line))
-            val brandLabel=header.getChildAt(1) as TextView
-            assertEquals("Header actions must leave the brand on one complete line",1,brandLabel.layout.lineCount)
-            assertEquals(brandLabel.text.length,brandLabel.layout.getLineEnd(0))
-            assertTrue("Brand text must fit its reserved width",brandLabel.layout.getLineMax(0)<=
-                brandLabel.width-brandLabel.compoundPaddingLeft-brandLabel.compoundPaddingRight+1)
+            val brandLogo=header.getChildAt(0)
+            assertTrue("Brand logo must fit its header",brandLogo.left>=0 && brandLogo.right<=header.width)
+            assertFalse("Home branding is logo-only",descendants(header).filterIsInstance<TextView>()
+                .any { it.text.toString() in listOf("Lincoln", "Ford") })
             val hero = scene.getChildAt(0)
             val firstAction = scene.getChildAt(1)
             val settings = scene.getChildAt(2)

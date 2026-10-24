@@ -45,7 +45,7 @@ internal class StableConnectionTextView(context: Context, variants: IntArray) : 
 
 internal object ConnectionScreenCopy {
     val headlines = intArrayOf(R.string.ui_glass_home_title, R.string.ui_glass_connecting_title,
-        R.string.connecting_to_your_iphone, R.string.carplay_connected)
+        R.string.connecting_to_your_iphone, R.string.carplay_connected, R.string.ui_glass_connection_incomplete)
     private val conciseStages = mapOf(
         R.string.this_head_unit_may_not_support_wireless_carplay_try_a_usb to R.string.ui_connection_hint_usb_fallback,
         R.string.your_iphone_isn_t_available_unlock_it_and_check_bluetooth to R.string.ui_connection_hint_wireless,
@@ -83,7 +83,7 @@ internal object ConnectionScreenCopy {
         R.string.ui_glass_video_preparing, R.string.ui_connection_waiting_network,
         R.string.ui_connection_network_timeout,
     ).map { conciseStages[it] ?: it }.distinct().toIntArray()
-    val allStages = (stages + intArrayOf(R.string.setup_needs_attention, R.string.carplay_connected,
+    val allStages get() = (stages + hints + intArrayOf(R.string.setup_needs_attention, R.string.carplay_connected,
         R.string.ui_glass_connecting_hint, R.string.ui_glass_paired_waiting, R.string.ready_when_you_are,
         R.string.settings_existing_wifi_setup_required)).distinct().toIntArray()
     val hints = intArrayOf(
