@@ -16,7 +16,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [25, 28, 33])
+@Config(sdk = [25, 27, 28, 33])
 class LincolnClusterOutputTest {
     private val app: Application get() = RuntimeEnvironment.getApplication()
     private var now = 1_000_000_000L
@@ -69,24 +69,26 @@ class LincolnClusterOutputTest {
         assertTrue("The card must keep being refreshed", infos().size > info)
     }
 
-    @Test fun sendsTheCompleteRoadNameAndKeepsItDuringQuietGuidance() {
-        val road = "沿这条道路继续行驶到下一个路口然后驶入目的地所在的道路".repeat(3) + "🛣️终点"
+    @Test fun sendsTheBoundedRoadNameAndKeepsItDuringQuietGuidance() {
+        val expected = "中".repeat(31)
+        val road = expected + "𠀀路终点"
         send(guidance().copy(road = road))
-        assertEquals(road, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(expected, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
 
         now += 1_000_000_000L
         send(quiet())
-        assertEquals(road, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(expected, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
     }
 
-    @Test fun sendsTheCompleteLyricWithoutAddingTheSongName() {
+    @Test fun sendsTheBoundedLyricWithoutAddingTheSongName() {
         LincolnClusterSettings.setMusic(app, true)
-        val lyric = "x".repeat(31) + "🎵" + "这一行歌词超过三十二个字符也应当完整发送到原厂仪表".repeat(3)
+        val expected = "中".repeat(30) + "🎵"
+        val lyric = expected + "这一行歌词需要截取完整字符"
         send(CarPlayGlance.Snapshot(connected = true, songTitle = lyric,
             song = "$lyric — Song name", songArtist = "Song name", playing = true))
 
         val media = shadowOf(app).broadcastIntents.last { it.action == LincolnClusterProtocol.ACTION_MEDIA_INFO }
-        assertEquals(lyric, media.getStringExtra(LincolnClusterProtocol.EXTRA_TITLE))
+        assertEquals(expected, media.getStringExtra(LincolnClusterProtocol.EXTRA_TITLE))
         assertEquals("", media.getStringExtra(LincolnClusterProtocol.EXTRA_ARTIST))
         assertTrue(media.getBooleanExtra(LincolnClusterProtocol.EXTRA_PLAYING, false))
     }

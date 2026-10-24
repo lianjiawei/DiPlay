@@ -1,5 +1,8 @@
 package com.shilapi.xcertplay.lincoln
 
+import java.text.BreakIterator
+import java.util.Locale
+
 /**
  * Lincoln/Ford instrument-cluster forwarding, reverse-engineered from the field build
  * `0.2.20-lincoln-preview19` (`com.lincolnpay.android81`).
@@ -43,6 +46,9 @@ object LincolnClusterProtocol {
     const val SOURCE_NAME = "CarPlay"
     const val SOURCE_TYPE = 1
 
+    /** Preserve the field build's 32 UTF-16-unit budget, not a UTF-8 byte limit. */
+    const val MAX_TEXT_CHARS = 32
+
     /** Beyond this the cluster is not asked to show a distance (matches the field build). */
     const val MAX_DISTANCE_METERS = 2_000_000
 
@@ -75,12 +81,56 @@ object LincolnClusterProtocol {
         }
     }
 
-    /** Remove control characters without shortening the text; the cluster owns its layout. */
+    /**
+     * Bound factory-cluster text without sending half a character. Ordinary Chinese characters
+     * use one unit; supplementary characters use two. A combining/emoji sequence that crosses
+     * the budget is omitted in full, with no ellipsis taking extra space on the cluster.
+     */
     fun sanitizeText(text: String?): String? {
         if (text == null) return null
-        val printable = text.filter { it.code in 32..126 || it.code > 126 }
-        if (printable.isBlank()) return null
-        return printable
+        val printable = buildString(text.length) {
+            var index = 0
+            while (index < text.length) {
+                val point = Character.codePointAt(text, index)
+                // Keep the existing C0-control filtering and also discard malformed surrogates.
+                if (point >= 32 && point !in 0xD800..0xDFFF) appendCodePoint(point)
+                index += Character.charCount(point)
+            }
+        }
+        if (printable.length <= MAX_TEXT_CHARS) return printable.takeIf { it.isNotBlank() }
+
+        val characters = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(printable) }
+        var end = if (characters.isBoundary(MAX_TEXT_CHARS)) MAX_TEXT_CHARS
+                  else characters.preceding(MAX_TEXT_CHARS)
+        // Older Android character iterators may split newer emoji sequences. Retreat over the
+        // entire sequence instead of relying on the host JVM's newer Unicode boundary rules.
+        while (end > 0 && !safeTextBoundary(printable, end)) end = characters.preceding(end)
+        return printable.substring(0, end.coerceAtLeast(0)).takeIf { it.isNotBlank() }
+    }
+
+    private fun safeTextBoundary(text: String, end: Int): Boolean {
+        if (text[end - 1].isHighSurrogate() && text[end].isLowSurrogate()) return false
+        val before = Character.codePointBefore(text, end)
+        val after = Character.codePointAt(text, end)
+        if (before == 0x200D || after == 0x200D || after == 0x200C) return false
+        if (Character.getType(after) in intArrayOf(Character.NON_SPACING_MARK.toInt(),
+                Character.COMBINING_SPACING_MARK.toInt(), Character.ENCLOSING_MARK.toInt()) ||
+            after in 0xFE00..0xFE0F || after in 0xE0100..0xE01EF ||
+            after in 0x1F3FB..0x1F3FF || after in 0xE0020..0xE007F) return false
+
+        // Regional indicators form flag pairs; never keep only the first half of a flag.
+        if (before in 0x1F1E6..0x1F1FF && after in 0x1F1E6..0x1F1FF) {
+            var count = 0
+            var index = end
+            while (index > 0) {
+                val point = Character.codePointBefore(text, index)
+                if (point !in 0x1F1E6..0x1F1FF) break
+                count++
+                index -= Character.charCount(point)
+            }
+            if (count % 2 != 0) return false
+        }
+        return true
     }
 
     /** Beyond this the cluster drops the remaining readout. */

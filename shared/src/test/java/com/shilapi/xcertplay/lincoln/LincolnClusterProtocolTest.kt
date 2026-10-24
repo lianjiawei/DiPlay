@@ -65,7 +65,62 @@ class LincolnClusterProtocolTest {
         assertNull(LincolnClusterProtocol.sanitizeText(null))
         assertNull(LincolnClusterProtocol.sanitizeText("\n\t\u0000"))
         assertEquals("Main Street", LincolnClusterProtocol.sanitizeText("Main\n\t\u0000 Street"))
-        val long = "x".repeat(31) + "🚗" + "这是完整的路名和歌词文字".repeat(4)
-        assertEquals(long, LincolnClusterProtocol.sanitizeText(long))
+        assertEquals("x".repeat(32), LincolnClusterProtocol.sanitizeText("x".repeat(40)))
+    }
+
+    @Test
+    fun countsOrdinaryChineseCharactersRatherThanUtf8Bytes() {
+        val chinese = "导航路名".repeat(8)
+        assertEquals(chinese, LincolnClusterProtocol.sanitizeText(chinese))
+        assertEquals(chinese, LincolnClusterProtocol.sanitizeText(chinese + "继续行驶"))
+        assertEquals(96, chinese.toByteArray(Charsets.UTF_8).size)
+    }
+
+    @Test
+    fun keepsSupplementaryChineseAndEmojiWholeAtTheLimit() {
+        for (character in listOf("𠀀", "🚗")) {
+            val fits = "中".repeat(30) + character
+            assertEquals(fits, LincolnClusterProtocol.sanitizeText(fits + "终点"))
+            assertEquals("中".repeat(31),
+                LincolnClusterProtocol.sanitizeText("中".repeat(31) + character + "终点"))
+        }
+    }
+
+    @Test
+    fun neverSplitsCombiningCharactersOrEmojiSequences() {
+        val clusters = listOf(
+            "e\u0301", "葛\uDB40\uDD00", "👍🏽", "🇨🇳", "👩‍👩‍👧‍👦", "#️⃣", "🏳️‍🌈",
+            "🏴\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F",
+        )
+        for (cluster in clusters) {
+            val fits = "中".repeat(32 - cluster.length) + cluster
+            assertEquals(cluster, fits, LincolnClusterProtocol.sanitizeText(fits + "终点"))
+            // Exercise every possible cut inside the sequence, not just the surrogate boundary.
+            for (available in 1 until cluster.length) {
+                val prefix = "中".repeat(32 - available)
+                assertEquals("$cluster at $available", prefix,
+                    LincolnClusterProtocol.sanitizeText(prefix + cluster + "终点"))
+            }
+        }
+    }
+
+    @Test
+    fun keepsCompleteFlagPairsWhenSeveralFlagsAreAdjacent() {
+        assertEquals("中".repeat(26) + "🇨🇳",
+            LincolnClusterProtocol.sanitizeText("中".repeat(26) + "🇨🇳🇺🇸终点"))
+    }
+
+    @Test
+    fun removesMalformedSurrogatesBeforeApplyingTheLimit() {
+        assertEquals("道路终点", LincolnClusterProtocol.sanitizeText("道\uD800路\uDC00终点"))
+        assertNull(LincolnClusterProtocol.sanitizeText("\uD800\uDC00".take(1)))
+        assertEquals("中".repeat(32),
+            LincolnClusterProtocol.sanitizeText("中".repeat(31) + "\uD800\n\t\u0000中终点"))
+    }
+
+    @Test
+    fun doesNotSendBlankPrefixesOrHalfAnOversizedCombiningSequence() {
+        assertNull(LincolnClusterProtocol.sanitizeText(" ".repeat(32) + "终点"))
+        assertNull(LincolnClusterProtocol.sanitizeText("a" + "\u0301".repeat(40) + "终点"))
     }
 }
