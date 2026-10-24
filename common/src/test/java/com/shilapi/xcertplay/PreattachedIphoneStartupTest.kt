@@ -49,6 +49,8 @@ class PreattachedIphoneStartupTest {
         app.getSharedPreferences("diplay", 0).edit().putBoolean("notification_asked", true).commit()
         AirPlayPersistence.saveWirelessEnabled(app, true)
         AirPlayPersistence.saveWirelessHotspotMode(app, WirelessHotspotMode.EXISTING_WIFI)
+        // These startup routing tests use a fully configured LAN connection.
+        AirPlayPersistence.saveExistingWifiCredentials(app, "Router", "router-password")
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         ReflectionHelpers.setField(activity, "page", "home")
     }
@@ -99,6 +101,14 @@ class PreattachedIphoneStartupTest {
 
     @Test fun noPhonePreservesTheConfiguredWiredDefault() {
         DiPlayPreferences.saveDefaultConnectionMode(app, DefaultConnectionMode.USB)
+        launchAutomatically()
+        idle()
+        assertHostStarted(wireless = false)
+    }
+
+    @Test fun attachedIphoneUsesUsbEvenWhenLanCredentialsHaveNotBeenConfigured() {
+        AirPlayPersistence.saveExistingWifiCredentials(app, "", "")
+        attachApple()
         launchAutomatically()
         idle()
         assertHostStarted(wireless = false)
