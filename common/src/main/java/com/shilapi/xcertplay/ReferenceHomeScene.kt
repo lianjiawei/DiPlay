@@ -4,13 +4,37 @@ import android.content.Context
 import android.view.TouchDelegate
 import android.graphics.Rect
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.math.roundToInt
 
+/** Publish this traversal's viewport before ScrollView measures its unbounded content. */
+internal class HomeViewportScrollView(context: Context) : ScrollView(context) {
+    var availableHeight = 0
+        private set
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val nextHeight = (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom).coerceAtLeast(1)
+        if (availableHeight != nextHeight) {
+            availableHeight = nextHeight
+            // ScrollView gives its child the same UNSPECIFIED height even when the window
+            // changes. Invalidate cached child measurements before, not during, layout.
+            for (index in 0 until childCount) invalidateMeasurements(getChildAt(index))
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    private fun invalidateMeasurements(view: View) {
+        view.forceLayout()
+        if (view is ViewGroup) for (index in 0 until view.childCount) invalidateMeasurements(view.getChildAt(index))
+    }
+}
+
 /** Home and preparation share their content slots, action dimensions and safe bottom edge. */
 internal class ReferenceHomeScene(
-    context: Context, private val hero: ConnectionContentLayout, private val ring: View,
+    context: Context, private val hero: ConnectionContentLayout,
     private val phone: View, private val primary: TextView, private val usb: View, private val settings: View,
     private val brand: View, private val viewportHeight: () -> Int,
     private val reservedHeight: Int,
@@ -54,7 +78,6 @@ internal class ReferenceHomeScene(
         val brandY=if (landscape) footerTop+(footerStackHeight-brand.measuredHeight)/2 else height-brand.measuredHeight
         brand.layout((width-brand.measuredWidth)/2,brandY,(width+brand.measuredWidth)/2,brandY+brand.measuredHeight)
         hero.touchDelegate=TouchDelegate(Rect(phone.left,phone.top-dp(4),phone.right,phone.bottom+dp(4)),phone)
-        if (wantedHeight != (viewportHeight()-reservedHeight).coerceAtLeast(1)) requestLayout()
     }
     private fun exact(size: Int) = MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY)
 }

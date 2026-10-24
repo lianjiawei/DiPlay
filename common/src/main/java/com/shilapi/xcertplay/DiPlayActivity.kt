@@ -747,6 +747,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun render() = render(appearanceOnly = false)
 
     private fun render(appearanceOnly: Boolean, preferredFocusTag: Any? = null) {
+        if (page !in setOf("home", "settings", "connection", "setup", "backup")) page = "home"
         enforceInterfaceSize()
         refreshAppearance()
         applyWindowAppearance()
@@ -802,7 +803,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             "settings" -> !SettingsLayoutPreferences.isActive(this)
             else -> true
         }
-        val scroll = ScrollView(this).apply {
+        val scroll = (if (page == "home") HomeViewportScrollView(this) else ScrollView(this)).apply {
             background = SceneBackdrop(this@DiPlayActivity, appNight,
                 quiet = page != "home" || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT,
                 readingShare = if (page == "home") ConnectionScreenMetrics.CONTENT_SHARE else .5f,
@@ -1146,9 +1147,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             contentDescription=brandString(R.string.home_public_preview,VehicleBranding.displayName(this@DiPlayActivity),version())
         }
         val reserved=dp(ReferenceHomeMetrics.TOP_DP+ReferenceHomeMetrics.BOTTOM_DP+ReferenceHomeMetrics.HEADER_DP+ReferenceHomeMetrics.HEADER_GAP_DP)
-        body.addView(ReferenceHomeScene(this,hero,homeConnectionRing!!,phone,connectButton!!,footerStart,settings,brand,
-            { rootScroll?.let { it.height-it.paddingTop-it.paddingBottom }?.takeIf { it>0 }
-                ?: dp(resources.configuration.screenHeightDp) }, reserved))
+        val viewport = rootScroll as HomeViewportScrollView
+        body.addView(ReferenceHomeScene(this,hero,phone,connectButton!!,footerStart,settings,brand,
+            { viewport.availableHeight }, reserved))
         val right=column()
         availableUpdate?.let { release ->
             val message = brandString(R.string.update_available_home)

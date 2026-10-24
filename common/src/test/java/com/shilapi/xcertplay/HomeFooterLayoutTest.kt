@@ -34,6 +34,74 @@ import org.robolectric.util.ReflectionHelpers
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class HomeFooterLayoutTest {
+    @Config(sdk = [29, 31])
+    @Test fun footerUsesCurrentWindowOnFirstLayoutAndEveryResize() {
+        // Configuration can exclude bars while the edge-to-edge window includes them.
+        // Repeated manual layouts hid this regression in the original screenshot test.
+        RuntimeEnvironment.setQualifiers("zh-rCN-w792dp-h310dp-land-533dpi")
+        val app = RuntimeEnvironment.getApplication()
+        app.getSharedPreferences("diplay", 0).edit().clear().commit()
+        app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
+        DiPlayPreferences.saveAutoConnect(app, false)
+        DiPlayPreferences.savePhone(app, "00:11:22:33:44:55", "GarveyPhone")
+        UpdateAvailability.saveBackgroundChecksEnabled(app, false)
+        AirPlayPersistence.saveAppAppearance(app, AppAppearance.DARK)
+        CarPlayBackgroundSession.clear()
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup().visible()
+        try {
+            val screen = controller.get()
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            ReflectionHelpers.setField(screen, "setupError", null)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "refreshStatus")
+            val root = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+            val density = screen.resources.displayMetrics.density
+            val settings = descendants(root).filterIsInstance<TextView>().single { it.text.toString() == screen.getString(R.string.settings) }
+            val brand = descendants(root).filterIsInstance<HomeBrandView>().single()
+            fun bottom(view: View) = Rect(0, 0, view.width, view.height).also { root.offsetDescendantRectToMyCoords(view, it) }.bottom
+            for ((name, dims) in listOf(
+                "first-window" to intArrayOf(792, 360, 0),
+                "resized-portrait" to intArrayOf(360, 792, 0),
+                "resized-landscape" to intArrayOf(792, 360, 24),
+                "bars-hidden" to intArrayOf(792, 360, 0))) {
+                val width = (dims[0]*density).toInt()
+                val height = (dims[1]*density).toInt()
+                root.setPadding(if (dims[0] > dims[1]) (46*density).toInt() else 0, 0, 0, (dims[2]*density).toInt())
+                root.measure(exact(width), exact(height))
+                root.layout(0, 0, width, height)
+                root.viewTreeObserver.dispatchOnPreDraw()
+                capture(root, "api${android.os.Build.VERSION.SDK_INT}-$name")
+                assertEquals("$name footer must use this traversal's window height", 12*density,
+                    (height-root.paddingBottom-maxOf(bottom(settings), bottom(brand))).toFloat(), 1f)
+                assertTrue("$name no extra scrolling", root.getChildAt(0).height <= height-root.paddingBottom)
+                val hero = descendants(root).filterIsInstance<ConnectionContentLayout>().single()
+                assertTrue("$name normal window keeps the phone below the ring",
+                    hero.getChildAt(2).top >= hero.getChildAt(1).bottom)
+                val primary = ReflectionHelpers.getField<TextView>(screen, "connectButton")
+                val footerTop = bottom(settings)-settings.height
+                assertTrue("$name primary clears the footer", bottom(primary) <= footerTop)
+                if (name == "bars-hidden") {
+                    CarPlayBackgroundSession.store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java),
+                        width, height, Any(), CarPlaySessionDisplay(width, height, Surface.ROTATION_0, false, false, width, height)) {}
+                    CarPlayBackgroundSession.active = true
+                    ReflectionHelpers.callInstanceMethod<Unit>(screen, "refreshStatus")
+                    root.measure(exact(width), exact(height)); root.layout(0, 0, width, height)
+                    root.viewTreeObserver.dispatchOnPreDraw()
+                    assertEquals("Connected state keeps footer position", footerTop, bottom(settings)-settings.height)
+                    capture(root, "api${android.os.Build.VERSION.SDK_INT}-connected")
+                    CarPlayBackgroundSession.clear()
+                }
+            }
+            // Unknown external destinations already fall back to home; keep that route safe.
+            ReflectionHelpers.setField(screen, "page", "unknown")
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            assertEquals("home", ReflectionHelpers.getField<String>(screen, "page"))
+        } finally {
+            controller.pause().stop().destroy()
+            CarPlayBackgroundSession.clear()
+            AppAppearanceRuntime.resetForTest()
+        }
+    }
+
     @Test fun actionsStayAtSafeBottomAndShareSizeAcrossSessionStates() {
         val app = RuntimeEnvironment.getApplication()
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL

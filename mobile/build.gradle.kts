@@ -16,8 +16,8 @@ android {
         applicationId = "cn.manstep.phonemirrorBox"
         minSdk = 25
         targetSdk = 37
-        versionCode = 77
-        versionName = "1.1.3-rc2"
+        versionCode = 78
+        versionName = "1.1.3-rc3"
 
     }
 
