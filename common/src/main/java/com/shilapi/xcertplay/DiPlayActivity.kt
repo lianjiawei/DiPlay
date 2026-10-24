@@ -371,6 +371,42 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
     private val iconPicker = registerForActivityResult(ActivityResultContracts.GetContent(), ::cropIcon)
+    private val wallpaperImport by lazy { androidx.lifecycle.ViewModelProvider(this)[WallpaperImportModel::class.java] }
+    private var wallpaperProgress: AlertDialog? = null
+    private val wallpaperPicker = registerForActivityResult(ActivityResultContracts.GetContent(), ::importWallpaper)
+    private val wallpaperDocumentPicker = registerForActivityResult(ActivityResultContracts.OpenDocument(), ::importWallpaper)
+    private fun importWallpaper(uri: Uri?) {
+        if (uri != null) wallpaperImport.import(applicationContext, uri)
+    }
+
+    private fun chooseWallpaperImage() {
+        launchCarButtonImagePicker(
+            openDocument = { wallpaperDocumentPicker.launch(arrayOf("image/*")) },
+            getContent = { wallpaperPicker.launch("image/*") },
+            documentPickerIsSystem = documentPickerIsSystem(),
+        ).onFailure {
+            Toast.makeText(this, R.string.this_head_unit_has_no_image_picker, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun reflectWallpaperImport(state: WallpaperImportModel.State) {
+        if (state == WallpaperImportModel.State.LOADING) {
+            if (wallpaperProgress == null) wallpaperProgress = appDialogBuilder()
+                .setTitle(R.string.settings_vehicle_custom)
+                .setMessage(R.string.loading_image)
+                .setNegativeButton(R.string.cancel) { _, _ -> wallpaperImport.cancel() }
+                .setOnCancelListener { wallpaperImport.cancel() }.show()
+            return
+        }
+        wallpaperProgress?.dismiss()
+        wallpaperProgress = null
+        if (state == WallpaperImportModel.State.SAVED) render()
+        if (state == WallpaperImportModel.State.FAILED) {
+            Toast.makeText(this, R.string.settings_wallpaper_import_failed, Toast.LENGTH_LONG).show()
+        }
+        wallpaperImport.acknowledge()
+    }
+
     private val iconDocumentPicker = registerForActivityResult(ActivityResultContracts.OpenDocument(), ::cropIcon)
     private fun cropIcon(uri: Uri?) {
         if (uri != null) iconCrop.launch(Intent(this, ImageCropActivity::class.java).setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
@@ -622,6 +658,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             connectAutomaticallyOnLaunch()
         }
         if (updatePromptForDownload) handler.post { refreshUpdatePrompt() }
+        wallpaperImport.observer = ::reflectWallpaperImport
+        reflectWallpaperImport(wallpaperImport.state)
     }
 
     private fun canAutoConnectOnLaunch(): Boolean =
@@ -642,6 +680,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onPause() {
+        wallpaperImport.observer = null
+        wallpaperProgress?.dismiss()
+        wallpaperProgress = null
         updatePromptResumed = false
         handler.removeCallbacks(automaticUpdatePrompt)
         updatePrompt?.dismiss()
@@ -1874,13 +1915,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             filteredSection(content, SettingsSection.VEHICLE_APPEARANCE,
                 brandString(R.string.settings_vehicle_appearance), R.drawable.ic_dp_car,
                 showHeading = false) { card ->
-                val models = VehicleModel.entries
-                choice(card, brandString(R.string.settings_vehicle_model),
-                    models.map { brandString(it.label) }, models.indexOf(AirPlayPersistence.loadVehicleModel(this)),
-                    reconnects = false) { index ->
-                    AirPlayPersistence.saveVehicleModel(this, models[index])
-                    render()
-                }
+                vehicleWallpaperControl(card)
             }
         }
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
@@ -7024,6 +7059,42 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             reconnects = sessionTransport) {
             AirPlayPersistence.saveMediaBufferMillis(this, wireless, presets[it])
         }
+    }
+
+    private fun vehicleWallpaperControl(parent: LinearLayout) {
+        val title = brandString(R.string.settings_vehicle_model)
+        val model = AirPlayPersistence.loadVehicleModel(this)
+        val control = button("$title · ${brandString(model.label)}", false) {
+            var pending = AirPlayPersistence.loadVehicleModel(this)
+            val models = VehicleModel.entries
+            lateinit var dialog: AlertDialog
+            fun refreshActions() {
+                val custom = pending == VehicleModel.CUSTOM
+                val savedImage = CustomWallpaper.available(this)
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText(
+                    if (custom && !savedImage) R.string.settings_wallpaper_choose else R.string.save)
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).visibility =
+                    if (custom && savedImage) View.VISIBLE else View.GONE
+            }
+            dialog = appDialogBuilder().setTitle(title)
+                .setSingleChoiceItems(models.map { brandString(it.label) }.toTypedArray(), models.indexOf(pending)) { _, index ->
+                    pending = models[index]
+                    refreshActions()
+                }
+                .setPositiveButton(R.string.save) { _, _ ->
+                    if (pending == VehicleModel.CUSTOM && !CustomWallpaper.available(this)) chooseWallpaperImage()
+                    else {
+                        wallpaperImport.cancel()
+                        AirPlayPersistence.saveVehicleModel(this, pending)
+                        render()
+                    }
+                }
+                .setNeutralButton(R.string.settings_wallpaper_replace) { _, _ -> chooseWallpaperImage() }
+                .setNegativeButton(R.string.cancel, null).create()
+            dialog.show()
+            refreshActions()
+        }
+        parent.addView(control, matchButton(0, FidelitySettingsMetrics.SETTING_ROW_DP))
     }
 
     // [announcesReconnect] labels a choice whose [save] reconnects by itself.

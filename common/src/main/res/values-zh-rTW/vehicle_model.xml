@@ -5,4 +5,8 @@
     <string name="settings_vehicle_corsair">冒險家</string>
     <string name="settings_vehicle_nautilus">航海家</string>
     <string name="settings_vehicle_aviator">飛行家</string>
+    <string name="settings_vehicle_custom">自訂</string>
+    <string name="settings_wallpaper_choose">選擇圖片</string>
+    <string name="settings_wallpaper_replace">更換圖片</string>
+    <string name="settings_wallpaper_import_failed">無法使用這張圖片，請選擇其他圖片。</string>
 </resources>

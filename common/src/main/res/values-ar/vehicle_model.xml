@@ -5,4 +5,8 @@
     <string name="settings_vehicle_corsair">Corsair</string>
     <string name="settings_vehicle_nautilus">Nautilus</string>
     <string name="settings_vehicle_aviator">Aviator</string>
+    <string name="settings_vehicle_custom">مخصصة</string>
+    <string name="settings_wallpaper_choose">اختيار صورة</string>
+    <string name="settings_wallpaper_replace">تغيير الصورة</string>
+    <string name="settings_wallpaper_import_failed">تعذر استخدام هذه الصورة. يرجى اختيار صورة أخرى.</string>
 </resources>

@@ -19,7 +19,9 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
     init { FidelityMaterials.install(context) }
     private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN) {
         val model = AirPlayPersistence.loadVehicleModel(context)
-        image(context, if (quiet) model.softScene else model.scene)
+        val custom = if (model == VehicleModel.CUSTOM) CustomWallpaper.file(context, quiet) else null
+        custom?.let { cachedImage("custom:${it.path}") { BitmapFactory.decodeFile(it.path) } }
+            ?: image(context, if (quiet) model.softScene else model.scene)
     } else null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val destination = RectF()
@@ -53,13 +55,15 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
     companion object {
         // Do not retain six full-size photos on old head units. Eviction leaves bitmaps held
         // by an existing drawable valid until that screen is released.
-        private val images = object : android.util.LruCache<Int, Bitmap>(16 * 1024 * 1024) {
-            override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
+        private val images = object : android.util.LruCache<String, Bitmap>(16 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
         }
-        @Synchronized private fun image(context: Context, resource: Int): Bitmap? {
-            images.get(resource)?.takeUnless { it.isRecycled }?.let { return it }
-            return runCatching { BitmapFactory.decodeResource(context.resources, resource) }
-                .getOrNull()?.also { images.put(resource, it) }
+        private fun image(context: Context, resource: Int): Bitmap? =
+            cachedImage("resource:$resource") { BitmapFactory.decodeResource(context.resources, resource) }
+
+        @Synchronized private fun cachedImage(key: String, decode: () -> Bitmap?): Bitmap? {
+            images.get(key)?.takeUnless { it.isRecycled }?.let { return it }
+            return runCatching(decode).getOrNull()?.also { images.put(key, it) }
         }
     }
 }

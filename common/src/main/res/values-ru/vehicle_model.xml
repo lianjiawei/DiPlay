@@ -5,4 +5,8 @@
     <string name="settings_vehicle_corsair">Corsair</string>
     <string name="settings_vehicle_nautilus">Nautilus</string>
     <string name="settings_vehicle_aviator">Aviator</string>
+    <string name="settings_vehicle_custom">Свой фон</string>
+    <string name="settings_wallpaper_choose">Выбрать фото</string>
+    <string name="settings_wallpaper_replace">Заменить фото</string>
+    <string name="settings_wallpaper_import_failed">Не удалось использовать изображение. Выберите другое.</string>
 </resources>

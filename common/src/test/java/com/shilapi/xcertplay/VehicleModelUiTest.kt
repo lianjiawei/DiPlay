@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Looper
 import android.view.Surface
 import android.view.View
@@ -64,7 +65,7 @@ class VehicleModelUiTest {
     }
 
     @Test @Config(sdk = [25, 27, 29])
-    fun defaultIsTheExistingCorsairAndThePickerHasOnlyThreeChoices() {
+    fun defaultIsTheExistingCorsairAndThePickerAddsCustomAsTheFourthChoice() {
         assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
         prefs.edit().putString("vehicle_scene_model", "unknown-future-model").commit()
         assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
@@ -73,13 +74,63 @@ class VehicleModelUiTest {
             descendants(screen.window.decorView).filterIsInstance<TextView>()
                 .any { it.isShown && it.text.toString() == screen.getString(R.string.settings_vehicle_appearance) })
         val dialog = picker(screen)
-        assertEquals(3, dialog.listView.count)
-        assertEquals(listOf("冒险家", "航海家", "飞行家"),
+        assertEquals(4, dialog.listView.count)
+        assertEquals(listOf("冒险家", "航海家", "飞行家", "自定义"),
             (0 until dialog.listView.count).map { dialog.listView.adapter.getItem(it).toString() })
         assertEquals(0, dialog.listView.checkedItemPosition)
         select(dialog, 1)
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
         assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
+    }
+
+    @Test @Config(sdk = [25, 27, 29])
+    fun selectingCustomWithoutAnImageOpensThePickerAndCancellationKeepsThePreset() {
+        val screen = open()
+        val dialog = picker(screen)
+        select(dialog, 3)
+        assertEquals(screen.getString(R.string.settings_wallpaper_choose), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertEquals(View.GONE, dialog.getButton(AlertDialog.BUTTON_NEUTRAL).visibility)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        val picker = shadowOf(screen).nextStartedActivityForResult
+        assertTrue(picker.intent.action in listOf(Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_GET_CONTENT))
+        if (picker.intent.action == Intent.ACTION_OPEN_DOCUMENT) {
+            assertEquals(listOf("image/*"), picker.intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)?.toList())
+        } else assertEquals("image/*", picker.intent.type)
+        screen.activityResultRegistry.dispatchResult(picker.requestCode, android.app.Activity.RESULT_CANCELED, null)
+        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
+        assertFalse(CustomWallpaper.available(app))
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun savedCustomImageCanBeReselectedOrReplacedWithoutChangingTheRunningSession() {
+        installCustomFixture()
+        val id = AirPlayPersistence.loadCustomWallpaperId(app)
+        AirPlayPersistence.saveVehicleModel(app, VehicleModel.CORSAIR)
+        val screen = open()
+        val session = mock(CarPlayController::class.java)
+        var stopped = false
+        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { stopped = true }
+        CarPlayBackgroundSession.active = true
+        val dialog = picker(screen)
+        select(dialog, 3)
+        assertEquals(View.VISIBLE, dialog.getButton(AlertDialog.BUTTON_NEUTRAL).visibility)
+        assertEquals(screen.getString(R.string.save), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals(id, AirPlayPersistence.loadCustomWallpaperId(app))
+        assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
+        assertFalse(stopped)
+        assertFalse(PendingReconnect.isPending(session))
+        val replacement = picker(screen)
+        replacement.getButton(AlertDialog.BUTTON_NEUTRAL).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        val launched = shadowOf(screen).nextStartedActivityForResult
+        screen.activityResultRegistry.dispatchResult(launched.requestCode, android.app.Activity.RESULT_CANCELED, null)
+        assertEquals(id, AirPlayPersistence.loadCustomWallpaperId(app))
+        assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
     }
 
     @Test @Config(sdk = [25, 27, 29])
@@ -122,6 +173,10 @@ class VehicleModelUiTest {
     fun landscapeModelsKeepTheSameLayout() = capture("landscape", 1f)
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
+    fun compactSettingsWithLargeText() = capture("compact-large", 1.3f)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "zh-rCN-w360dp-h760dp-port-mdpi")
     fun portraitModelsWithLargeTextKeepTheSameLayout() = capture("portrait-large", 1.3f)
 
@@ -135,6 +190,7 @@ class VehicleModelUiTest {
 
     private fun capture(name: String, fontScale: Float) {
         RuntimeEnvironment.setFontScale(fontScale)
+        installCustomFixture()
         val screen = open()
         var geometry: List<Rect>? = null
         val homeImages = mutableSetOf<Int>()
@@ -163,7 +219,7 @@ class VehicleModelUiTest {
             } finally { rowImage.recycle() }
             writeScreenshot(root(screen), "$name-${model.key}-settings")
         }
-        assertEquals("Each choice must show its own car, including after a cached image", 3, homeImages.size)
+        assertEquals("Each choice must show its own image, including after a cached image", 4, homeImages.size)
         val dialog = picker(screen)
         val decor = dialog.window!!.decorView
         val metrics = screen.resources.displayMetrics
@@ -175,6 +231,16 @@ class VehicleModelUiTest {
             for (line in 0 until layout.lineCount) assertEquals("Picker text must fit: ${text.text}", 0, layout.getEllipsisCount(line))
         }
         writeScreenshot(decor, "$name-picker")
+    }
+
+    private fun installCustomFixture() {
+        // Simulate a user selecting a local image; do not change any packaged artwork.
+        val source = File(app.cacheDir, "chosen-wallpaper")
+        app.resources.openRawResource(R.drawable.aviator_scene).use { input ->
+            source.outputStream().use { input.copyTo(it) }
+        }
+        CustomWallpaper.activate(app, CustomWallpaper.prepare(app, Uri.fromFile(source)))
+        source.delete()
     }
 
     private fun open(): DiPlayActivity {

@@ -704,7 +704,17 @@ object AirPlayPersistence {
 
     internal fun loadVehicleModel(context: Context): VehicleModel = VehicleModel.fromKey(
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_VEHICLE_MODEL, null),
-    )
+    ).let { if (it == VehicleModel.CUSTOM && !CustomWallpaper.available(context)) VehicleModel.CORSAIR else it }
+
+    // The image is local-only; the settings backup must not export its file identifier.
+    internal fun loadCustomWallpaperId(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("custom_wallpaper_id", null)
+
+    internal fun saveCustomWallpaper(context: Context, id: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("custom_wallpaper_id", id)
+            .putString(KEY_VEHICLE_MODEL, VehicleModel.CUSTOM.key).apply()
+    }
 
     internal fun saveVehicleModel(context: Context, model: VehicleModel) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
