@@ -67,6 +67,22 @@ class CustomWallpaperTest {
         assertTrue(maxOf(soft.outWidth, soft.outHeight) <= CustomWallpaper.SOFT_EDGE)
     }
 
+    @Test fun readingBackgroundSoftensDetailWhileHomeKeepsTheOriginalDetail() {
+        val source = image(Color.BLACK, 100, 100)
+        val pattern = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
+        for (y in 0 until 100) for (x in 0 until 100) pattern.setPixel(x, y,
+            if ((x / 5 + y / 5) % 2 == 0) Color.WHITE else Color.BLACK)
+        source.outputStream().use { pattern.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        pattern.recycle()
+        CustomWallpaper.activate(app, CustomWallpaper.prepare(app, Uri.fromFile(source)))
+        val home = BitmapFactory.decodeFile(CustomWallpaper.file(app)!!.path)
+        val reading = BitmapFactory.decodeFile(CustomWallpaper.file(app, true)!!.path)
+        try {
+            assertTrue(Color.red(home.getPixel(52, 52)) > 230)
+            assertTrue(Color.red(reading.getPixel(52, 52)) in 80..190)
+        } finally { home.recycle(); reading.recycle() }
+    }
+
     @Test fun invalidAndOversizedFilesKeepThePreviousImage() {
         CustomWallpaper.activate(app, CustomWallpaper.prepare(app, Uri.fromFile(image(Color.RED))))
         val previous = CustomWallpaper.appearanceKey(app)

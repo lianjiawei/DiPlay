@@ -87,7 +87,10 @@ internal object CustomWallpaper {
                         val scale = minOf(1f, SOFT_EDGE.toFloat() / maxOf(image.width, image.height))
                         val soft = Bitmap.createScaledBitmap(image, maxOf(1, (image.width * scale).toInt()),
                             maxOf(1, (image.height * scale).toInt()), true)
-                        try { write(soft, File(dir, "soft.jpg")) } finally { if (soft !== image) soft.recycle() }
+                        try {
+                            soften(soft)
+                            write(soft, File(dir, "soft.jpg"))
+                        } finally { if (soft !== image) soft.recycle() }
                     } finally { image.recycle() }
                 } finally { if (oriented !== decoded) oriented.recycle() }
             } finally { decoded.recycle() }
@@ -119,6 +122,43 @@ internal object CustomWallpaper {
 
     private fun write(bitmap: Bitmap, file: File) {
         file.outputStream().use { if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)) throw IOException("Cannot save image") }
+    }
+
+    /** Two small box passes approximate a soft lens blur without newer graphics APIs or GPU work. */
+    private fun soften(bitmap: Bitmap) {
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixels = IntArray(width * height)
+        val scratch = IntArray(pixels.size)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        fun pass(source: IntArray, output: IntArray, horizontal: Boolean) {
+            val lines = if (horizontal) height else width
+            val length = if (horizontal) width else height
+            for (line in 0 until lines) {
+                fun index(position: Int): Int = if (horizontal) line * width + position.coerceIn(0, length - 1)
+                    else position.coerceIn(0, length - 1) * width + line
+                var red = 0
+                var green = 0
+                var blue = 0
+                for (offset in -2..2) {
+                    val color = source[index(offset)]
+                    red += Color.red(color); green += Color.green(color); blue += Color.blue(color)
+                }
+                for (position in 0 until length) {
+                    output[index(position)] = Color.rgb(red / 5, green / 5, blue / 5)
+                    val leaving = source[index(position - 2)]
+                    val entering = source[index(position + 3)]
+                    red += Color.red(entering) - Color.red(leaving)
+                    green += Color.green(entering) - Color.green(leaving)
+                    blue += Color.blue(entering) - Color.blue(leaving)
+                }
+            }
+        }
+        repeat(2) {
+            pass(pixels, scratch, true)
+            pass(scratch, pixels, false)
+        }
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
     }
 
     fun activate(context: Context, prepared: Prepared) {
