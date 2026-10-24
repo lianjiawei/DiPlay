@@ -52,8 +52,12 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         val compactHeight = height - paddingTop - paddingBottom < dp(300)
         landscape = availableWidth > (height-paddingTop-paddingBottom)*1.3f
         brandTopInset = dp(if (compactHeight) 0 else ReferenceHomeMetrics.TOP_DP)
-        brandLabel.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
-        val brandHeight = maxOf(brandLabel.measuredHeight, dp(if (compactHeight) 32 else ReferenceHomeMetrics.HEADER_DP))
+        // Do not speculatively measure the live label: the unchanged brand row may reuse its
+        // measurement cache, leaving the label with a natural measured height inside its taller
+        // laid-out bounds. TextView uses that measured height for vertical gravity, so only the
+        // word moves upward on the next connection-status traversal while the logo stays put.
+        val textHeight = brandLabel.lineHeight + brandLabel.compoundPaddingTop + brandLabel.compoundPaddingBottom
+        val brandHeight = maxOf(textHeight, dp(if (compactHeight) 32 else ReferenceHomeMetrics.HEADER_DP))
         headerReserve = brandTopInset + brandHeight + dp(ReferenceHomeMetrics.HEADER_GAP_DP)
         val innerWidth = (availableWidth-dp(ConnectionScreenMetrics.SIDE_DP*2)).coerceAtLeast(1)
         val actionWidth = ConnectionPageLayout.actionWidth(innerWidth, landscape, resources.displayMetrics.density)
