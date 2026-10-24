@@ -123,13 +123,15 @@ internal class ConnectionContentLayout(
         val height = MeasureSpec.getSize(heightMeasureSpec)
         setMeasuredDimension(width, height)
         side = 0
-        gap = dp(if (height < dp(140)) 4 else ConnectionPageLayout.CONTENT_GAP_DP)
+        val compactSpacing = height < dp(ConnectionPageLayout.COMPACT_BODY_DP)
+        gap = dp(if (compactSpacing) ConnectionPageLayout.COMPACT_GAP_DP else ConnectionPageLayout.CONTENT_GAP_DP)
         val innerWidth = width.coerceAtLeast(1)
         columns = height < dp(ConnectionPageLayout.SHORT_BODY_DP) && innerWidth >= dp(320)
         visualWidth = if (columns) (innerWidth*.42f).toInt() else innerWidth
         detailsWidth = if (columns) innerWidth-visualWidth-gap else innerWidth
         val compact = height < dp(140)
-        headline.textSize = if (compact) 18f else if (columns) 20f else UiTypography.HERO_SP.toFloat()
+        headline.textSize = if (compact) 18f else if (compactSpacing) ConnectionPageLayout.COMPACT_HEADLINE_SP
+            else UiTypography.HERO_SP.toFloat()
         phone.textSize = if (compact) 14f else UiTypography.ROW_SP.toFloat()
         stage.textSize = if (compact) 12f else UiTypography.BODY_SP.toFloat()
         hintMeasure.textSize = if (compact) 12f else UiTypography.CAPTION_SP.toFloat()

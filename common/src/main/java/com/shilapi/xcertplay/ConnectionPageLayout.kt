@@ -12,6 +12,9 @@ internal object ConnectionPageLayout {
     const val CONTENT_GAP_DP = 8
     const val PHONE_DP = 48
     const val SHORT_BODY_DP = 200
+    const val COMPACT_BODY_DP = 240
+    const val COMPACT_GAP_DP = 4
+    const val COMPACT_HEADLINE_SP = 20f
     const val MIN_READING_WIDTH_DP = 432
 
     fun contentWidth(safeWidth: Int, bodyHeight: Int, landscape: Boolean, density: Float): Int {

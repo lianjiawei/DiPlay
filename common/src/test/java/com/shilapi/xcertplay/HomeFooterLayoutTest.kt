@@ -74,6 +74,11 @@ class HomeFooterLayoutTest {
                     (height-root.paddingBottom-maxOf(bottom(settings), bottom(brand))).toFloat(), 1f)
                 assertTrue("$name no extra scrolling", root.getChildAt(0).height <= height-root.paddingBottom)
                 val hero = descendants(root).filterIsInstance<ConnectionContentLayout>().single()
+                for (index in 0 until hero.childCount) {
+                    val child = hero.getChildAt(index)
+                    assertTrue("$name content clears the reserved footer gap: child=$index bottom=${child.bottom}, height=${hero.height}",
+                        child.bottom <= hero.height)
+                }
                 assertTrue("$name normal window keeps the phone below the ring",
                     hero.getChildAt(2).top >= hero.getChildAt(1).bottom)
                 val primary = ReflectionHelpers.getField<TextView>(screen, "connectButton")
