@@ -1118,18 +1118,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         hero.addView(status,LinearLayout.LayoutParams(-1,-2))
         connectButton=button(brandString(R.string.ui_glass_connect_carplay),true) {
             if (CarPlayBackgroundSession.hasSession()) openProjection() else connect(true)
-        }.apply { textSize=UiTypography.PRIMARY_ACTION_SP.toFloat();minHeight=dp(FidelitySettingsMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
+        }.apply { textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
         disconnectButton=button(brandString(R.string.disconnect),false) {
             disconnectButton?.isEnabled=false
             CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
         }.apply {
-            visibility=View.GONE;textSize=16f;minHeight=dp(48);centeredIconGroup=true
+            visibility=View.GONE;textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);centeredIconGroup=true
             persistentStartIcon=getDrawable(R.drawable.ic_dp_usb)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
             setCompoundDrawablesRelative(persistentStartIcon,null,null,null);compoundDrawablePadding=dp(8)
         }
         hero.addView(connectButton,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(4) })
         val usb=headerButton(brandString(R.string.connect_with_usb),R.drawable.ic_dp_usb,true) { connect(false) }.apply {
-            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
+            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false);centeredIconGroup=true
         }
         homeUsbFooter=usb
         val footerStart=android.widget.FrameLayout(this).apply {
@@ -1138,13 +1138,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             addView(disconnectButton,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
         val settings=headerButton(brandString(R.string.settings),R.drawable.ic_glass_settings,true) { page="settings";render() }.apply {
-            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(48);setSingleLine(false);centeredIconGroup=true
+            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false);centeredIconGroup=true
         }
         val brand=HomeBrandView(this).apply {
             contentDescription=brandString(R.string.home_public_preview,VehicleBranding.displayName(this@DiPlayActivity),version())
         }
         val reserved=dp(ReferenceHomeMetrics.TOP_DP+ReferenceHomeMetrics.BOTTOM_DP+ReferenceHomeMetrics.HEADER_DP+ReferenceHomeMetrics.HEADER_GAP_DP)
-        body.addView(ReferenceHomeScene(this,hero,homeConnectionRing!!,phone,footerStart,settings,brand,
+        body.addView(ReferenceHomeScene(this,hero,homeConnectionRing!!,phone,connectButton!!,footerStart,settings,brand,
             { rootScroll?.let { it.height-it.paddingTop-it.paddingBottom }?.takeIf { it>0 }
                 ?: dp(resources.configuration.screenHeightDp) }, reserved))
         val right=column()
