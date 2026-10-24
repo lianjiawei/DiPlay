@@ -151,6 +151,8 @@ class HomeFooterLayoutTest {
             val waitingBrand = descendants(viewport).filterIsInstance<HomeBrandView>().single()
             assertEquals("$name same wordmark position", rect(homeRoot, brand), rect(root, waitingBrand))
             val word = waitingBrand.getChildAt(1) as TextView
+            assertEquals("$name wordmark must not scroll", 0, word.scrollX)
+            assertEquals(host.getString(R.string.app_name), word.text.toString())
             assertTrue("$name wordmark visible: ${word.text}, measured=${word.measuredWidth}x${word.measuredHeight}, bounds=${rect(root, word)}, textHeight=${word.layout?.height}",
                 word.height > 0 && word.layout != null && word.height >= word.layout.height)
             capture(root, "$name-preparation")

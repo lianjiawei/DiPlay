@@ -919,7 +919,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val brandTextSize = if (home || compact) 20 else 26
         val brandLabel = label(VehicleBranding.displayName(this@DiPlayActivity), brandTextSize, TEXT, true,
             centreGlyphs = resources.configuration.locales[0].language != "zh").apply {
-            setPadding(if (compact && !home) dp(8) else dp(12), 0, 0, 0)
+            setPaddingRelative(if (compact && !home) dp(8) else dp(12), 0, 0, 0)
+            gravity = (if (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) Gravity.RIGHT else Gravity.LEFT) or Gravity.CENTER_VERTICAL
+            textAlignment = View.TEXT_ALIGNMENT_GRAVITY
             maxLines = 1
             TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12,
                 if (home) 20 else if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)

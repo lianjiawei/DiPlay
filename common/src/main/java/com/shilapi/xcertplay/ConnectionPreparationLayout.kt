@@ -83,7 +83,8 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         val start = paddingLeft+dp(ConnectionScreenMetrics.SIDE_DP)
         contentArea.layout(start, bodyTop, start+contentWidth, bodyTop+contentArea.measuredHeight)
         val brandTop = paddingTop+brandTopInset
-        brand.layout(start, brandTop, start+brand.measuredWidth, brandTop+brand.measuredHeight)
+        val brandStart = if (layoutDirection == LAYOUT_DIRECTION_RTL) width-paddingRight-dp(ConnectionScreenMetrics.SIDE_DP)-brand.measuredWidth else start
+        brand.layout(brandStart, brandTop, brandStart+brand.measuredWidth, brandTop+brand.measuredHeight)
         val footerBottom = height-paddingBottom-dp(ConnectionScreenMetrics.BOTTOM_DP)
         val actionTop = footerBottom-footerStackHeight
         actions.layout(start, actionTop, start+actions.measuredWidth, actionTop+actions.measuredHeight)

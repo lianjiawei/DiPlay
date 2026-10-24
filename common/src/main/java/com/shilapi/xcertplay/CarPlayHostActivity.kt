@@ -1864,7 +1864,7 @@ class CarPlayHostActivity : ComponentActivity() {
         connectionIconView = icon
         val title=TextView(this).apply {
             text=VehicleBranding.displayName(context);textSize=20f;includeFontPadding=false
-            gravity=Gravity.CENTER_VERTICAL;typeface=Typeface.create("sans-serif",Typeface.BOLD)
+            gravity=Gravity.CENTER_VERTICAL;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
         }
         connectionTitleView=title
         val brandHeader=LinearLayout(this).apply {
@@ -1874,6 +1874,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         val phone=TextView(this).apply {
             text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=UiTypography.ROW_SP.toFloat();gravity=Gravity.CENTER
+            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
             maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
         }
         val stage = StableConnectionTextView(this, ConnectionScreenCopy.allStages).apply {

@@ -29,7 +29,8 @@ internal class HomeBrandView(context: Context) : LinearLayout(context) {
             letterSpacing = .12f
             gravity = Gravity.CENTER
             includeFontPadding = false
-            setSingleLine()
+            // A decorative label must not acquire TextView's single-line horizontal scroll offset.
+            maxLines = 1
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
             // The photo remains a dusk scene in both themes; muted text loses contrast.
             setTextColor(Color.WHITE)
