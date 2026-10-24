@@ -64,10 +64,8 @@ class HomeFooterLayoutTest {
                     val density = activity.resources.displayMetrics.density
                     val width = (activity.resources.configuration.screenWidthDp * density).toInt()
                     val height = (activity.resources.configuration.screenHeightDp * density).toInt()
-                    // Keep the camera/system bars outside the footer in either orientation.
-                    ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
-                        .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, (8*density).toInt(), 0, (24*density).toInt()))
-                        .build())
+                    ReflectionHelpers.setField(activity, "setupError", null)
+                    ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
                     fun layout() {
                         repeat(3) {
                             root.measure(exact(width), exact(height)); root.layout(0, 0, width, height)
@@ -75,6 +73,12 @@ class HomeFooterLayoutTest {
                         }
                     }
                     layout()
+                    // Apply after attachment's initial insets so that it cannot replace this case.
+                    ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
+                        .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, (8*density).toInt(), 0, (24*density).toInt()))
+                        .build())
+                    layout()
+                    assertEquals("System bottom inset is applied", (24*density).toInt(), root.paddingBottom)
                     val primary = ReflectionHelpers.getField<TextView>(activity, "connectButton")
                     val usb = ReflectionHelpers.getField<TextView>(activity, "homeUsbFooter")
                     val settings = descendants(root).filterIsInstance<TextView>().single { it.text.toString() == activity.getString(R.string.settings) }
