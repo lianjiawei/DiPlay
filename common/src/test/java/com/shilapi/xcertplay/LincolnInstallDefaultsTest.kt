@@ -34,8 +34,9 @@ class LincolnInstallDefaultsTest {
 
     @Test fun displayDefaultsMatchTheSavedLincolnSetup() {
         assertEquals(CarPlayNightMode.AMBIENT, AirPlayPersistence.loadCarPlayNightMode(context))
-        assertEquals(AmbientLightThreshold(120), AirPlayPersistence.loadAmbientLightThreshold(context))
-        assertEquals(CarPlaySize.LARGE, CarPlaySize.fromWidthMillimeters(
+        assertEquals(AmbientLightThreshold(350), AirPlayPersistence.loadAmbientLightThreshold(context))
+        assertEquals(1, AirPlayPersistence.loadAmbientDelaySeconds(context))
+        assertEquals(CarPlaySize.SMALL, CarPlaySize.fromWidthMillimeters(
             AirPlayPersistence.loadWidthPhysicalMm(context)))
         assertEquals(60, AirPlayPersistence.loadFps(context))
     }
@@ -71,8 +72,14 @@ class LincolnInstallDefaultsTest {
         LincolnClusterSettings.setNavigation(context, false)
         AirPlayPersistence.saveSpeechWithout8And16Khz(context, false)
         AirPlayPersistence.saveNavigationDuckingMedia(context, false)
+        AirPlayPersistence.saveWidthPhysicalMm(context, CarPlaySize.LARGE.widthMillimeters)
+        AirPlayPersistence.saveAmbientLightThreshold(context, AmbientLightThreshold(120))
+        AirPlayPersistence.saveAmbientDelaySeconds(context, 2)
         assertEquals(false, LincolnClusterSettings.navigation(context))
         assertEquals(false, AirPlayPersistence.loadSpeechWithout8And16Khz(context))
         assertEquals(false, AirPlayPersistence.loadNavigationDuckingMedia(context))
+        assertEquals(CarPlaySize.LARGE.widthMillimeters, AirPlayPersistence.loadWidthPhysicalMm(context))
+        assertEquals(AmbientLightThreshold(120), AirPlayPersistence.loadAmbientLightThreshold(context))
+        assertEquals(2, AirPlayPersistence.loadAmbientDelaySeconds(context))
     }
 }

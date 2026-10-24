@@ -533,7 +533,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var carPlayNightMode = CarPlayNightMode.SYSTEM
     private var nightSchedule = CarPlayNightSchedule()
     private var ambientLightThreshold = AmbientLightThreshold()
-    private var ambientDelaySeconds = 2
+    private var ambientDelaySeconds = CarPlayNightMode.DEFAULT_AMBIENT_DELAY_SECONDS
     private var nightModeDiagnosticSource = ThemeModeDiagnostics.Source.CARPLAY_MODE
     private var carThemeNight = true
     private val nightModeController by lazy {

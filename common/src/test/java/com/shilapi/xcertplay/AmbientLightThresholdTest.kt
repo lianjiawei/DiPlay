@@ -10,10 +10,10 @@ class AmbientLightThresholdTest {
         for (lux in listOf(1, 50, 200_000)) assertTrue(AmbientLightThreshold.isValid(lux))
     }
 
-    @Test fun rejectsOutOfRangeThresholdsAndFallsBackToThirtyLux() {
+    @Test fun rejectsOutOfRangeThresholdsAndFallsBackToDefaultLux() {
         for (lux in listOf(-1, 0, 200_001, Int.MAX_VALUE)) {
             assertFalse(AmbientLightThreshold.isValid(lux))
-            assertEquals(AmbientLightThreshold(30), AmbientLightThreshold.fromStored(lux))
+            assertEquals(AmbientLightThreshold(350), AmbientLightThreshold.fromStored(lux))
         }
     }
 

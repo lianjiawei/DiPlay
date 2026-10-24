@@ -148,12 +148,10 @@ object AirPlayPersistence {
     const val MAX_CARPLAY_CORNER_RADIUS_DP = 48
     const val CARPLAY_CORNER_RADIUS_STEP_DP = 1
     const val DEFAULT_MFI_I2C_PATH = "/dev/i2c-1"
-    /** Ambient light threshold this fork ships with for automatic day/night switching. */
-    private const val DEFAULT_AMBIENT_LUX = 120
 
     fun loadAmbientDelaySeconds(context: Context): Int =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt("ambient_delay_seconds", 2).coerceIn(0, 60)
+            .getInt("ambient_delay_seconds", CarPlayNightMode.DEFAULT_AMBIENT_DELAY_SECONDS).coerceIn(0, 60)
 
     fun saveAmbientDelaySeconds(context: Context, seconds: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -740,9 +738,8 @@ object AirPlayPersistence {
 
     fun loadAmbientLightThreshold(context: Context): AmbientLightThreshold {
         val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_AMBIENT_LUX_THRESHOLD, DEFAULT_AMBIENT_LUX)
-        return if (AmbientLightThreshold.isValid(stored)) AmbientLightThreshold(stored)
-        else AmbientLightThreshold(DEFAULT_AMBIENT_LUX)
+            .getInt(KEY_AMBIENT_LUX_THRESHOLD, AmbientLightThreshold.DEFAULT_LUX)
+        return AmbientLightThreshold.fromStored(stored)
     }
 
     fun saveAmbientLightThreshold(context: Context, threshold: AmbientLightThreshold) {

@@ -2098,7 +2098,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             })
             ambientLightThresholdControl(ambientControls)
             nightDelaySettingControl(ambientControls, R.string.ambient_delay_title, R.string.ambient_delay_hint,
-                0..60, 2, R.string.ambient_delay_summary, { AirPlayPersistence.loadAmbientDelaySeconds(this) },
+                0..60, CarPlayNightMode.DEFAULT_AMBIENT_DELAY_SECONDS, R.string.ambient_delay_summary,
+                { AirPlayPersistence.loadAmbientDelaySeconds(this) },
                 save = { AirPlayPersistence.saveAmbientDelaySeconds(this, it) })
             scheduleControls.addView(settingsNote(brandString(R.string.carplay_night_schedule_hint), 14, MUTED).apply {
                 setPadding(0, 0, 0, dp(18))

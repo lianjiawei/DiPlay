@@ -11,6 +11,8 @@ enum class CarPlayNightMode(val key: String) {
     SCHEDULE("schedule");
 
     companion object {
+        const val DEFAULT_AMBIENT_DELAY_SECONDS = 1
+
         fun fromKey(key: String?): CarPlayNightMode = entries.firstOrNull { it.key == key } ?: SYSTEM
     }
 }
@@ -67,7 +69,7 @@ internal class CarPlayNightModeController(
     private var mode = CarPlayNightMode.SYSTEM
     private var systemNight = initialNight
     private var threshold = AmbientLightThreshold()
-    private var delaySeconds = 2
+    private var delaySeconds = CarPlayNightMode.DEFAULT_AMBIENT_DELAY_SECONDS
     private var schedule = CarPlayNightSchedule()
     private var resumed = false
     private var listening = false
@@ -90,7 +92,7 @@ internal class CarPlayNightModeController(
         mode: CarPlayNightMode,
         systemNight: Boolean,
         threshold: AmbientLightThreshold = AmbientLightThreshold(),
-        delaySeconds: Int = 2,
+        delaySeconds: Int = CarPlayNightMode.DEFAULT_AMBIENT_DELAY_SECONDS,
         schedule: CarPlayNightSchedule = CarPlayNightSchedule(),
     ) {
         stopListening()

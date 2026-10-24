@@ -7,7 +7,7 @@ data class AmbientLightThreshold(val lux: Int = DEFAULT_LUX) {
     }
 
     companion object {
-        const val DEFAULT_LUX = 30
+        const val DEFAULT_LUX = 350
         const val MIN_LUX = 1
         const val MAX_LUX = 200_000
 

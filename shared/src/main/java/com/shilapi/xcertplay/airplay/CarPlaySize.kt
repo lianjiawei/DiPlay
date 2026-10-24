@@ -10,8 +10,8 @@ enum class CarPlaySize(val label: String, val widthMillimeters: Int) {
     SMALL("Small", 350);
 
     companion object {
-        /** Larger CarPlay icons and text, the size this fork ships with for the Lincoln panel. */
-        val DEFAULT = LARGE
+        /** Smaller CarPlay icons and text, the default for the Lincoln panel. */
+        val DEFAULT = SMALL
 
         /** Maps any stored width, including values from older builds, to the nearest preset. */
         fun fromWidthMillimeters(millimeters: Int): CarPlaySize =

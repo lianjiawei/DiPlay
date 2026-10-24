@@ -24,7 +24,7 @@ class CarPlayNightModePersistenceTest {
     }
 
     @Test fun thresholdDefaultAndCustomValuePersist() {
-        assertEquals(AmbientLightThreshold(120), AirPlayPersistence.loadAmbientLightThreshold(context))
+        assertEquals(AmbientLightThreshold(350), AirPlayPersistence.loadAmbientLightThreshold(context))
         AirPlayPersistence.saveCarPlayNightMode(context, CarPlayNightMode.AMBIENT)
         AirPlayPersistence.saveAmbientLightThreshold(context, AmbientLightThreshold(200))
         assertEquals(AmbientLightThreshold(200), AirPlayPersistence.loadAmbientLightThreshold(context))
@@ -36,7 +36,7 @@ class CarPlayNightModePersistenceTest {
     @Test fun invalidStoredThresholdRestoresTheDefault() {
         for (lux in listOf(-1, 0, 200_001)) {
             prefs.edit().putInt("ambient_lux_threshold", lux).apply()
-            assertEquals(AmbientLightThreshold(120), AirPlayPersistence.loadAmbientLightThreshold(context))
+            assertEquals(AmbientLightThreshold(350), AirPlayPersistence.loadAmbientLightThreshold(context))
         }
     }
 
@@ -64,9 +64,9 @@ class CarPlayNightModePersistenceTest {
     }
 
     @Test fun transitionDelayPersistsIncludingImmediateSwitching() {
-        assertEquals(2, AirPlayPersistence.loadAmbientDelaySeconds(context))
-        AirPlayPersistence.saveAmbientDelaySeconds(context, 1)
         assertEquals(1, AirPlayPersistence.loadAmbientDelaySeconds(context))
+        AirPlayPersistence.saveAmbientDelaySeconds(context, 2)
+        assertEquals(2, AirPlayPersistence.loadAmbientDelaySeconds(context))
         AirPlayPersistence.saveAmbientDelaySeconds(context, 0)
         assertEquals(0, AirPlayPersistence.loadAmbientDelaySeconds(context))
     }
