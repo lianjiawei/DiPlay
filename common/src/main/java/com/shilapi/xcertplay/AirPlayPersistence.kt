@@ -505,15 +505,11 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString("existing_wifi_passphrase", "").orEmpty()
 
-    fun loadExistingWifiLegacyHandshake(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean("existing_wifi_legacy_handshake", false)
-
-    fun saveExistingWifiCredentials(context: Context, ssid: String, passphrase: String, legacyHandshake: Boolean = false) {
+    fun saveExistingWifiCredentials(context: Context, ssid: String, passphrase: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("existing_wifi_ssid", ssid)
             .putString("existing_wifi_passphrase", passphrase)
-            .putBoolean("existing_wifi_legacy_handshake", legacyHandshake).apply()
+            .remove("existing_wifi_legacy_handshake").apply()
     }
 
     fun loadManualHotspotSsid(context: Context): String =

@@ -1,19 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_existing_wifi_handshake">Método de conexión</string>
-    <string name="settings_existing_wifi_reuse">Usar Wi-Fi actual (sin contraseña)</string>
-    <string name="settings_existing_wifi_compatibility">Conexión compatible (con contraseña)</string>
-    <string name="settings_existing_wifi_reuse_description">Conecta ambos dispositivos al mismo Wi-Fi. Los cambios guardados se aplican en la próxima conexión.</string>
-    <string name="settings_existing_wifi_compatibility_description">Envía el nombre de red y la contraseña WPA2 al iPhone por Bluetooth. Los cambios guardados se aplican en la próxima conexión.</string>
+    <string name="settings_existing_wifi_setup_required">Guarda el nombre y la contraseña de Wi-Fi en los ajustes de conexión.</string>
+    <string name="settings_existing_wifi_credentials_description">Envía el nombre de red y la contraseña WPA2 al iPhone por Bluetooth. Los cambios guardados se aplican en la próxima conexión.</string>
     <string name="settings_existing_wifi_password_required">Introduce la contraseña WPA2 del Wi-Fi actual (8–63 caracteres).</string>
-    <string name="settings_existing_wifi_compatibility_name_hint">Selecciona o introduce la red a la que está conectado el receptor. Vuelve a introducir la contraseña al cambiar de red.</string>
     <string name="settings_existing_wifi_manual">Introducir red manualmente</string>
     <string name="settings_existing_wifi_select">Elegir Wi-Fi del sistema</string>
     <string name="settings_existing_wifi_connected">Conectada · %1$s</string>
     <string name="settings_existing_wifi_saved">Guardada · %1$s</string>
     <string name="settings_existing_wifi_available">Disponible · %1$s</string>
     <string name="settings_existing_wifi_unavailable">No hay nombres de Wi-Fi disponibles. Activa Wi-Fi y la ubicación, permite el acceso a la ubicación o elige una red en los ajustes Wi-Fi del sistema.</string>
-    <string name="settings_existing_wifi_name_hint">Se usa automáticamente la Wi-Fi conectada del sistema. Introduce un nombre solo si Android no lo muestra; déjalo vacío para detectarlo.</string>
+    <string name="settings_existing_wifi_name_hint">Selecciona o introduce la red a la que está conectado el receptor. Vuelve a introducir la contraseña al cambiar de red.</string>
     <string name="settings_existing_wifi_switch_note">Esto cambia la Wi-Fi del equipo y puede interrumpir CarPlay. En una red guardada, deja la contraseña vacía para usar las credenciales del sistema. En otras redes protegidas, introduce la contraseña WPA2. Las redes abiertas no necesitan contraseña.</string>
     <string name="settings_existing_wifi_connect">Conectar Wi-Fi</string>
     <string name="settings_existing_wifi_connecting">Conexión Wi-Fi solicitada. Espera a que el sistema se conecte antes de iniciar CarPlay.</string>
@@ -21,7 +17,7 @@
     <string name="existing_wifi_title">Wi-Fi existente / Misma LAN</string>
     <string name="existing_wifi_description">Usa un router o Wi-Fi portátil existente. Mantén el iPhone y el coche en la misma red con acceso a Internet.</string>
     <string name="existing_wifi_hint">Wi-Fi existente · Mantén ambos dispositivos en la misma Wi-Fi y el Bluetooth activado. No necesitas el punto de acceso del coche.</string>
-    <string name="existing_wifi_instructions">Conecta el equipo desde los ajustes Wi-Fi del sistema. DiPlay reutiliza esa conexión sin contraseña y no configura el iPhone. Mantén ambos dispositivos en la misma LAN y desactiva el aislamiento de clientes del router. Los cambios se aplican a la próxima conexión CarPlay.</string>
+    <string name="existing_wifi_instructions">Envía el nombre de red y la contraseña WPA2 al iPhone por Bluetooth. Los cambios guardados se aplican en la próxima conexión.</string>
     <string name="existing_wifi_details">Datos de Wi-Fi externa</string>
     <string name="existing_wifi_ssid">Nombre de Wi-Fi externa (SSID)</string>
     <string name="existing_wifi_password">Contraseña de Wi-Fi externa</string>
@@ -595,7 +591,7 @@
     <string name="location_reporting_reconnects">Cambiar este ajuste vuelve a conectar la sesión activa de CarPlay.</string>
     <string name="diagnostic_report_saved_in_app">El informe se guardó de forma privada en Lincoln porque no había una ubicación pública disponible. Compártelo o míralo aquí. No se envía nada automáticamente.</string>
     <string name="diagnostic_report_saved_to_path">El informe se guardó en:\n%1$s\n\nTambién puedes compartirlo o verlo aquí. No se envía nada automáticamente.</string>
-    <string name="view_diagnostic_report">Ver informe</string>
+    <string name="view_diagnostic_report">Ver</string>
     <string name="diagnostic_report_copy_hint">Mantén pulsado el texto del informe para seleccionarlo y copiarlo. Puedes usar esta opción si no hay una aplicación para compartir.</string>
     <string name="wheel_map_zoom">Zoom del mapa del panel con el volante</string>
     <string name="wheel_map_zoom_description">El botón personalizable de BYD cambia los botones de volumen entre el volumen y el zoom del mapa del panel mientras el panel de instrumentos muestra el mapa de CarPlay. Durante una llamada siempre controlan el volumen. En algunos coches el volumen de la consola envía los mismos botones, así que también hace zoom mientras el zoom está activo. Usa el servicio de botones del volante de Lincoln; el aviso en el panel necesita ADB.</string>

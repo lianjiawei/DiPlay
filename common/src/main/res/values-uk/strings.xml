@@ -1,19 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_existing_wifi_handshake">Спосіб підключення</string>
-    <string name="settings_existing_wifi_reuse">Поточна Wi-Fi (без пароля)</string>
-    <string name="settings_existing_wifi_compatibility">Сумісне підключення (з паролем)</string>
-    <string name="settings_existing_wifi_reuse_description">Спершу підключіть обидва пристрої до однієї Wi-Fi. Зміни діють з наступного підключення.</string>
-    <string name="settings_existing_wifi_compatibility_description">Передає назву мережі та пароль WPA2 на iPhone через Bluetooth. Зміни діють з наступного підключення.</string>
+    <string name="settings_existing_wifi_setup_required">Збережіть назву й пароль Wi-Fi у налаштуваннях з’єднання.</string>
+    <string name="settings_existing_wifi_credentials_description">Передає назву мережі та пароль WPA2 на iPhone через Bluetooth. Зміни діють з наступного підключення.</string>
     <string name="settings_existing_wifi_password_required">Введіть пароль WPA2 поточної Wi-Fi (8–63 символи).</string>
-    <string name="settings_existing_wifi_compatibility_name_hint">Виберіть або введіть назву мережі, до якої підключено приймач. Після зміни мережі введіть пароль знову.</string>
     <string name="settings_existing_wifi_manual">Ввести мережу вручну</string>
     <string name="settings_existing_wifi_select">Вибрати Wi-Fi системи</string>
     <string name="settings_existing_wifi_connected">Підключено · %1$s</string>
     <string name="settings_existing_wifi_saved">Збережено · %1$s</string>
     <string name="settings_existing_wifi_available">Доступно · %1$s</string>
     <string name="settings_existing_wifi_unavailable">Назви Wi-Fi недоступні. Увімкніть Wi-Fi і геолокацію, дозвольте доступ до неї або виберіть мережу в системних налаштуваннях Wi-Fi.</string>
-    <string name="settings_existing_wifi_name_hint">Автоматично використовується поточне підключення Wi-Fi системи. Введіть назву, лише якщо Android її не показує; порожнє поле означає автовизначення.</string>
+    <string name="settings_existing_wifi_name_hint">Виберіть або введіть назву мережі, до якої підключено приймач. Після зміни мережі введіть пароль знову.</string>
     <string name="settings_existing_wifi_switch_note">Це перемкне Wi-Fi головного пристрою й може перервати CarPlay. Для збереженої мережі залиште пароль порожнім, щоб використати системні дані. Для інших захищених мереж введіть пароль WPA2. Відкритим мережам пароль не потрібен.</string>
     <string name="settings_existing_wifi_connect">Підключити Wi-Fi</string>
     <string name="settings_existing_wifi_connecting">Підключення Wi-Fi запитано. Дочекайтеся підключення системи перед запуском CarPlay.</string>
@@ -21,7 +17,7 @@
     <string name="existing_wifi_title">Наявна Wi-Fi / Одна LAN</string>
     <string name="existing_wifi_description">Використовуйте наявний роутер або портативну Wi-Fi. iPhone та автомобіль залишаються в одній мережі з доступом до Інтернету.</string>
     <string name="existing_wifi_hint">Наявна Wi-Fi · Підключіть обидва пристрої до однієї Wi-Fi та увімкніть Bluetooth. Точка доступу автомобіля не потрібна.</string>
-    <string name="existing_wifi_instructions">Підключіть головний пристрій у системних налаштуваннях Wi-Fi. DiPlay використовує це підключення без пароля й не налаштовує iPhone. Обидва пристрої мають бути в одній LAN; вимкніть ізоляцію клієнтів на роутері. Зміни застосовуються під час наступного підключення CarPlay.</string>
+    <string name="existing_wifi_instructions">Передає назву мережі та пароль WPA2 на iPhone через Bluetooth. Зміни діють з наступного підключення.</string>
     <string name="existing_wifi_details">Дані зовнішньої Wi-Fi</string>
     <string name="existing_wifi_ssid">Назва зовнішньої Wi-Fi (SSID)</string>
     <string name="existing_wifi_password">Пароль зовнішньої Wi-Fi</string>
@@ -607,7 +603,7 @@
     <string name="byd_adb_features">Функції BYD · потрібен ADB</string>
     <string name="diagnostic_report_saved_in_app">Звіт збережено приватно в Lincoln, оскільки загальнодоступне місце збереження недоступне. Поділіться ним або перегляньте його тут. Нічого не надсилається автоматично.</string>
     <string name="diagnostic_report_saved_to_path">Звіт збережено в:\n%1$s\n\nВи також можете поділитися ним або переглянути його тут. Нічого не надсилається автоматично.</string>
-    <string name="view_diagnostic_report">Переглянути звіт</string>
+    <string name="view_diagnostic_report">Перегляд</string>
     <string name="diagnostic_report_copy_hint">Натисніть і утримуйте текст звіту, щоб виділити та скопіювати його. Це можна використати, якщо немає застосунку для надсилання.</string>
     <string name="wheel_map_zoom">Масштаб карти на панелі приладів кнопками керма</string>
     <string name="wheel_map_zoom_description">Кастомна кнопка BYD перемикає кнопки гучності між звуком і масштабом карти на панелі приладів, поки там карта CarPlay. Під час дзвінка кнопки завжди керують звуком. На деяких авто гучність на консолі надсилає ті самі кнопки, тож у режимі масштабу вона теж змінює масштаб. Працює через службу кнопок керма Lincoln; напис на панелі приладів потребує ADB.</string>

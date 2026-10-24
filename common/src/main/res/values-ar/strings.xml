@@ -1,19 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_existing_wifi_handshake">طريقة الاتصال</string>
-    <string name="settings_existing_wifi_reuse">استخدام Wi-Fi الحالية (دون كلمة مرور)</string>
-    <string name="settings_existing_wifi_compatibility">اتصال متوافق (بكلمة مرور)</string>
-    <string name="settings_existing_wifi_reuse_description">صِل الجهازين بشبكة Wi-Fi نفسها أولًا. تسري التغييرات المحفوظة عند الاتصال التالي.</string>
-    <string name="settings_existing_wifi_compatibility_description">يرسل اسم الشبكة وكلمة مرور WPA2 إلى iPhone عبر Bluetooth. تسري التغييرات المحفوظة عند الاتصال التالي.</string>
+    <string name="settings_existing_wifi_setup_required">افتح إعدادات الاتصال واحفظ اسم شبكة Wi-Fi وكلمة المرور.</string>
+    <string name="settings_existing_wifi_credentials_description">يرسل اسم الشبكة وكلمة مرور WPA2 إلى iPhone عبر Bluetooth. تسري التغييرات المحفوظة عند الاتصال التالي.</string>
     <string name="settings_existing_wifi_password_required">أدخل كلمة مرور WPA2 لشبكة Wi-Fi الحالية (8–63 حرفًا).</string>
-    <string name="settings_existing_wifi_compatibility_name_hint">اختر اسم الشبكة المتصل بها جهاز الاستقبال حاليًا أو أدخله. أدخل كلمة المرور مجددًا بعد تغيير الشبكة.</string>
     <string name="settings_existing_wifi_manual">إدخال الشبكة يدويًا</string>
     <string name="settings_existing_wifi_select">اختيار شبكة Wi-Fi للنظام</string>
     <string name="settings_existing_wifi_connected">متصل · %1$s</string>
     <string name="settings_existing_wifi_saved">محفوظة · %1$s</string>
     <string name="settings_existing_wifi_available">متاحة · %1$s</string>
     <string name="settings_existing_wifi_unavailable">أسماء شبكات Wi-Fi غير متاحة. فعّل Wi-Fi وموقع النظام واسمح بالوصول إلى الموقع، أو اختر شبكة من إعدادات Wi-Fi للنظام.</string>
-    <string name="settings_existing_wifi_name_hint">تُستخدم شبكة Wi-Fi المتصل بها النظام تلقائيًا. أدخل الاسم فقط إذا تعذر على Android عرضه، أو اتركه فارغًا لاكتشافه تلقائيًا.</string>
+    <string name="settings_existing_wifi_name_hint">اختر اسم الشبكة المتصل بها جهاز الاستقبال حاليًا أو أدخله. أدخل كلمة المرور مجددًا بعد تغيير الشبكة.</string>
     <string name="settings_existing_wifi_switch_note">سيؤدي هذا إلى تبديل Wi-Fi لوحدة السيارة وقد يقطع CarPlay. للشبكة المحفوظة، اترك كلمة المرور فارغة لاستخدام بيانات النظام. للشبكات المحمية الأخرى، أدخل كلمة مرور WPA2. لا تحتاج الشبكات المفتوحة إلى كلمة مرور.</string>
     <string name="settings_existing_wifi_connect">الاتصال بشبكة Wi-Fi</string>
     <string name="settings_existing_wifi_connecting">تم طلب اتصال Wi-Fi. انتظر اتصال النظام قبل بدء CarPlay.</string>
@@ -21,7 +17,7 @@
     <string name="existing_wifi_title">شبكة Wi-Fi موجودة / نفس الشبكة المحلية</string>
     <string name="existing_wifi_description">استخدم جهاز توجيه أو Wi-Fi محمولاً موجوداً. أبقِ iPhone والسيارة على الشبكة نفسها مع اتصال بالإنترنت.</string>
     <string name="existing_wifi_hint">Wi-Fi موجودة · أبقِ الجهازين على شبكة Wi-Fi نفسها والبلوتوث قيد التشغيل. لا تحتاج إلى نقطة اتصال السيارة.</string>
-    <string name="existing_wifi_instructions">صل وحدة السيارة من إعدادات Wi-Fi للنظام. يستخدم DiPlay هذا الاتصال دون كلمة مرور ولا يضبط شبكة iPhone. أبقِ الجهازين على الشبكة المحلية نفسها وعطّل عزل العملاء في الموجّه. تسري التغييرات عند اتصال CarPlay التالي.</string>
+    <string name="existing_wifi_instructions">يرسل اسم الشبكة وكلمة مرور WPA2 إلى iPhone عبر Bluetooth. تسري التغييرات المحفوظة عند الاتصال التالي.</string>
     <string name="existing_wifi_details">بيانات شبكة Wi-Fi الخارجية</string>
     <string name="existing_wifi_ssid">اسم شبكة Wi-Fi الخارجية (SSID)</string>
     <string name="existing_wifi_password">كلمة مرور شبكة Wi-Fi الخارجية</string>
@@ -595,7 +591,7 @@
     <string name="location_reporting_reconnects">يؤدي تغيير هذا الإعداد إلى إعادة اتصال جلسة CarPlay النشطة.</string>
     <string name="diagnostic_report_saved_in_app">تم حفظ التقرير بشكل خاص داخل Lincoln لعدم توفر موقع حفظ عام. يمكنك مشاركته أو عرضه هنا. لا يتم إرسال شيء تلقائياً.</string>
     <string name="diagnostic_report_saved_to_path">تم حفظ التقرير في:\n%1$s\n\nيمكنك أيضاً مشاركته أو عرضه هنا. لا يتم إرسال شيء تلقائياً.</string>
-    <string name="view_diagnostic_report">عرض التقرير</string>
+    <string name="view_diagnostic_report">عرض</string>
     <string name="diagnostic_report_copy_hint">المس نص التقرير مطولاً لتحديده ونسخه. يمكنك استخدام ذلك إذا لم يتوفر تطبيق للمشاركة.</string>
     <string name="wheel_map_zoom">تكبير خريطة لوحة العدادات بأزرار المقود</string>
     <string name="wheel_map_zoom_description">يبدّل زر BYD المخصّص أزرار الصوت بين التحكم في الصوت وتكبير خريطة لوحة العدادات ما دامت لوحة العدادات تعرض خريطة CarPlay. أثناء المكالمة تتحكم الأزرار دائمًا في الصوت. في بعض السيارات يرسل زر الصوت في الكونسول الأزرار نفسها، لذلك يكبّر الخريطة أيضًا أثناء وضع التكبير. يستخدم خدمة أزرار المقود في Lincoln؛ وتحتاج الملاحظة على لوحة العدادات إلى ADB.</string>

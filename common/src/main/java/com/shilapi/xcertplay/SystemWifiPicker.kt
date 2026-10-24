@@ -86,8 +86,8 @@ internal class SystemWifiPicker(
         if (manual) fields.addView(name)
         val password = EditText(context).apply {
             hint = activity.getString(R.string.existing_wifi_password)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine()
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             visibility = if (network.security == ExistingWifiNetwork.Security.OPEN) android.view.View.GONE else android.view.View.VISIBLE
         }
         fields.addView(password)

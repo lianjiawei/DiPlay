@@ -24,8 +24,8 @@ class ExistingWifiManager(
     private val ssid: String,
     private val onDiagnostic: (String) -> Unit = {},
     private val onNetworkChanged: () -> Unit = {},
-    /** Null keeps password-free reuse. A value explicitly opts into the original WPA2 bootstrap. */
-    private val legacyPassphrase: String? = null,
+    /** Credentials for the original iAP2 Wi-Fi provisioning handshake. */
+    private val passphrase: String,
 ) : WirelessHotspotManager {
     private val connectivity = context.applicationContext.getSystemService(ConnectivityManager::class.java)
         ?: throw IllegalStateException("ConnectivityManager is unavailable")
@@ -53,12 +53,9 @@ class ExistingWifiManager(
     }
 
     init {
-        require(ssid.isEmpty() || ManualHotspotValidation.error(ssid, "") == null) {
-            "Invalid fallback Wi-Fi name"
+        require(ManualHotspotValidation.error(ssid, passphrase) == null && passphrase.length in 8..63) {
+            "Existing Wi-Fi requires its SSID and an 8–63 character WPA2 password"
         }
-        if (legacyPassphrase != null) require(
-            ManualHotspotValidation.error(ssid, legacyPassphrase) == null && legacyPassphrase.length in 8..63,
-        ) { "Legacy Wi-Fi connection requires its SSID and an 8–63 character WPA2 password" }
     }
 
     override fun start(timeoutMillis: Long): WirelessHotspotInfo {
@@ -97,15 +94,13 @@ class ExistingWifiManager(
                 val liveSsid = readableSsid(info)
                 val networkSsid = liveSsid ?: ssid.takeIf { it.isNotBlank() }
                     ?: throw IOException("Cannot read the connected Wi-Fi name. Allow location access and enable system location, or select its name in Connection setup")
-                if (legacyPassphrase != null) {
-                    if (networkSsid != ssid) throw IOException(
-                        "Connected Wi-Fi differs from the legacy credentials; select the current network and enter its password again",
-                    )
-                    if (Build.VERSION.SDK_INT >= 31 && info != null &&
-                        info.currentSecurityType !in listOf(WifiInfo.SECURITY_TYPE_UNKNOWN,
-                            WifiInfo.SECURITY_TYPE_PSK, WifiInfo.SECURITY_TYPE_SAE)) {
-                        throw IOException("Legacy connection requires WPA2-Personal; use system Wi-Fi reuse for this network")
-                    }
+                if (networkSsid != ssid) throw IOException(
+                    "Connected Wi-Fi differs from the saved credentials; select the current network and enter its password again",
+                )
+                if (Build.VERSION.SDK_INT >= 31 && info != null &&
+                    info.currentSecurityType !in listOf(WifiInfo.SECURITY_TYPE_UNKNOWN,
+                        WifiInfo.SECURITY_TYPE_PSK, WifiInfo.SECURITY_TYPE_SAE)) {
+                    throw IOException("Existing Wi-Fi connection requires a WPA2-Personal network")
                 }
                 val frequency = info?.frequency?.takeIf { it > 0 }
                 val channel = frequency?.let(::wifiFrequencyMhzToChannel) ?: 0
@@ -130,10 +125,9 @@ class ExistingWifiManager(
                 }
                 onDiagnostic("Existing Wi-Fi attached iface=$name host=${address.hostAddress} " +
                     "networkNameReadable=${liveSsid != null} channel=$channel " +
-                    "handshake=${if (legacyPassphrase == null) "system-reuse" else "legacy-credentials"} " +
+                    "handshake=credentials " +
                     "receiverIdentity=saved")
-                return WirelessHotspotInfo(networkSsid, legacyPassphrase.orEmpty(),
-                    if (legacyPassphrase == null) Iap2WirelessSecurity.SYSTEM_MANAGED else Iap2WirelessSecurity.WPA_WPA2,
+                return WirelessHotspotInfo(networkSsid, passphrase, Iap2WirelessSecurity.WPA_WPA2,
                     channel, frequency,
                     // The router's BSSID is not this receiver's AirPlay device identity.
                     null, name, address, when {
@@ -142,7 +136,7 @@ class ExistingWifiManager(
                         frequency < 5955 -> "5 GHz"
                         else -> "6 GHz"
                     }, WirelessHotspotBackend.EXISTING_WIFI, hostAddresses = addresses, accessPointBssid = apBssid,
-                    configureWifi = legacyPassphrase != null, network = network, gatewayAddresses = gateways)
+                    configureWifi = true, network = network, gatewayAddresses = gateways)
             }
             if ((System.nanoTime() - started) / 1_000_000 >= timeoutMillis) {
                 throw IOException("Existing Wi-Fi is not connected or has no usable address. Connect both devices to the same Wi-Fi in system settings")

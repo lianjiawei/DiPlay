@@ -67,9 +67,8 @@ class CarPlayRuntimeConfig(
     val locationReportingEnabled: Boolean = false,
     val wifiP2pPreferredChannel: Int = WifiP2pChannels.AUTO,
     val existingWifiSsid: String = "",
-    /** Used only after explicitly selecting the legacy credential-sharing handshake. */
+    /** Wi-Fi credentials supplied to the selected iPhone during LAN bootstrap. */
     val existingWifiPassphrase: String = "",
-    val existingWifiLegacyHandshake: Boolean = false,
 ) {
     init {
         require(iphoneDevices.all { it.vendorId == APPLE_VENDOR_ID }) {
@@ -102,14 +101,9 @@ class CarPlayRuntimeConfig(
         }
         // Only a wireless session starts the hotspot; a USB session must not fail on unused settings.
         if (transport == CarPlayTransport.WIRELESS && wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) {
-            require(existingWifiSsid.isEmpty() || ManualHotspotValidation.error(existingWifiSsid, "") == null) {
-                "Existing Wi-Fi requires a system connection or a fallback SSID of at most 32 UTF-8 bytes"
-            }
-            if (existingWifiLegacyHandshake) {
-                require(ManualHotspotValidation.error(existingWifiSsid, existingWifiPassphrase) == null &&
-                    existingWifiPassphrase.length in 8..63) {
-                    "Legacy Wi-Fi connection requires its SSID and an 8–63 character WPA2 password"
-                }
+            require(ManualHotspotValidation.error(existingWifiSsid, existingWifiPassphrase) == null &&
+                existingWifiPassphrase.length in 8..63) {
+                "Existing Wi-Fi requires its SSID and an 8–63 character WPA2 password"
             }
         }
         if (transport == CarPlayTransport.WIRELESS && wirelessHotspotMode == WirelessHotspotMode.WIFI_P2P) {

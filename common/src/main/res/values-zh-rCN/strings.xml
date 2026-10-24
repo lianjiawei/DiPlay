@@ -1,18 +1,14 @@
 <resources>
-    <string name="settings_existing_wifi_handshake">连接方式</string>
-    <string name="settings_existing_wifi_reuse">复用当前 Wi-Fi（免密码）</string>
-    <string name="settings_existing_wifi_compatibility">兼容连接（输入密码）</string>
-    <string name="settings_existing_wifi_reuse_description">车机和 iPhone 需先连上同一 Wi-Fi；保存后下次连接生效。</string>
-    <string name="settings_existing_wifi_compatibility_description">通过蓝牙将网络名与 WPA2 密码发送给 iPhone；保存后下次连接生效。</string>
+    <string name="settings_existing_wifi_setup_required">请在连接设置中保存 Wi-Fi 名称和密码。</string>
+    <string name="settings_existing_wifi_credentials_description">通过蓝牙将网络名与 WPA2 密码发送给 iPhone；保存后下次连接生效。</string>
     <string name="settings_existing_wifi_password_required">请输入当前 Wi-Fi 的 WPA2 密码（8–63 个字符）。</string>
-    <string name="settings_existing_wifi_compatibility_name_hint">选择或输入车机当前连接的网络名。切换网络后请重新填写密码。</string>
     <string name="settings_existing_wifi_manual">手动连接网络</string>
     <string name="settings_existing_wifi_select">选择系统 Wi-Fi</string>
     <string name="settings_existing_wifi_connected">已连接 · %1$s</string>
     <string name="settings_existing_wifi_saved">已保存 · %1$s</string>
     <string name="settings_existing_wifi_available">可用网络 · %1$s</string>
     <string name="settings_existing_wifi_unavailable">未读取到 Wi-Fi 名称。请开启 Wi-Fi 和系统定位、允许定位权限，或到系统 Wi-Fi 设置中选择网络。</string>
-    <string name="settings_existing_wifi_name_hint">默认自动使用系统当前连接的 Wi-Fi。仅在 Android 无法显示名称时手动填写；留空表示自动读取。</string>
+    <string name="settings_existing_wifi_name_hint">选择或输入车机当前连接的网络名。切换网络后请重新填写密码。</string>
     <string name="settings_existing_wifi_switch_note">此操作会切换车机 Wi-Fi，可能中断 CarPlay。已保存的网络可留空密码以使用系统凭据；其他受保护网络请输入 WPA2 密码，开放网络无需密码。</string>
     <string name="settings_existing_wifi_connect">连接 Wi-Fi</string>
     <string name="settings_existing_wifi_connecting">已请求连接 Wi-Fi，请等待系统连接成功后再启动 CarPlay。</string>
@@ -20,7 +16,7 @@
     <string name="existing_wifi_title">现有 Wi-Fi / 同一局域网</string>
     <string name="existing_wifi_description">使用已有路由器或随身 Wi-Fi。让 iPhone 和车机保持连接同一网络，并通过它上网。</string>
     <string name="existing_wifi_hint">现有 Wi-Fi · 两台设备保持连接同一 Wi-Fi，蓝牙保持开启，无需开启车机热点。</string>
-    <string name="existing_wifi_instructions">先在系统中连接车机 Wi-Fi。DiPlay 直接复用当前连接，无需填写密码，也不替 iPhone 配网。两台设备应在同一局域网，路由器关闭客户端隔离。更改在下次 CarPlay 连接时生效。</string>
+    <string name="existing_wifi_instructions">通过蓝牙将网络名与 WPA2 密码发送给 iPhone；保存后下次连接生效。</string>
     <string name="existing_wifi_details">外部 Wi-Fi 详情</string>
     <string name="existing_wifi_ssid">外部 Wi-Fi 名称（SSID）</string>
     <string name="existing_wifi_password">外部 Wi-Fi 密码</string>
@@ -639,7 +635,7 @@
     <string name="location_reporting_reconnects">更改此设置会重新连接当前 CarPlay 会话。</string>
     <string name="diagnostic_report_saved_in_app">由于公共保存位置不可用，报告已私密保存到 Lincoln。您可以在此分享或查看报告。不会自动发送任何内容。</string>
     <string name="diagnostic_report_saved_to_path">报告已保存到：\n%1$s\n\n您也可以在此分享或查看报告。不会自动发送任何内容。</string>
-    <string name="view_diagnostic_report">查看报告</string>
+    <string name="view_diagnostic_report">查看</string>
     <string name="diagnostic_report_copy_hint">长按报告文本即可选择并复制。如果没有可用的分享应用，可以使用此方式。</string>
     <string name="wheel_map_zoom">用方向盘按键缩放仪表盘地图</string>
     <string name="wheel_map_zoom_description">仪表盘显示 CarPlay 地图时，比亚迪自定义按键可在音量和仪表盘地图缩放之间切换音量键。通话时按键始终调节音量。部分车型的中控音量与方向盘发送相同按键，因此缩放模式下它也会缩放地图。使用 Lincoln 方向盘按键服务；仪表盘上的提示需要 ADB。</string>

@@ -62,16 +62,16 @@ class ExistingWifiManagerTest {
             .registerNetworkCallback(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
     }
 
-    @Test fun usesSystemStationWithoutCredentialsOrChangingWifiOrDefaultRoute() {
+    @Test fun provisionsCredentialsWithoutChangingWifiOrDefaultRoute() {
         manager().use { manager ->
             val result = start(manager)
             assertEquals(WirelessHotspotBackend.EXISTING_WIFI, result.backend)
             assertEquals("192.0.2.10", result.hostAddress!!.hostAddress)
             assertEquals(iface.name, result.interfaceName)
             assertEquals(36, result.channel)
-            assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, result.security)
-            assertFalse(result.configureWifi)
-            assertEquals("", result.passphrase)
+            assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
+            assertTrue(result.configureWifi)
+            assertEquals("pocket-password", result.passphrase)
             assertNull(result.bssid) // Router BSSID must never replace the receiver identity.
             assertArrayEquals(byteArrayOf(0xaa.toByte(), 0xbb.toByte(), 0xcc.toByte(), 0xdd.toByte(), 0xee.toByte(), 0xff.toByte()), result.accessPointBssid)
             assertTrue(diagnostics.none { it.contains("pocket-password") })
@@ -86,7 +86,7 @@ class ExistingWifiManagerTest {
 
     @Test fun explicitLegacyConnectionRestoresWpa2BootstrapWithoutJoiningOrChangingRoutes() {
         ExistingWifiManager(context, "Pocket Wi-Fi", diagnostics::add,
-            legacyPassphrase = "pocket-password").use {
+            passphrase = "pocket-password").use {
             val result = start(it)
             assertTrue(result.configureWifi)
             assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
@@ -96,36 +96,36 @@ class ExistingWifiManagerTest {
             assertSame(network, result.network)
             verify(connectivity, never()).bindProcessToNetwork(any())
             verify(connectivity, never()).requestNetwork(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
-            assertTrue(diagnostics.any { line -> line.contains("handshake=legacy-credentials") })
+            assertTrue(diagnostics.any { line -> line.contains("handshake=credentials") })
             assertTrue(diagnostics.none { line -> line.contains("pocket-password") || line.contains("Pocket Wi-Fi") })
         }
     }
 
     @Test fun legacyPasswordCannotBeReusedForAnotherConnectedNetwork() {
         `when`(info.ssid).thenReturn("\"Another network\"")
-        ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
+        ExistingWifiManager(context, "Pocket Wi-Fi", passphrase = "pocket-password").use {
             assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("differs"))
             verify(connectivity, never()).registerNetworkCallback(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
         }
         assertThrows(IllegalArgumentException::class.java) {
-            ExistingWifiManager(context, "", legacyPassphrase = "pocket-password")
+            ExistingWifiManager(context, "", passphrase = "pocket-password")
         }
         assertThrows(IllegalArgumentException::class.java) {
-            ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "")
+            ExistingWifiManager(context, "Pocket Wi-Fi", passphrase = "")
         }
     }
 
     @Test @Config(sdk = [33]) fun legacyWpa2CredentialsAreNotAdvertisedForOpenOrEnterpriseNetworks() {
         for (security in listOf(WifiInfo.SECURITY_TYPE_OPEN, WifiInfo.SECURITY_TYPE_EAP)) {
             `when`(info.currentSecurityType).thenReturn(security)
-            ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
+            ExistingWifiManager(context, "Pocket Wi-Fi", passphrase = "pocket-password").use {
                 assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("WPA2-Personal"))
             }
         }
         // SAE on the receiver does not prove a router lacks WPA2: mixed networks can
         // negotiate SAE with Android while the original CarPlay bootstrap uses WPA2.
         `when`(info.currentSecurityType).thenReturn(WifiInfo.SECURITY_TYPE_SAE)
-        ExistingWifiManager(context, "Pocket Wi-Fi", legacyPassphrase = "pocket-password").use {
+        ExistingWifiManager(context, "Pocket Wi-Fi", passphrase = "pocket-password").use {
             val result = start(it)
             assertTrue(result.configureWifi)
             assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
@@ -203,7 +203,7 @@ class ExistingWifiManagerTest {
             assertFalse(exported.contains("aa:bb:cc:dd:ee:ff"))
         }
         `when`(info.ssid).thenReturn("\"Different network\"")
-        manager().use { assertEquals("Different network", start(it).ssid) }
+        manager().use { assertThrows(IOException::class.java) { start(it) } }
     }
 
     @Test fun restrictedStationAndCapabilitiesKeepManualFallbackAndOmitPlaceholder() {
@@ -229,19 +229,7 @@ class ExistingWifiManagerTest {
         val caps = capabilities(NetworkCapabilities.TRANSPORT_WIFI)
         `when`(caps.transportInfo).thenReturn(redacted)
         doReturn(caps).`when`(connectivity).getNetworkCapabilities(network)
-        manager().use { assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, start(it).security) }
-    }
-
-    @Test @Config(sdk = [33]) fun reusesSystemConnectionRegardlessOfProvisioningSecurity() {
-        for (security in listOf(WifiInfo.SECURITY_TYPE_OPEN, WifiInfo.SECURITY_TYPE_PSK, WifiInfo.SECURITY_TYPE_EAP)) {
-            `when`(info.currentSecurityType).thenReturn(security)
-            manager().use {
-                val result = start(it)
-                assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, result.security)
-                assertFalse(result.configureWifi)
-                assertEquals("", result.passphrase)
-            }
-        }
+        manager().use { assertEquals(Iap2WirelessSecurity.WPA_WPA2, start(it).security) }
     }
 
     @Test fun redactedSsidAllowsManualConfigurationAndUnknownChannelStaysZero() {
@@ -251,13 +239,13 @@ class ExistingWifiManagerTest {
             val result = start(it)
             assertEquals("Pocket Wi-Fi", result.ssid)
             assertEquals(0, result.channel)
-            assertEquals(Iap2WirelessSecurity.SYSTEM_MANAGED, result.security)
+            assertEquals(Iap2WirelessSecurity.WPA_WPA2, result.security)
         }
     }
 
     @Test fun followsTheCurrentSystemNetworkAndRejectsMissingConnection() {
         `when`(info.ssid).thenReturn("\"Different network\"")
-        manager().use { assertEquals("Different network", start(it).ssid) }
+        manager().use { assertThrows(IOException::class.java) { start(it) } }
         `when`(connectivity.allNetworks).thenReturn(emptyArray())
         manager().use { assertTrue(assertThrows(IOException::class.java) { start(it, 1) }.message!!.contains("not connected")) }
     }
@@ -295,16 +283,14 @@ class ExistingWifiManagerTest {
         assertThrows(IllegalArgumentException::class.java) { manager("x".repeat(33)) }
     }
 
-    @Test fun readsCurrentSsidWithNoSavedDetailsAndExplainsRedaction() {
-        manager("").use { assertEquals("Pocket Wi-Fi", start(it).ssid) }
-        `when`(info.ssid).thenReturn(WifiManager.UNKNOWN_SSID)
-        manager("").use {
-            assertTrue(assertThrows(IOException::class.java) { start(it) }.message!!.contains("Allow location"))
-        }
+    @Test fun missingCredentialsAreRejectedBeforeStartingTheNetwork() {
+        assertThrows(IllegalArgumentException::class.java) { manager("") }
+        assertThrows(IllegalArgumentException::class.java) { ExistingWifiManager(context, "Pocket Wi-Fi", passphrase = "") }
+        verify(connectivity, never()).registerNetworkCallback(any(NetworkRequest::class.java), any(ConnectivityManager.NetworkCallback::class.java))
     }
 
     private fun manager(ssid: String = "Pocket Wi-Fi") = ExistingWifiManager(context,
-        ssid, diagnostics::add, { changes++ })
+        ssid, diagnostics::add, { changes++ }, passphrase = "pocket-password")
 
     private fun link(address: String) = LinkProperties().apply {
         interfaceName = iface.name

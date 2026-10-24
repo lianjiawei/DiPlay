@@ -4065,8 +4065,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 .also { hotspotJoinControls = it }
             parent.addView(join.build())
         } else if (mode == WirelessHotspotMode.EXISTING_WIFI) {
-            parent.addView(label(brandString(if (AirPlayPersistence.loadExistingWifiLegacyHandshake(this))
-                R.string.settings_existing_wifi_compatibility_description else R.string.existing_wifi_instructions), 16, MUTED))
+            parent.addView(label(brandString(R.string.existing_wifi_instructions), 16, MUTED))
             parent.addView(button(brandString(R.string.open_car_wi_fi_settings), false) { openCarClientWifiSettings() }, matchButton(12, 60))
             val name = ExistingWifiNetworks.read(this).firstOrNull { it.connected }?.ssid
                 ?: AirPlayPersistence.loadExistingWifiSsid(this).ifEmpty { brandString(R.string.auto) }
@@ -4221,8 +4220,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun askExistingWifiNetwork() {
         var active = true
         val fields = column().apply { setPadding(dp(FidelitySettingsMetrics.CONTENT_PAD_DP), dp(FidelitySettingsMetrics.ROW_GAP_DP), dp(FidelitySettingsMetrics.CONTENT_PAD_DP), dp(FidelitySettingsMetrics.ROW_GAP_DP)) }
-        var legacyHandshake = AirPlayPersistence.loadExistingWifiLegacyHandshake(this)
-        val instructions = label("", UiTypography.BODY_SP, MUTED)
+        val instructions = label(brandString(R.string.settings_existing_wifi_credentials_description), UiTypography.BODY_SP, MUTED)
         val current = ExistingWifiNetworks.read(this).firstOrNull { it.connected }
         val savedName = AirPlayPersistence.loadExistingWifiSsid(this)
         val name = EditText(appDialogContext()).apply {
@@ -4240,24 +4238,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             textSize = UiTypography.ROW_SP.toFloat()
             minHeight = dp(GlassChrome.MIN_TARGET_DP)
             imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            if (legacyHandshake && name.text.toString() == savedName)
+            if (name.text.toString() == savedName)
                 setText(AirPlayPersistence.loadExistingWifiPassphrase(this@DiPlayActivity))
         }
         val error = label("", 14, WARNING).apply {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             visibility = View.GONE
-        }
-        fun updateHandshake() {
-            instructions.text = brandString(if (legacyHandshake) R.string.settings_existing_wifi_compatibility_description
-                else R.string.settings_existing_wifi_reuse_description)
-            password.visibility = if (legacyHandshake) View.VISIBLE else View.GONE
-            error.visibility = View.GONE
-        }
-        choice(fields, brandString(R.string.settings_existing_wifi_handshake), listOf(
-            brandString(R.string.settings_existing_wifi_reuse), brandString(R.string.settings_existing_wifi_compatibility),
-        ), if (legacyHandshake) 1 else 0, reconnects = false) {
-            legacyHandshake = it == 1
-            updateHandshake()
         }
         fields.addView(instructions)
         lateinit var choose: ImageButton
@@ -4295,7 +4281,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 if (wide) marginStart = dp(FidelitySettingsMetrics.CONTROL_GAP_DP)
             })
         })
-        updateHandshake()
         fields.addView(error)
         val dialog = appDialogBuilder().setTitle(R.string.existing_wifi_details)
             .setView(ScrollView(appDialogContext()).apply { addView(fields) })
@@ -4304,17 +4289,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val ssid = name.text.toString() // SSID whitespace is meaningful.
-                val passphrase = if (legacyHandshake) password.text.toString() else ""
+                val passphrase = password.text.toString()
                 val problem = when {
-                    legacyHandshake && passphrase.length !in 8..63 -> brandString(R.string.settings_existing_wifi_password_required)
-                    ssid.isEmpty() && !legacyHandshake -> null
+                    passphrase.length !in 8..63 -> brandString(R.string.settings_existing_wifi_password_required)
                     else -> hotspotError(ssid, passphrase)
                 }
                 if (problem != null) {
                     error.text = problem
                     error.visibility = View.VISIBLE
                 } else {
-                    AirPlayPersistence.saveExistingWifiCredentials(this, ssid, passphrase, legacyHandshake)
+                    AirPlayPersistence.saveExistingWifiCredentials(this, ssid, passphrase)
                     markReconnectNeeded()
                     dialog.dismiss()
                     render()
@@ -6270,6 +6254,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             toast(brandString(R.string.save_the_name_and_password_from_the_car_s_hotspot_settings))
             return
         }
+        if (wireless && AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.EXISTING_WIFI &&
+            (AirPlayPersistence.loadExistingWifiPassphrase(this).length !in 8..63 ||
+                hotspotError(AirPlayPersistence.loadExistingWifiSsid(this), AirPlayPersistence.loadExistingWifiPassphrase(this)) != null)) {
+            askExistingWifiNetwork()
+            return
+        }
         if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
         if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
             pendingWireless = true; choosePhone(); return
@@ -6477,24 +6467,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 exportButton?.apply { isEnabled = true; text = brandString(R.string.save_diagnostic_report) }
                 if (result.isSuccess) {
                     val (savedReport, report) = result.getOrThrow()
-                    appDialogBuilder().setTitle(brandString(R.string.diagnostic_report_saved))
-                        .setMessage(when {
-                            savedReport.savedInApp -> brandString(R.string.diagnostic_report_saved_in_app)
-                            savedReport.savedPath != null -> brandString(R.string.diagnostic_report_saved_to_path, savedReport.savedPath)
-                            uri == null -> "Downloads/Lincoln/$fileName"
-                            else -> brandString(R.string.your_report_was_saved_to_the_selected_location)
-                        })
-                        .setPositiveButton(brandString(R.string.view_diagnostic_report)) { _, _ -> showDiagnosticReport(report) }
-                        .setNegativeButton(brandString(R.string.done), null)
-                        .setNeutralButton(brandString(R.string.share)) { _, _ ->
-                            runCatching {
-                                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"; putExtra(Intent.EXTRA_STREAM, savedReport.uri)
-                                    clipData = android.content.ClipData.newRawUri(brandString(R.string.report_clip_label), savedReport.uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }, brandString(R.string.share_diagnostic_report)))
-                            }.onFailure { showDiagnosticReport(report) }
-                        }.show()
+                    showSavedDiagnosticReport(savedReport, report, when {
+                        savedReport.savedInApp -> brandString(R.string.diagnostic_report_saved_in_app)
+                        savedReport.savedPath != null -> brandString(R.string.diagnostic_report_saved_to_path, savedReport.savedPath)
+                        uri == null -> "Downloads/Lincoln/$fileName"
+                        else -> brandString(R.string.your_report_was_saved_to_the_selected_location)
+                    })
                 } else {
                     appDialogBuilder().setTitle(brandString(R.string.could_not_save_the_report))
                         .setMessage(brandString(R.string.check_that_storage_is_available_or_choose_another_save_loc))
@@ -6504,6 +6482,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
         }, "diplay-export").start()
     }
+
+    private fun showSavedDiagnosticReport(savedReport: DiagnosticExportStore.SavedReport, report: String, location: String): AlertDialog =
+        appDialogBuilder().setTitle(brandString(R.string.diagnostic_report_saved))
+            .setMessage(location)
+            .setPositiveButton(brandString(R.string.view_diagnostic_report)) { _, _ -> showDiagnosticReport(report) }
+            .setNegativeButton(brandString(R.string.done), null)
+            .setNeutralButton(brandString(R.string.share)) { _, _ ->
+                runCatching {
+                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"; putExtra(Intent.EXTRA_STREAM, savedReport.uri)
+                        clipData = android.content.ClipData.newRawUri(brandString(R.string.report_clip_label), savedReport.uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }, brandString(R.string.share_diagnostic_report)))
+                }.onFailure { showDiagnosticReport(report) }
+            }.show()
 
     /** The text of a diagnostic report. It reads the session logs, so call it off the main thread. */
     private fun diagnosticReportText(appContext: Context): String = buildString {
@@ -6604,7 +6597,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             typeface = Typeface.MONOSPACE
             setTextIsSelectable(true)
         })
-        appDialogBuilder().setTitle(brandString(R.string.view_diagnostic_report))
+        appDialogBuilder().setTitle(brandString(R.string.report_clip_label))
             .setView(ScrollView(appDialogContext()).apply { addView(body) })
             .setPositiveButton(brandString(R.string.close), null).show()
     }

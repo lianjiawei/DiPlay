@@ -1,18 +1,14 @@
 <resources>
-    <string name="settings_existing_wifi_handshake">Connection method</string>
-    <string name="settings_existing_wifi_reuse">Reuse current Wi-Fi (no password)</string>
-    <string name="settings_existing_wifi_compatibility">Compatible connection (enter password)</string>
-    <string name="settings_existing_wifi_reuse_description">Connect both devices to the same Wi-Fi first. Saved changes apply next time.</string>
-    <string name="settings_existing_wifi_compatibility_description">Send the network name and WPA2 password to the iPhone over Bluetooth. Saved changes apply next time.</string>
+    <string name="settings_existing_wifi_setup_required">Open Connection settings and save the Wi-Fi name and password.</string>
+    <string name="settings_existing_wifi_credentials_description">Send the network name and WPA2 password to the iPhone over Bluetooth. Saved changes apply next time.</string>
     <string name="settings_existing_wifi_password_required">Enter the current Wi-Fi WPA2 password (8–63 characters).</string>
-    <string name="settings_existing_wifi_compatibility_name_hint">Choose or enter the network currently connected on the receiver. Enter its password again after changing networks.</string>
     <string name="settings_existing_wifi_manual">Enter network manually</string>
     <string name="settings_existing_wifi_select">Choose system Wi-Fi</string>
     <string name="settings_existing_wifi_connected">Connected · %1$s</string>
     <string name="settings_existing_wifi_saved">Saved · %1$s</string>
     <string name="settings_existing_wifi_available">Available · %1$s</string>
     <string name="settings_existing_wifi_unavailable">No Wi-Fi names are available. Enable Wi-Fi and system location, allow location access, or choose a network in system Wi-Fi settings.</string>
-    <string name="settings_existing_wifi_name_hint">The connected system Wi-Fi is used automatically. Only enter a name here if Android cannot show it; leave blank for automatic detection.</string>
+    <string name="settings_existing_wifi_name_hint">Choose or enter the network currently connected on the receiver. Enter its password again after changing networks.</string>
     <string name="settings_existing_wifi_switch_note">This switches the head unit’s Wi-Fi and may interrupt CarPlay. For a saved network, leave the password blank to use its system credentials. Otherwise enter the WPA2 password. Open networks need no password.</string>
     <string name="settings_existing_wifi_connect">Connect Wi-Fi</string>
     <string name="settings_existing_wifi_connecting">Wi-Fi connection requested. Wait for the system to connect before starting CarPlay.</string>
@@ -20,7 +16,7 @@
     <string name="existing_wifi_title">Existing Wi-Fi / Same LAN</string>
     <string name="existing_wifi_description">Use an existing router or portable Wi-Fi. Keep the iPhone and car on the same network with Internet access.</string>
     <string name="existing_wifi_hint">Existing Wi-Fi · Keep both devices on the same Wi-Fi and Bluetooth on. No car hotspot is needed.</string>
-    <string name="existing_wifi_instructions">Connect the head unit in system Wi-Fi settings. DiPlay reuses that connection without a password and does not configure the iPhone. Keep both devices on the same LAN and disable router client isolation. Changes apply to the next CarPlay connection.</string>
+    <string name="existing_wifi_instructions">Send the network name and WPA2 password to the iPhone over Bluetooth. Saved changes apply next time.</string>
     <string name="existing_wifi_details">External Wi-Fi details</string>
     <string name="existing_wifi_ssid">External Wi-Fi name (SSID)</string>
     <string name="existing_wifi_password">External Wi-Fi password</string>
@@ -678,7 +674,7 @@
     <string name="location_reporting_reconnects">Changing this setting reconnects an active CarPlay session.</string>
     <string name="diagnostic_report_saved_in_app">Your report was saved privately in Lincoln because a public save location was unavailable. Share it or view it here. Nothing is sent automatically.</string>
     <string name="diagnostic_report_saved_to_path">Your report was saved to:\n%1$s\n\nYou can also share it or view it here. Nothing is sent automatically.</string>
-    <string name="view_diagnostic_report">View report</string>
+    <string name="view_diagnostic_report">View</string>
     <string name="diagnostic_report_copy_hint">Touch and hold the report text to select and copy it. You can use this if no sharing app is available.</string>
     <string name="wheel_map_zoom">Zoom the dashboard map with the wheel</string>
     <string name="wheel_map_zoom_description">BYD\'s custom key switches the volume keys between volume and dashboard map zoom while the dashboard shows the CarPlay map. A call always keeps the volume. On some cars the console volume sends the same keys, so it zooms too while zoom is on. Uses Lincoln\'s wheel key service; the note on the dashboard needs ADB.</string>

@@ -222,9 +222,8 @@ class CarPlayHostActivity : ComponentActivity() {
         manualHotspotChannel = manualHotspotChannel,
         manualHotspotSecurity = manualHotspotSecurity,
         existingWifiSsid = existingWifiSsid,
-        existingWifiPassphrase = if (existingWifiLegacyHandshake && wirelessEnabled &&
+        existingWifiPassphrase = if (wirelessEnabled &&
             wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) existingWifiPassphrase else "",
-        existingWifiLegacyHandshake = existingWifiLegacyHandshake,
         locationReportingEnabled = locationReportingEnabled,
         availableCurrentMilliAmps = AirPlayPersistence.loadUsbChargingCurrent(this).milliAmps,
     )
@@ -502,7 +501,6 @@ class CarPlayHostActivity : ComponentActivity() {
     private var manualHotspotSsid = ""
     private var existingWifiSsid = ""
     private var existingWifiPassphrase = ""
-    private var existingWifiLegacyHandshake = false
     private val systemWifiPicker = SystemWifiPicker(this, { appDialogBuilder() }) {
         runCatching { startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)) }
     }
@@ -887,8 +885,7 @@ class CarPlayHostActivity : ComponentActivity() {
         locationReportingEnabled = AirPlayPersistence.loadLocationReportingEnabled(this)
         wirelessHotspotMode = AirPlayPersistence.loadWirelessHotspotMode(this)
         existingWifiSsid = AirPlayPersistence.loadExistingWifiSsid(this)
-        existingWifiLegacyHandshake = AirPlayPersistence.loadExistingWifiLegacyHandshake(this)
-        existingWifiPassphrase = if (existingWifiLegacyHandshake) AirPlayPersistence.loadExistingWifiPassphrase(this) else ""
+        existingWifiPassphrase = AirPlayPersistence.loadExistingWifiPassphrase(this)
         manualHotspotSsid = AirPlayPersistence.loadManualHotspotSsid(this)
         manualHotspotPassphrase = AirPlayPersistence.loadManualHotspotPassphrase(this)
         manualHotspotBand = AirPlayPersistence.loadManualHotspotBand(this)
@@ -3396,7 +3393,7 @@ class CarPlayHostActivity : ComponentActivity() {
         AirPlayPersistence.saveRemoteMfiToken(this, remoteMfiToken)
         AirPlayPersistence.saveWirelessHotspotMode(this, wirelessHotspotMode)
         AirPlayPersistence.saveExistingWifiCredentials(this, existingWifiSsid,
-            if (existingWifiLegacyHandshake) existingWifiPassphrase else "", existingWifiLegacyHandshake)
+            existingWifiPassphrase)
         AirPlayPersistence.saveManualHotspotSsid(this, manualHotspotSsid)
         AirPlayPersistence.saveManualHotspotPassphrase(this, manualHotspotPassphrase)
         AirPlayPersistence.saveManualHotspotBand(this, manualHotspotBand)
@@ -3428,7 +3425,7 @@ class CarPlayHostActivity : ComponentActivity() {
     /** Mirrors [persistMenuSettings]: a field staged there belongs here too. */
     private fun menuSettingsSignature(): Int = listOf(
         gestureFingerCount, wirelessEnabled, mfiTarget, mfiI2cPath, remoteMfiServer, remoteMfiToken,
-        wirelessHotspotMode, existingWifiSsid, existingWifiLegacyHandshake, existingWifiPassphrase, manualHotspotSsid,
+        wirelessHotspotMode, existingWifiSsid, existingWifiPassphrase, manualHotspotSsid,
         manualHotspotPassphrase, manualHotspotBand, manualHotspotChannel, manualHotspotSecurity,
         locationReportingEnabled, autoStartOnBoot, advancedAudioChannelMapping, displayScaleTenths,
         displayScalePercent, carPlayCornerRadiusDp, fps, widthPhysicalMm, physicalSizeBasis, hevcEnabled,
@@ -4452,35 +4449,11 @@ class CarPlayHostActivity : ComponentActivity() {
         )
         manualHotspotFields = manualFields
         manualHotspotErrorView = error
-        val currentWifi = ExistingWifiNetworks.read(this).firstOrNull { it.connected }
-        val displayedSsid = if (existingWifiLegacyHandshake) existingWifiSsid else currentWifi?.ssid ?: existingWifiSsid
-        val existingInstructions = menuText("", 14f, MENU_SECONDARY)
-        val existingNameHint = menuText("", 14f, MENU_SECONDARY)
-        lateinit var legacyPasswordRow: View
+        val displayedSsid = existingWifiSsid
         lateinit var nameInput: EditText
         lateinit var passwordInput: EditText
-        fun updateHandshake() {
-            existingInstructions.text = brandString(if (existingWifiLegacyHandshake)
-                R.string.settings_existing_wifi_compatibility_description else R.string.settings_existing_wifi_reuse_description)
-            existingNameHint.text = brandString(if (existingWifiLegacyHandshake)
-                R.string.settings_existing_wifi_compatibility_name_hint else R.string.settings_existing_wifi_name_hint)
-            legacyPasswordRow.visibility = if (existingWifiLegacyHandshake) View.VISIBLE else View.GONE
-        }
-        val existingFields = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        existingFields.addView(settingsChoiceRow(brandString(R.string.settings_existing_wifi_handshake),
-            listOf(false to brandString(R.string.settings_existing_wifi_reuse),
-                true to brandString(R.string.settings_existing_wifi_compatibility)), existingWifiLegacyHandshake) {
-            existingWifiLegacyHandshake = it
-            if (it && existingWifiSsid != nameInput.text.toString()) {
-                existingWifiSsid = nameInput.text.toString()
-                existingWifiPassphrase = ""
-                passwordInput.text.clear()
-            }
-            updateHandshake()
-        })
-        existingFields.addView(existingInstructions)
+        val existingFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        existingFields.addView(menuText(brandString(R.string.settings_existing_wifi_credentials_description), 14f, MENU_SECONDARY))
         val chooseWifi = DiPlayButton(this).apply {
             text = "${brandString(R.string.settings_existing_wifi_select)} · " +
                 displayedSsid.ifEmpty { brandString(R.string.auto) }
@@ -4496,7 +4469,6 @@ class CarPlayHostActivity : ComponentActivity() {
         existingFields.addView(chooseWifi, LinearLayout.LayoutParams(-1, -2).apply {
             topMargin = dp(SWIPE_ACTION_GAP_DP)
         })
-        existingFields.addView(existingNameHint)
         existingFields.addView(settingsInputRow(brandString(R.string.existing_wifi_ssid),
             displayedSsid, onInputCreated = { nameInput = it }) {
             if (existingWifiSsid != it) {
@@ -4506,13 +4478,12 @@ class CarPlayHostActivity : ComponentActivity() {
             existingWifiSsid = it
             existingWifiErrorView?.visibility = View.GONE
         })
-        legacyPasswordRow = settingsInputRow(brandString(R.string.existing_wifi_password),
+        val passwordRow = settingsInputRow(brandString(R.string.existing_wifi_password),
             existingWifiPassphrase, password = true, onInputCreated = { passwordInput = it }) {
             existingWifiPassphrase = it
             existingWifiErrorView?.visibility = View.GONE
         }
-        existingFields.addView(legacyPasswordRow)
-        updateHandshake()
+        existingFields.addView(passwordRow)
         existingWifiErrorView = menuText("", 14f, MENU_DANGER).apply { visibility = View.GONE }
         existingFields.addView(existingWifiErrorView)
         section.addView(existingFields)
@@ -4552,13 +4523,13 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun validateManualHotspotSettings(): Boolean {
+        if (!wirelessEnabled) return true
         if (wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI) {
             val error = when {
-                existingWifiLegacyHandshake && existingWifiPassphrase.length !in 8..63 ->
+                existingWifiPassphrase.length !in 8..63 ->
                     brandString(R.string.settings_existing_wifi_password_required)
-                existingWifiSsid.isEmpty() && !existingWifiLegacyHandshake -> null
                 else -> com.shilapi.xcertplay.orchestration.ManualHotspotValidation.error(existingWifiSsid,
-                    if (existingWifiLegacyHandshake) existingWifiPassphrase else "")?.let { brandString(it.messageResource()) }
+                    existingWifiPassphrase)?.let { brandString(it.messageResource()) }
             }
             existingWifiErrorView?.text = error.orEmpty()
             existingWifiErrorView?.visibility = if (error == null) View.GONE else View.VISIBLE
@@ -5446,6 +5417,12 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun startCarPlay(size: DisplaySize) {
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
+        if (wirelessEnabled && wirelessHotspotMode == WirelessHotspotMode.EXISTING_WIFI &&
+            !validateManualHotspotSettings()) {
+            startupRetryStopped = true
+            setConnectionStage(R.string.settings_existing_wifi_setup_required)
+            return
+        }
         val controllerGeneration = restartGeneration
         // Settings → Connection can change the target while this screen stays open (#696).
         mfiTarget = AirPlayPersistence.loadMfiTarget(this)
@@ -6618,6 +6595,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     // The keywords are English; matching the English text keeps the result the same in every UI language.
     private fun friendlyStage(message: String, englishMessage: String = message): String = when {
+        message == brandString(R.string.settings_existing_wifi_setup_required) -> message
         message == brandString(R.string.vpn_authorization_unavailable) -> message
         message == brandString(R.string.waiting_for_mfi_coprocessor) ||
             message == brandString(R.string.requesting_mfi_usb_permission) -> message

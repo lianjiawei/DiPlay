@@ -57,7 +57,7 @@ class ExistingWifiScreenshotsTest {
                 val choose = descendants(parent).filterIsInstance<Button>().single { it.text.contains(" · ") }
                 choose.performClick()
                 val details = ShadowAlertDialog.getLatestAlertDialog()
-                assertEquals(1, descendants(details.window!!.decorView).filterIsInstance<EditText>().count { it.visibility == View.VISIBLE })
+                assertEquals(2, descendants(details.window!!.decorView).filterIsInstance<EditText>().count { it.visibility == View.VISIBLE })
                 capture(details, "$name-details", width, height)
                 descendants(details.window!!.decorView).filterIsInstance<ImageButton>().single {
                     it.contentDescription.toString().startsWith(activity.getString(R.string.settings_existing_wifi_select) + " · ")
@@ -70,6 +70,9 @@ class ExistingWifiScreenshotsTest {
                 assertTrue(descendants(password.window!!.decorView).filterIsInstance<EditText>().any {
                     it.inputType and android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD != 0
                 })
+                assertTrue(descendants(password.window!!.decorView).filterIsInstance<EditText>().all {
+                    it.transformationMethod is android.text.method.PasswordTransformationMethod
+                })
                 capture(password, "$name-password", width, height)
                 password.dismiss(); details.dismiss(); activity.finish()
             }
@@ -79,7 +82,7 @@ class ExistingWifiScreenshotsTest {
         }
     }
 
-    @Test @Config(sdk = [29]) fun bothHandshakeFormsKeepSaveReachableAcrossOrientationsAndLargeText() {
+    @Test @Config(sdk = [29]) fun credentialFormKeepsSaveReachableAcrossOrientationsAndLargeText() {
         val app = RuntimeEnvironment.getApplication()
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         try {
@@ -92,9 +95,9 @@ class ExistingWifiScreenshotsTest {
                 RuntimeEnvironment.setFontScale(1.3f)
                 DiPlayPreferences.saveAutoConnect(app, false)
                 UpdateAvailability.saveBackgroundChecksEnabled(app, false)
-                for (legacy in listOf(false, true)) {
+                run {
                     AirPlayPersistence.saveAppAppearance(app, AppAppearance.DARK)
-                    AirPlayPersistence.saveExistingWifiCredentials(app, "Lian", if (legacy) "test-password" else "", legacy)
+                    AirPlayPersistence.saveExistingWifiCredentials(app, "Lian", "test-password")
                     AirPlayPersistence.saveWirelessHotspotMode(app, WirelessHotspotMode.EXISTING_WIFI)
                     val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
                         Intent(app, DiPlayActivity::class.java).putExtra("page", "connection")).setup().visible()
@@ -103,8 +106,8 @@ class ExistingWifiScreenshotsTest {
                         ReflectionHelpers.callInstanceMethod<Unit>(screen, "askExistingWifiNetwork")
                         val dialog = ShadowAlertDialog.getLatestAlertDialog()
                         val inputs = descendants(dialog.window!!.decorView).filterIsInstance<EditText>().filter { it.visibility == View.VISIBLE }.toList()
-                        assertEquals(if (legacy) 2 else 1, inputs.size)
-                        capture(dialog, "$name-${if (legacy) "compatibility" else "reuse"}", width, height)
+                        assertEquals(2, inputs.size)
+                        capture(dialog, "$name-credentials", width, height)
                         dialog.dismiss()
                     } finally { controller.pause().stop().destroy() }
                 }

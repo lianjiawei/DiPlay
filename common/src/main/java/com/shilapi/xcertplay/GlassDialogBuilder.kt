@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import kotlin.math.roundToInt
+import androidx.core.widget.doAfterTextChanged
 
 /** Styles the framework dialog after inflation; its adapters, listeners and dismiss rules stay native. */
 internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Builder(owner,owner.appDialogTheme()) {
@@ -105,5 +106,41 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
             }
             if(checks!=null)for(i in 0 until checks.size())setItemChecked(checks.keyAt(i),checks.valueAt(i))
         }
+        fitMessageContent(dialog, decor, density)
+        decor.findViewById<TextView>(android.R.id.message)?.doAfterTextChanged {
+            decor.post { if (dialog.isShowing) fitMessageContent(dialog, decor, density) }
+        }
+    }
+
+    /** OEM alert themes can reserve a tall window even for a one-line confirmation. */
+    private fun fitMessageContent(dialog: AlertDialog, decor: View, density: Float) {
+        if (dialog.listView != null) return
+        val message = decor.findViewById<TextView>(android.R.id.message) ?: return
+        if (!message.isShown) return
+        fun panel(name: String): View? = owner.resources.getIdentifier(name, "id", "android")
+            .takeIf { it != 0 }?.let { decor.findViewById(it) }
+        // Form and list dialogs keep their own scrolling and sizing policy.
+        if (panel("customPanel")?.visibility == View.VISIBLE) return
+        val content = decor.findViewById<View>(android.R.id.content) ?: return
+        val window = dialog.window ?: return
+        val configuration = owner.resources.configuration
+        fun dp(value: Int) = (value * density).roundToInt()
+        val width = minOf(dp(FidelitySettingsMetrics.DIALOG_FORM_MAX_WIDTH_DP),
+            dp(configuration.screenWidthDp - 2 * FidelitySettingsMetrics.CONTENT_PAD_DP)).coerceAtLeast(1)
+        val availableHeight = dp(configuration.screenHeightDp - 2 * GlassChrome.CONTROL_GAP_DP).coerceAtLeast(1)
+        val verticalInsets = decor.paddingTop + decor.paddingBottom
+        for (view in listOfNotNull(content, panel("parentPanel"), panel("contentPanel"))) {
+            view.minimumHeight = 0
+            view.layoutParams = view.layoutParams.apply {
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                if (this is android.widget.LinearLayout.LayoutParams) weight = 0f
+            }
+        }
+        content.forceLayout()
+        content.measure(View.MeasureSpec.makeMeasureSpec(
+            (width - decor.paddingLeft - decor.paddingRight).coerceAtLeast(1), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec((availableHeight - verticalInsets).coerceAtLeast(1), View.MeasureSpec.AT_MOST))
+        // Use the measured height explicitly: WRAP_CONTENT alone can still inherit an OEM fixed height.
+        window.setLayout(width, (content.measuredHeight + verticalInsets).coerceAtMost(availableHeight))
     }
 }
