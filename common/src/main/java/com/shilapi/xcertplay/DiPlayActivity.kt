@@ -14,6 +14,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.widget.FrameLayout
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -803,7 +804,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val scroll = ScrollView(this).apply {
             background = SceneBackdrop(this@DiPlayActivity, appNight,
-                quiet = page != "home" || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
+                quiet = page != "home" || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT,
+                readingShare = if (page == "home") ConnectionScreenMetrics.CONTENT_SHARE else .5f,
+                strongReadingVeil = page == "home")
             isFillViewport = true; clipToPadding = false
         }
         rootScroll = scroll
@@ -916,7 +919,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val brandTextSize = if (home || compact) 20 else 26
         val brandLabel = label(VehicleBranding.displayName(this@DiPlayActivity), brandTextSize, TEXT, true,
             centreGlyphs = resources.configuration.locales[0].language != "zh").apply {
-            setPadding(if (compact) dp(8) else dp(12), 0, 0, 0)
+            setPadding(if (compact && !home) dp(8) else dp(12), 0, 0, 0)
             maxLines = 1
             TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12,
                 if (home) 20 else if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)
@@ -1083,17 +1086,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun home(content: LinearLayout) {
         val body = column()
-        val hero = column().apply { gravity = Gravity.CENTER_HORIZONTAL; clipChildren = false; clipToPadding = false }
-        hero.addView(StableConnectionTextView(this, intArrayOf(R.string.ui_glass_home_title,
-            R.string.ui_glass_connecting_title, R.string.carplay_connected)).apply {
+        val headline = StableConnectionTextView(this, ConnectionScreenCopy.headlines).apply {
             text=brandString(R.string.ui_glass_home_title);textSize=UiTypography.HERO_SP.toFloat()
             homeHeadline=this
             gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif", Typeface.BOLD)
             includeFontPadding = false
             SceneText.apply(this, appNight)
-        }, LinearLayout.LayoutParams(-1, -2))
+        }
         homeConnectionRing = ConnectionRingView(this).apply { appearance(appNight) }
-        hero.addView(homeConnectionRing, LinearLayout.LayoutParams(dp(156),dp(156)).apply { topMargin=dp(8) })
         val phone = actionButton(if (DiPlayPreferences.phoneAddress(this) == null) brandString(R.string.choose_iphone)
             else DiPlayPreferences.phoneName(this), false) { choosePhone() }.apply {
             SceneText.apply(this, appNight); textSize=UiTypography.ROW_SP.toFloat(); includeFontPadding=false
@@ -1107,27 +1107,27 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setCompoundDrawablesRelative(null,null,arrow,null)
             doOnLayout { background=RippleDrawable(ColorStateList.valueOf(RIPPLE),ColorDrawable(Color.TRANSPARENT),null) }
         }
-        hero.addView(phone,LinearLayout.LayoutParams(-2,-2).apply { topMargin=dp(-8);gravity=Gravity.CENTER_HORIZONTAL })
         phone.minHeight=dp(40)
-        status=StableConnectionTextView(this, intArrayOf(R.string.setup_needs_attention,
-            R.string.carplay_connected, R.string.ui_glass_connecting_hint,
-            R.string.ui_glass_paired_waiting, R.string.ready_when_you_are)).apply {
+        phone.maxLines=1;phone.ellipsize=android.text.TextUtils.TruncateAt.END
+        status=StableConnectionTextView(this, ConnectionScreenCopy.allStages).apply {
             text=brandString(R.string.ready_when_you_are);textSize=UiTypography.BODY_SP.toFloat()
             gravity=Gravity.CENTER;includeFontPadding=false;SceneText.apply(this, appNight, secondary=true)
         }
-        hero.addView(status,LinearLayout.LayoutParams(-1,-2))
         connectButton=button(brandString(R.string.ui_glass_connect_carplay),true) {
             if (CarPlayBackgroundSession.hasSession()) openProjection() else connect(true)
-        }.apply { textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
+        }.apply { textSize=UiTypography.ACTION_SP.toFloat();includeFontPadding=false;minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
         disconnectButton=button(brandString(R.string.disconnect),false) {
             disconnectButton?.isEnabled=false
             CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
         }.apply {
-            visibility=View.GONE;textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);centeredIconGroup=true
+            visibility=View.GONE;textSize=UiTypography.ACTION_SP.toFloat();includeFontPadding=false;minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);centeredIconGroup=true
             persistentStartIcon=getDrawable(R.drawable.ic_dp_usb)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
             setCompoundDrawablesRelative(persistentStartIcon,null,null,null);compoundDrawablePadding=dp(8)
         }
-        hero.addView(connectButton,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(4) })
+        val primarySlot = FrameLayout(this).apply {
+            addView(connectButton, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+        }
+        val hero = ConnectionContentLayout(this, headline, homeConnectionRing!!, phone, status!!, primarySlot)
         val usb=headerButton(brandString(R.string.connect_with_usb),R.drawable.ic_dp_usb,true) { connect(false) }.apply {
             textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false);centeredIconGroup=true
         }

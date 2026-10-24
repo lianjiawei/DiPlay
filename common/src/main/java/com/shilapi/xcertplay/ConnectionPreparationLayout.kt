@@ -11,7 +11,7 @@ internal object ConnectionScreenMetrics {
     const val ACTION_WIDTH_DP = 360
     const val HEADER_RESERVE_DP = 64
     const val SIDE_DP = 24
-    const val BOTTOM_DP = 24
+    const val BOTTOM_DP = ReferenceHomeMetrics.BOTTOM_DP
     const val ACTION_GAP_DP = 16
     const val BRAND_TOP_DP = 16
     const val BRAND_HEIGHT_DP = 44
@@ -23,10 +23,14 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
     private lateinit var brand: View
     private lateinit var brandLabel: TextView
     private lateinit var actions: View
+    private val wordmark = HomeBrandView(context)
+    private var footerHeight = 0
+    private var footerStackHeight = 0
+    private var landscape = false
     private var contentWidth = 0
     private var headerReserve = 0
     private var brandTopInset = 0
-    val usesFullWidthContent get() = contentWidth >= width - paddingLeft - paddingRight
+    val usesFullWidthContent get() = contentWidth >= width-paddingLeft-paddingRight-dp(ConnectionScreenMetrics.SIDE_DP*2)
 
     init { isClickable = true; addView(contentArea) }
 
@@ -37,6 +41,7 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         contentArea.addView(content, FrameLayout.LayoutParams(-1, -1))
         addView(brand)
         addView(actions)
+        addView(wordmark)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -45,37 +50,46 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         setMeasuredDimension(width, height)
         val availableWidth = (width - paddingLeft - paddingRight).coerceAtLeast(1)
         val compactHeight = height - paddingTop - paddingBottom < dp(300)
-        headerReserve = dp(if (compactHeight) 32 else ConnectionScreenMetrics.HEADER_RESERVE_DP)
-        brandTopInset = dp(if (compactHeight) 0 else ConnectionScreenMetrics.BRAND_TOP_DP)
-        contentWidth = (availableWidth * if (width > height * 1.3f)
-            ConnectionScreenMetrics.CONTENT_SHARE else 1f).toInt().coerceAtLeast(1)
-        val actionWidth = minOf(dp(ConnectionScreenMetrics.ACTION_WIDTH_DP),
-            (contentWidth - dp(ConnectionScreenMetrics.SIDE_DP * 2)).coerceAtLeast(1))
-        actions.measure(exact(actionWidth), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
-        val brandWidth = MeasureSpec.makeMeasureSpec(
-            (availableWidth - dp(ConnectionScreenMetrics.SIDE_DP * 2)).coerceAtLeast(1), MeasureSpec.AT_MOST)
-        brandLabel.measure(brandWidth, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
-        val brandHeight = maxOf(brandLabel.measuredHeight, dp(if (compactHeight) 28 else ConnectionScreenMetrics.BRAND_HEIGHT_DP))
-        brand.measure(brandWidth, exact(brandHeight))
-        headerReserve = maxOf(headerReserve, brandTopInset + brandHeight + dp(4))
-        val bodyHeight = (height - paddingTop - paddingBottom - headerReserve -
-            actions.measuredHeight - dp(ConnectionScreenMetrics.BOTTOM_DP + if (compactHeight) 4 else ConnectionScreenMetrics.ACTION_GAP_DP))
-            .coerceAtLeast(1)
-        // Very short landscape windows use the available width for a two-column composition.
-        if (bodyHeight < dp(200) && width > height * 1.3f) contentWidth = availableWidth
+        landscape = availableWidth > (height-paddingTop-paddingBottom)*1.3f
+        brandTopInset = dp(if (compactHeight) 0 else ReferenceHomeMetrics.TOP_DP)
+        brandLabel.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+        val brandHeight = maxOf(brandLabel.measuredHeight, dp(if (compactHeight) 32 else ReferenceHomeMetrics.HEADER_DP))
+        headerReserve = brandTopInset + brandHeight + dp(ReferenceHomeMetrics.HEADER_GAP_DP)
+        val innerWidth = (availableWidth-dp(ConnectionScreenMetrics.SIDE_DP*2)).coerceAtLeast(1)
+        val actionWidth = ConnectionPageLayout.actionWidth(innerWidth, landscape, resources.displayMetrics.density)
+        footerHeight = ConnectionPageLayout.actionHeight(context, actionWidth)
+        val row = actions as android.widget.LinearLayout
+        for (i in 0 until row.childCount) {
+            row.getChildAt(i).layoutParams = (row.getChildAt(i).layoutParams as android.widget.LinearLayout.LayoutParams).apply {
+                this.width = actionWidth; this.height = footerHeight; weight = 0f
+                marginEnd = if (i == 0) innerWidth-actionWidth*2 else 0
+            }
+        }
+        actions.measure(exact(innerWidth), exact(footerHeight))
+        val wordmarkWidth = if (landscape) (innerWidth-actionWidth*2-dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP*2)).coerceAtLeast(0) else innerWidth
+        wordmark.measure(exact(wordmarkWidth), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+        footerStackHeight = if (landscape) maxOf(footerHeight,wordmark.measuredHeight)
+            else footerHeight+wordmark.measuredHeight+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        brand.measure(MeasureSpec.makeMeasureSpec(innerWidth, MeasureSpec.AT_MOST), exact(brandHeight))
+        val bodyHeight = (height-paddingTop-paddingBottom-headerReserve-footerStackHeight-
+            dp(ConnectionScreenMetrics.BOTTOM_DP + ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)).coerceAtLeast(1)
+        contentWidth = ConnectionPageLayout.contentWidth(availableWidth, bodyHeight, landscape, resources.displayMetrics.density)
+        (contentArea.getChildAt(0) as ConnectionContentLayout).actionHeight = footerHeight
         contentArea.measure(exact(contentWidth), exact(bodyHeight))
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         val bodyTop = paddingTop + headerReserve
-        contentArea.layout(paddingLeft, bodyTop, paddingLeft + contentWidth, bodyTop + contentArea.measuredHeight)
-        val brandLeft = paddingLeft + dp(ConnectionScreenMetrics.SIDE_DP)
-        val brandTop = paddingTop + brandTopInset
-        brand.layout(brandLeft, brandTop, brandLeft + brand.measuredWidth, brandTop + brand.measuredHeight)
-        val actionLeft = paddingLeft + (contentWidth - actions.measuredWidth) / 2
-        val actionBottom = height - paddingBottom - dp(ConnectionScreenMetrics.BOTTOM_DP)
-        actions.layout(actionLeft, actionBottom - actions.measuredHeight,
-            actionLeft + actions.measuredWidth, actionBottom)
+        val start = paddingLeft+dp(ConnectionScreenMetrics.SIDE_DP)
+        contentArea.layout(start, bodyTop, start+contentWidth, bodyTop+contentArea.measuredHeight)
+        val brandTop = paddingTop+brandTopInset
+        brand.layout(start, brandTop, start+brand.measuredWidth, brandTop+brand.measuredHeight)
+        val footerBottom = height-paddingBottom-dp(ConnectionScreenMetrics.BOTTOM_DP)
+        val actionTop = footerBottom-footerStackHeight
+        actions.layout(start, actionTop, start+actions.measuredWidth, actionTop+actions.measuredHeight)
+        val wordmarkTop = if (landscape) actionTop+(footerStackHeight-wordmark.measuredHeight)/2 else footerBottom-wordmark.measuredHeight
+        val wordmarkLeft = paddingLeft+(width-paddingLeft-paddingRight-wordmark.measuredWidth)/2
+        wordmark.layout(wordmarkLeft, wordmarkTop, wordmarkLeft+wordmark.measuredWidth, wordmarkTop+wordmark.measuredHeight)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
@@ -94,6 +108,8 @@ internal class ConnectionContentLayout(
     private var side = 0
     private var visualHeight = 0
     private var detailsHeight = 0
+    var actionHeight = 0
+    private val hintMeasure = StableConnectionTextView(context, ConnectionScreenCopy.hints).apply { includeFontPadding = false }
 
     init {
         listOf(headline, phone, stage).forEach { it.includeFontPadding = false }
@@ -105,44 +121,48 @@ internal class ConnectionContentLayout(
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val height = MeasureSpec.getSize(heightMeasureSpec)
         setMeasuredDimension(width, height)
-        side = dp(ConnectionScreenMetrics.SIDE_DP)
-        gap = dp(if (height < dp(140)) 4 else if (height < dp(240)) 6 else 10)
-        val innerWidth = (width - side * 2).coerceAtLeast(1)
-        columns = height < dp(200) && innerWidth >= dp(480)
-        visualWidth = if (columns) (innerWidth * .42f).toInt() else innerWidth
-        detailsWidth = if (columns) innerWidth - visualWidth - gap else innerWidth
+        side = 0
+        gap = dp(if (height < dp(140)) 4 else ConnectionPageLayout.CONTENT_GAP_DP)
+        val innerWidth = width.coerceAtLeast(1)
+        columns = height < dp(ConnectionPageLayout.SHORT_BODY_DP) && innerWidth >= dp(320)
+        visualWidth = if (columns) (innerWidth*.42f).toInt() else innerWidth
+        detailsWidth = if (columns) innerWidth-visualWidth-gap else innerWidth
         val compact = height < dp(140)
-        headline.textSize = if (compact) 18f else if (height < dp(200)) 20f else UiTypography.COMPACT_PAGE_SP.toFloat()
+        headline.textSize = if (compact) 18f else if (columns) 20f else UiTypography.HERO_SP.toFloat()
         phone.textSize = if (compact) 14f else UiTypography.ROW_SP.toFloat()
         stage.textSize = if (compact) 12f else UiTypography.BODY_SP.toFloat()
-        for (index in 0 until hint.childCount) (hint.getChildAt(index) as TextView).textSize = if (compact) 12f else UiTypography.CAPTION_SP.toFloat()
-        fun measureText() {
-            headline.measure(exact(visualWidth), unspecified())
-            listOf(phone, stage, hint).forEach { it.measure(exact(detailsWidth), unspecified()) }
-            detailsHeight = phone.measuredHeight + stage.measuredHeight + hint.measuredHeight + gap * 2
+        hintMeasure.textSize = if (compact) 12f else UiTypography.CAPTION_SP.toFloat()
+        var primaryAction = false
+        for (index in 0 until hint.childCount) {
+            val child = hint.getChildAt(index)
+            if (child is android.widget.Button) primaryAction = true
+            else (child as? TextView)?.textSize = hintMeasure.textSize / resources.displayMetrics.scaledDensity
         }
-        measureText()
-        val normalRing = dp(if (columns) 72 else 120)
-        val ringRoom = height - headline.measuredHeight - gap -
-            if (columns) 0 else detailsHeight + gap
-        val ringSize = minOf(normalRing, ringRoom).coerceAtLeast(dp(32))
+        headline.measure(exact(visualWidth), unspecified())
+        phone.measure(MeasureSpec.makeMeasureSpec(detailsWidth, MeasureSpec.AT_MOST), unspecified())
+        phone.measure(exact(phone.measuredWidth), exact(maxOf(phone.measuredHeight, dp(if (compact) 20 else ConnectionPageLayout.PHONE_DP))))
+        stage.measure(exact(detailsWidth), unspecified())
+        hintMeasure.measure(exact(detailsWidth), unspecified())
+        val detailHeight = maxOf(hintMeasure.measuredHeight, if (!compact || primaryAction) actionHeight else 0)
+        hint.measure(exact(detailsWidth), exact(detailHeight))
+        detailsHeight = phone.measuredHeight+stage.measuredHeight+hint.measuredHeight+gap*2
+        val ringRoom = height-headline.measuredHeight-gap-(if (columns) 0 else detailsHeight+gap)
+        val ringSize = minOf(dp(ConnectionPageLayout.RING_DP), ringRoom).coerceAtLeast(dp(ReferenceHomeMetrics.MIN_RING_DP))
         ring.measure(exact(ringSize), exact(ringSize))
-        visualHeight = headline.measuredHeight + gap + ringSize
+        visualHeight = headline.measuredHeight+gap+ringSize
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-        val groupHeight = if (columns) maxOf(visualHeight, detailsHeight) else visualHeight + gap + detailsHeight
-        val groupTop = ((height - groupHeight) / 2).coerceAtLeast(0)
-        val visualTop = if (columns) ((height - visualHeight) / 2).coerceAtLeast(0) else groupTop
-        headline.layout(side, visualTop, side + visualWidth, visualTop + headline.measuredHeight)
-        val ringLeft = side + (visualWidth - ring.measuredWidth) / 2
-        val ringTop = headline.bottom + gap
-        ring.layout(ringLeft, ringTop, ringLeft + ring.measuredWidth, ringTop + ring.measuredHeight)
-        val detailsLeft = if (columns) side + visualWidth + gap else side
-        var y = if (columns) ((height - detailsHeight) / 2).coerceAtLeast(0) else ring.bottom + gap
+        headline.layout(side, 0, side+visualWidth, headline.measuredHeight)
+        val ringLeft = side+(visualWidth-ring.measuredWidth)/2
+        val ringTop = headline.bottom+gap
+        ring.layout(ringLeft, ringTop, ringLeft+ring.measuredWidth, ringTop+ring.measuredHeight)
+        val detailsLeft = if (columns) side+visualWidth+gap else side
+        var y = if (columns) 0 else ring.bottom+gap
         for (view in listOf(phone, stage, hint)) {
-            view.layout(detailsLeft, y, detailsLeft + detailsWidth, y + view.measuredHeight)
-            y += view.measuredHeight + gap
+            val x = detailsLeft+(detailsWidth-view.measuredWidth)/2
+            view.layout(x, y, x+view.measuredWidth, y+view.measuredHeight)
+            y += view.measuredHeight+gap
         }
     }
 

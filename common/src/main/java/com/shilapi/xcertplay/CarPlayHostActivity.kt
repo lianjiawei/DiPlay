@@ -1854,29 +1854,29 @@ class CarPlayHostActivity : ComponentActivity() {
         root.addView(video, FrameLayout.LayoutParams(-1, -1))
         root.addView(gestureLayer, FrameLayout.LayoutParams(-1, -1))
         val viewport = ConnectionPreparationLayout(this)
-        val headline=TextView(this).apply {
-            text=brandString(R.string.connecting_to_your_iphone);textSize=UiTypography.COMPACT_PAGE_SP.toFloat()
-            gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+        val headline=StableConnectionTextView(this, ConnectionScreenCopy.headlines).apply {
+            text=brandString(R.string.connecting_to_your_iphone);textSize=UiTypography.HERO_SP.toFloat()
+            gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif",Typeface.BOLD)
         }
         val ring = ConnectionRingView(this).apply { appearance(appNight); state(connecting = true) }
         connectionRing = ring
         val icon = BrandMarkView(this,appNight)
         connectionIconView = icon
         val title=TextView(this).apply {
-            text=VehicleBranding.displayName(context);textSize=22f
-            gravity=Gravity.CENTER_VERTICAL;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+            text=VehicleBranding.displayName(context);textSize=20f;includeFontPadding=false
+            gravity=Gravity.CENTER_VERTICAL;typeface=Typeface.create("sans-serif",Typeface.BOLD)
         }
         connectionTitleView=title
         val brandHeader=LinearLayout(this).apply {
             orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
-            addView(icon,LinearLayout.LayoutParams(dp(32),-1).apply { marginEnd=dp(12) })
+            addView(icon,LinearLayout.LayoutParams(dp(32),dp(40)).apply { marginEnd=dp(12) })
             addView(title,LinearLayout.LayoutParams(-2,-1))
         }
         val phone=TextView(this).apply {
             text=DiPlayPreferences.phoneName(this@CarPlayHostActivity);textSize=UiTypography.ROW_SP.toFloat();gravity=Gravity.CENTER
             maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
         }
-        val stage = StableConnectionTextView(this, ConnectionScreenCopy.stages).apply {
+        val stage = StableConnectionTextView(this, ConnectionScreenCopy.allStages).apply {
             text = brandString(R.string.getting_carplay_ready)
             gravity = Gravity.CENTER
         }
@@ -1952,12 +1952,13 @@ class CarPlayHostActivity : ComponentActivity() {
         paintWaitingScreen = {
             paintedVehicleModel = AirPlayPersistence.loadVehicleModel(this)
             // The connection screen is DiPlay chrome: follow the app theme, not the day/night mode sent to CarPlay.
-            viewport.background = SceneBackdrop(this, appNight, quiet = false,
-                readingShare = ConnectionScreenMetrics.CONTENT_SHARE, fullWidthReading = { viewport.usesFullWidthContent })
+            viewport.background = SceneBackdrop(this, appNight, quiet = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT,
+                readingShare = ConnectionScreenMetrics.CONTENT_SHARE, fullWidthReading = { viewport.usesFullWidthContent },
+                strongReadingVeil = true)
             ring.appearance(appNight)
             icon.appearance(appNight)
-            for (text in listOf(title, headline, phone, stage)) SceneText.apply(text, appNight)
-            for (text in listOf(instructions, help, gestureHint)) SceneText.apply(text, appNight, secondary = true)
+            for (text in listOf(title, headline, phone)) SceneText.apply(text, appNight)
+            for (text in listOf(stage, instructions, help, gestureHint)) SceneText.apply(text, appNight, secondary = true)
             val buttonPalette = DiPlayPalette.of(appNight)
             back.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
             connectionHelp.style(DiPlayButtonKind.SECONDARY, buttonPalette, overlay = false)
@@ -2014,7 +2015,8 @@ class CarPlayHostActivity : ComponentActivity() {
         for (button in listOf(back, connectionHelp, recovery, retry)) {
             button.textSize = UiTypography.ACTION_SP.toFloat()
             button.minHeight = dp(GlassChrome.MIN_TARGET_DP)
-            button.setPadding(dp(20), dp(8), dp(20), dp(8))
+            button.includeFontPadding = false
+            button.setPadding(dp(16), dp(8), dp(16), dp(8))
         }
         ViewCompat.setOnApplyWindowInsetsListener(viewport) { _, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())

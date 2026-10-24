@@ -164,7 +164,7 @@ class ConnectionScreenPresentationTest {
                 assertTrue("Headline must clear the brand header", bounds(headline).top >= bounds(title).bottom)
                 assertTrue("Actions stay on screen", bounds(row).bottom <= height + 1)
                 assertEquals("Bottom actions keep their safe margin", height - panel.paddingBottom - ConnectionScreenMetrics.BOTTOM_DP * density,
-                    bounds(row).bottom, 1f)
+                    maxOf(bounds(row).bottom, bounds(descendants(panel).filterIsInstance<HomeBrandView>().single()).bottom), 1f)
                 val stage = ReflectionHelpers.getField<TextView>(host, "stageStatusView")
                 val instructions = ReflectionHelpers.getField<TextView>(host, "connectionInstructionsView")
                 val ring = ReflectionHelpers.getField<View>(host, "connectionRing")

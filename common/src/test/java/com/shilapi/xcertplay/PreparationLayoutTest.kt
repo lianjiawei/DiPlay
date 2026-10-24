@@ -46,7 +46,7 @@ class PreparationLayoutTest {
             assertEquals(0, viewport.scrollY)
             assertEquals(1f, panel.scaleX, 0f)
             assertEquals(1f, panel.scaleY, 0f)
-            assertEquals(viewport.height - viewport.paddingBottom - (ConnectionScreenMetrics.BOTTOM_DP * density).toInt(), actions.bottom)
+            assertEquals(viewport.height - viewport.paddingBottom - (ConnectionScreenMetrics.BOTTOM_DP * density).toInt(), maxOf(actions.bottom, (viewport.getChildAt(3) as HomeBrandView).bottom))
             assertTrue(actions.height >= 48 * density)
             assertTrue(body.bottom <= actions.top)
             assertEquals(body.height, panel.height)
@@ -60,6 +60,6 @@ class PreparationLayoutTest {
         for (height in listOf(200, 240, 320, 400, 479, 480, 720)) layout(height)
         viewport.setPadding(12, 20, 12, 32)
         layout(720)
-        assertEquals(22f, org.robolectric.util.ReflectionHelpers.getField<TextView>(activity, "connectionTitleView").textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
+        assertEquals(20f, org.robolectric.util.ReflectionHelpers.getField<TextView>(activity, "connectionTitleView").textSize / activity.resources.displayMetrics.scaledDensity, 0.01f)
     }
 }

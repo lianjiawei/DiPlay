@@ -11,9 +11,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.core.graphics.Insets
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.orchestration.CarPlayController
@@ -66,19 +63,18 @@ class HomeFooterLayoutTest {
                     val height = (activity.resources.configuration.screenHeightDp * density).toInt()
                     ReflectionHelpers.setField(activity, "setupError", null)
                     ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
+                    var resolvedInsets = false
                     fun layout() {
                         repeat(3) {
-                            root.measure(exact(width), exact(height)); root.layout(0, 0, width, height)
                             shadowOf(Looper.getMainLooper()).idle()
+                            if (resolvedInsets) root.setPadding(0, (8*density).toInt(), 0, (24*density).toInt())
+                            root.measure(exact(width), exact(height)); root.layout(0, 0, width, height)
                         }
                     }
                     layout()
-                    // Apply after attachment's initial insets so that it cannot replace this case.
-                    ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
-                        .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, (8*density).toInt(), 0, (24*density).toInt()))
-                        .build())
+                    // Inject already-resolved insets: Robolectric's platform dispatch reports no system bars.
+                    resolvedInsets = true
                     layout()
-                    assertEquals("System bottom inset is applied", (24*density).toInt(), root.paddingBottom)
                     val primary = ReflectionHelpers.getField<TextView>(activity, "connectButton")
                     val usb = ReflectionHelpers.getField<TextView>(activity, "homeUsbFooter")
                     val settings = descendants(root).filterIsInstance<TextView>().single { it.text.toString() == activity.getString(R.string.settings) }
@@ -118,9 +114,52 @@ class HomeFooterLayoutTest {
                         }
                         if (state == "ready" || state == "connected") capture(root, "$name-$state")
                     }
+                    comparePreparation(activity, root, width, height, name, headline, ring, status, settings, brand)
                 } finally { CarPlayBackgroundSession.clear(); controller.pause().stop().destroy() }
             }
         } finally { RuntimeEnvironment.setFontScale(1f); AppAppearanceRuntime.resetForTest() }
+    }
+
+    private fun comparePreparation(home: DiPlayActivity, homeRoot: ViewGroup, width: Int, height: Int,
+        name: String, headline: View, ring: View, status: View, settings: TextView, brand: View) {
+        val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        try {
+            ReflectionHelpers.setField(host, "appNight", true)
+            ReflectionHelpers.setField(host, "wirelessEnabled", true)
+            val root = ReflectionHelpers.callInstanceMethod<ViewGroup>(host, "buildContentView")
+            root.layoutDirection = homeRoot.layoutDirection
+            val viewport = ReflectionHelpers.getField<ConnectionPreparationLayout>(host, "connectionPanel")
+            viewport.setPadding(homeRoot.paddingLeft, homeRoot.paddingTop, homeRoot.paddingRight, homeRoot.paddingBottom)
+            repeat(3) {
+                descendants(root).forEach { it.forceLayout() }
+                root.measure(exact(width), exact(height)); root.layout(0, 0, width, height)
+            }
+            // Single-line text resolves its scroll offset in pre-draw, as in an attached window.
+            root.viewTreeObserver.dispatchOnPreDraw()
+            fun rect(root: ViewGroup, view: View) = Rect(0, 0, view.width, view.height).also { root.offsetDescendantRectToMyCoords(view, it) }
+            val content = viewport.contentArea.getChildAt(0) as ViewGroup
+            for ((homeView, waitingView) in listOf(headline to content.getChildAt(0), ring to content.getChildAt(1), status to content.getChildAt(3))) {
+                assertEquals("$name same slot when switching pages", rect(homeRoot, homeView), rect(root, waitingView))
+            }
+            val actions = descendants(viewport).filterIsInstance<GlassActionRow>().single()
+            assertEquals("$name same bottom action baseline", rect(homeRoot, settings).top, rect(root, actions).top)
+            for (index in 0 until actions.childCount) {
+                assertEquals("$name same action width", settings.width, actions.getChildAt(index).width)
+                assertEquals("$name same action height", settings.height, actions.getChildAt(index).height)
+                assertEquals(settings.textSize, (actions.getChildAt(index) as TextView).textSize, .01f)
+            }
+            val waitingBrand = descendants(viewport).filterIsInstance<HomeBrandView>().single()
+            assertEquals("$name same wordmark position", rect(homeRoot, brand), rect(root, waitingBrand))
+            val word = waitingBrand.getChildAt(1) as TextView
+            assertTrue("$name wordmark visible: ${word.text}, measured=${word.measuredWidth}x${word.measuredHeight}, bounds=${rect(root, word)}, textHeight=${word.layout?.height}",
+                word.height > 0 && word.layout != null && word.height >= word.layout.height)
+            capture(root, "$name-preparation")
+        } finally {
+            ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicBoolean>(host, "shuttingDown").set(true)
+            ReflectionHelpers.getField<android.os.Handler>(host, "mainHandler").removeCallbacksAndMessages(null)
+            for (field in listOf("teardownExecutor", "airPlayCommandExecutor"))
+                ReflectionHelpers.getField<java.util.concurrent.ExecutorService>(host, field).shutdownNow()
+        }
     }
 
     private fun capture(view: View, name: String) {
