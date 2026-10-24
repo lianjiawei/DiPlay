@@ -36,6 +36,8 @@ object LincolnClusterOutput {
     private var lastNavTurn: String? = null
     private var lastNavDistance: Int? = null
     private var lastNavRoad: String = ""
+    private var lastNavBargraphSteps: Int? = null
+    private val maneuverProgress = LincolnManeuverProgress()
     private var lastNavSentNs = 0L
     private var lastMusicKey: String? = null
     private var lastRemainKey: String? = null
@@ -127,6 +129,8 @@ object LincolnClusterOutput {
             lastNavTurn = null
             lastNavDistance = null
             lastNavRoad = ""
+            lastNavBargraphSteps = null
+            maneuverProgress.reset()
             lastNavSentNs = 0L
             lastMusicKey = null
             lastRemainKey = null
@@ -227,7 +231,11 @@ object LincolnClusterOutput {
             clearNavLocked(app)
             return
         }
-        val key = "$turn|$distance|${snapshot.road}|${snapshot.remainingMeters}|${snapshot.remainingSeconds}"
+        val road = LincolnClusterProtocol.sanitizeRoadName(snapshot.road).orEmpty()
+        val bargraphSteps = maneuverProgress.update(
+            snapshot.maneuverIndex, turn, road, snapshot.distanceMeters.coerceAtLeast(0),
+        )
+        val key = "$turn|$distance|$road|${snapshot.remainingMeters}|${snapshot.remainingSeconds}"
         if (navStateOn != true) {
             if (broadcast(app, Intent(LincolnClusterProtocol.ACTION_NAV_STATE)
                     .putExtra(LincolnClusterProtocol.EXTRA_STATE, LincolnClusterProtocol.STATE_ON))) {
@@ -236,7 +244,6 @@ object LincolnClusterOutput {
             }
         }
         if (!navOwned) return
-        val road = LincolnClusterProtocol.sanitizeText(snapshot.road).orEmpty()
         val changed = key != lastNavKey
         // Repeat the current card at least once a second even when nothing changed: the cluster hides
         // a nav card it has not heard about within a few seconds, so a long leg or a red light made it
@@ -247,11 +254,15 @@ object LincolnClusterOutput {
                 .putExtra(LincolnClusterProtocol.EXTRA_NAME, turn)
                 .putExtra(LincolnClusterProtocol.EXTRA_DISTANCE, distance)
                 .putExtra(LincolnClusterProtocol.EXTRA_ROAD, road)
+                // The factory presenter writes this exact key as a decimal String to its vendor
+                // Bundle. Extra fields are ignored by older simplified receivers.
+                .putExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS, bargraphSteps.toString())
             if (broadcast(app, info)) {
                 lastNavKey = key
                 lastNavTurn = turn
                 lastNavDistance = distance
                 lastNavRoad = road
+                lastNavBargraphSteps = bargraphSteps
                 lastNavSentNs = nanoTime()
                 navSent++
                 if (changed) Log.i(TAG, "nav INFO $turn ${distance}m '${snapshot.road}' (#$navSent)")
@@ -302,6 +313,8 @@ object LincolnClusterOutput {
             .putExtra(LincolnClusterProtocol.EXTRA_NAME, turn)
             .putExtra(LincolnClusterProtocol.EXTRA_DISTANCE, distance)
             .putExtra(LincolnClusterProtocol.EXTRA_ROAD, lastNavRoad)
+            .putExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS,
+                lastNavBargraphSteps?.toString() ?: return)
         if (broadcast(app, info)) {
             lastNavSentNs = nanoTime()
             navSent++
@@ -341,7 +354,7 @@ object LincolnClusterOutput {
         // The cluster draws one text row. Music apps put the current lyric in the iAP2 title field
         // and the song name in the artist field, so send the raw title alone: the widget's combined
         // "title — artist" would otherwise carry the song name along on the lyric line.
-        val title = LincolnClusterProtocol.sanitizeText(snapshot.songTitle ?: snapshot.song)
+        val title = LincolnClusterProtocol.sanitizeMediaText(snapshot.songTitle ?: snapshot.song)
         if (title == null) {
             clearMusicLocked(app)
             return
@@ -367,6 +380,8 @@ object LincolnClusterOutput {
             .putExtra(LincolnClusterProtocol.EXTRA_PLAYING, playing))
 
     private fun clearNavLocked(app: Context) {
+        maneuverProgress.reset()
+        lastNavBargraphSteps = null
         // Send OFF whenever the cluster was told ON, even if a later snapshot already dropped the
         // owned flag, so a finished route cannot leave "arrived" on the cluster.
         if (navStateOn != true) return

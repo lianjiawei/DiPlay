@@ -15,6 +15,8 @@ object CarPlayGlance {
     data class Snapshot(
         val connected: Boolean = false,
         val maneuverType: Int? = null,
+        /** Stable id from iAP2 0x5201/0x5202, used to reset per-maneuver cluster progress. */
+        val maneuverIndex: Int = -1,
         /**
          * A route is still running even though [maneuverType] may be momentarily null (the iPhone's
          * empty current-maneuver list, or the stale window). Outputs that must not flicker — the
@@ -118,6 +120,7 @@ object CarPlayGlance {
         val next = Snapshot(
             connected = connected,
             maneuverType = maneuver?.type,
+            maneuverIndex = maneuver?.index ?: -1,
             routeActive = route.routeActive(),
             // A dropped session is reported through `connected`, not as a guidance end.
             routeEnded = connected && route.routeEnded(),

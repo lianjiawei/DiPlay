@@ -18,6 +18,8 @@ internal data class BydAppleManeuver(
     val remainingSeconds: Long? = null,
     val remainingMeters: Long? = null,
     val arrivalEpochSeconds: Long? = null,
+    /** Stable iAP2 maneuver id; lets external displays reset per-turn progress exactly once. */
+    val index: Int = -1,
 )
 
 internal enum class BydHudRouteChange {
@@ -110,8 +112,14 @@ internal class BydHudRouteState(
     fun currentApple(): BydAppleManeuver? {
         val maneuver = activeManeuver() ?: return null
         return BydAppleManeuver(
-            distanceMeters, maneuver.type, maneuver.drivingSide,
-            roadFor(maneuver), remainingSeconds, remainingMeters, arrivalEpochSeconds,
+            distanceMeters = distanceMeters,
+            type = maneuver.type,
+            drivingSide = maneuver.drivingSide,
+            road = roadFor(maneuver),
+            remainingSeconds = remainingSeconds,
+            remainingMeters = remainingMeters,
+            arrivalEpochSeconds = arrivalEpochSeconds,
+            index = activeIndex,
         )
     }
 

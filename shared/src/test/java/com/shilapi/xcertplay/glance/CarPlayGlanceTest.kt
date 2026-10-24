@@ -40,6 +40,7 @@ class CarPlayGlanceTest {
         val now = CarPlayGlance.snapshot()
         assertTrue(now.connected)
         assertEquals(2, now.maneuverType)
+        assertEquals(7, now.maneuverIndex)
         assertEquals(350, now.distanceMeters)
         assertEquals("Main Street", now.road)
         assertEquals("Numb — Linkin Park", now.song)

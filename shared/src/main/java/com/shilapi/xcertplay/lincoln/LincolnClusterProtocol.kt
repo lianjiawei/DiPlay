@@ -31,6 +31,8 @@ object LincolnClusterProtocol {
     const val EXTRA_NAME = "name"
     const val EXTRA_DISTANCE = "distance"
     const val EXTRA_ROAD = "nextRoadName"
+    /** Factory instrument progress, encoded as a decimal string in its vendor Bundle. */
+    const val EXTRA_BARGRAPH_STEPS = "BargraphSteps"
     const val EXTRA_REMAIN_DISTANCE = "remainDistance"
     const val EXTRA_REMAIN_TIME = "remainTime"
     const val EXTRA_TITLE = "title"
@@ -46,8 +48,14 @@ object LincolnClusterProtocol {
     const val SOURCE_NAME = "CarPlay"
     const val SOURCE_TYPE = 1
 
-    /** Preserve the field build's 32 UTF-16-unit budget, not a UTF-8 byte limit. */
-    const val MAX_TEXT_CHARS = 32
+    /** Full scale used by the factory instrument's per-maneuver progress bar. */
+    const val BARGRAPH_FULL_SCALE = 256
+
+    /** The factory cluster truncates its primary street-name slot at 19 UTF-16 units. */
+    const val MAX_ROAD_NAME_CHARS = 19
+
+    /** The factory cluster applies the same 19-unit limit to its short media-text slots. */
+    const val MAX_MEDIA_TEXT_CHARS = 19
 
     /** Beyond this the cluster is not asked to show a distance (matches the field build). */
     const val MAX_DISTANCE_METERS = 2_000_000
@@ -71,22 +79,40 @@ object LincolnClusterProtocol {
         else -> "turn_front"
     }
 
-    /** Round to 5 m / 50 m / 500 m for the cluster; null outside the accepted range. */
+    /**
+     * Match Baidu's factory HUD packet distance: exact below 1 km, floor to 100 m below 100 km,
+     * then floor to 1 km. Negative and implausibly large values are rejected before formatting.
+     */
     fun roundDistance(meters: Int): Int? {
         if (meters < 0 || meters > MAX_DISTANCE_METERS) return null
         return when {
-            meters < 1_000 -> (meters + 2) / 5 * 5
-            meters < 10_000 -> (meters + 25) / 50 * 50
-            else -> (meters + 250) / 500 * 500
+            meters < 1_000 -> meters
+            meters < 100_000 -> meters / 100 * 100
+            else -> meters / 1_000 * 1_000
         }
     }
 
+    /** Matches the factory instrument: remaining distance divided by this maneuver's start distance. */
+    fun bargraphSteps(distanceMeters: Int, maneuverStartMeters: Int): Int {
+        if (distanceMeters < 0) return 0
+        // The factory presenter initializes this field to 1 until it has a maneuver baseline. A
+        // transient first frame with distance 0 must not look like a completed maneuver.
+        if (maneuverStartMeters <= 0) return 1
+        if (distanceMeters == 0) return 0
+        return ((distanceMeters.toLong() * BARGRAPH_FULL_SCALE) / maneuverStartMeters)
+            .coerceIn(0L, BARGRAPH_FULL_SCALE.toLong()).toInt()
+    }
+
+    fun sanitizeRoadName(text: String?): String? = sanitizeText(text, MAX_ROAD_NAME_CHARS)
+
+    fun sanitizeMediaText(text: String?): String? = sanitizeText(text, MAX_MEDIA_TEXT_CHARS)
+
     /**
-     * Bound factory-cluster text without sending half a character. Ordinary Chinese characters
-     * use one unit; supplementary characters use two. A combining/emoji sequence that crosses
-     * the budget is omitted in full, with no ellipsis taking extra space on the cluster.
+     * Bound factory-cluster text without sending half a character. The receiver measures Java
+     * UTF-16 units and otherwise uses `substring(0, 19)`, which can split a supplementary or
+     * combined character. A sequence that crosses the budget is omitted in full instead.
      */
-    fun sanitizeText(text: String?): String? {
+    private fun sanitizeText(text: String?, maxChars: Int): String? {
         if (text == null) return null
         val printable = buildString(text.length) {
             var index = 0
@@ -97,11 +123,10 @@ object LincolnClusterProtocol {
                 index += Character.charCount(point)
             }
         }
-        if (printable.length <= MAX_TEXT_CHARS) return printable.takeIf { it.isNotBlank() }
+        if (printable.length <= maxChars) return printable.takeIf { it.isNotBlank() }
 
         val characters = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(printable) }
-        var end = if (characters.isBoundary(MAX_TEXT_CHARS)) MAX_TEXT_CHARS
-                  else characters.preceding(MAX_TEXT_CHARS)
+        var end = if (characters.isBoundary(maxChars)) maxChars else characters.preceding(maxChars)
         // Older Android character iterators may split newer emoji sequences. Retreat over the
         // entire sequence instead of relying on the host JVM's newer Unicode boundary rules.
         while (end > 0 && !safeTextBoundary(printable, end)) end = characters.preceding(end)
@@ -135,4 +160,42 @@ object LincolnClusterProtocol {
 
     /** Beyond this the cluster drops the remaining readout. */
     const val MAX_REMAIN_DISTANCE_METERS = 10_000_000
+}
+
+/** Keeps the factory progress bar's start distance separate for each iAP2 maneuver. */
+internal class LincolnManeuverProgress {
+    private var identity: String? = null
+    private var startDistanceMeters = 0
+    private var lastDistanceMeters = 0
+
+    fun update(maneuverIndex: Int, turn: String, road: String, distanceMeters: Int): Int {
+        val nextIdentity = if (maneuverIndex >= 0) {
+            "$maneuverIndex|$turn|$road"
+        } else {
+            // Older callers and tests may not have an iAP2 index. The visible instruction is the
+            // safest fallback; an increase beyond the recorded start still resets a reroute.
+            "$turn|$road"
+        }
+        val reroutedFartherAway = lastDistanceMeters > 0 &&
+            distanceMeters.toLong() - lastDistanceMeters.toLong() >= REROUTE_RESET_METERS
+        if (nextIdentity != identity ||
+            (startDistanceMeters <= 0 && distanceMeters > 0) || reroutedFartherAway) {
+            identity = nextIdentity
+            startDistanceMeters = distanceMeters.coerceAtLeast(0)
+        }
+        lastDistanceMeters = distanceMeters.coerceAtLeast(0)
+        return LincolnClusterProtocol.bargraphSteps(lastDistanceMeters, startDistanceMeters)
+    }
+
+    fun reset() {
+        identity = null
+        startDistanceMeters = 0
+        lastDistanceMeters = 0
+    }
+
+    private companion object {
+        // Route guidance can drift by a few metres as GPS settles. A 50 m jump is large enough to
+        // mean a reroute while still catching a detour that remains below the maneuver's old start.
+        const val REROUTE_RESET_METERS = 50
+    }
 }
