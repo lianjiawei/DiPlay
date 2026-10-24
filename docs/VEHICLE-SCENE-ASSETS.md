@@ -32,9 +32,29 @@
 
 | 车型 | 首页 | 设置页 |
 | --- | --- | --- |
-| 冒险家（默认） | `corsair_scene.png` | `corsair_scene_soft.png` |
-| 航海家 | `nautilus_scene.png` | `nautilus_scene_soft.png` |
-| 飞行家 | `aviator_scene.png` | `aviator_scene_soft.png` |
+| 冒险家（默认） | `corsair_scene.webp` | `corsair_scene_soft.webp` |
+| 航海家 | `nautilus_scene.webp` | `nautilus_scene_soft.webp` |
+| 飞行家 | `aviator_scene.webp` | `aviator_scene_soft.webp` |
+
+## 内置背景无损压缩
+
+六张随包背景由 PNG 转为无损 WebP。保持原尺寸、像素、配色及柔焦效果；冒险家继续使用原版画面。资源名称、`drawable-nodpi`、居中裁切和缓存逻辑保持一致，不增加运行时依赖。
+
+| 素材 | 原 APK 内 PNG（字节） | 无损 WebP（字节） |
+| --- | ---: | ---: |
+| 冒险家 | 2,267,449 | 1,686,988 |
+| 冒险家柔焦 | 1,395,882 | 1,072,526 |
+| 航海家 | 2,196,314 | 1,640,814 |
+| 航海家柔焦 | 1,701,258 | 1,281,856 |
+| 飞行家 | 2,221,335 | 1,661,140 |
+| 飞行家柔焦 | 1,727,453 | 1,307,458 |
+| 合计 | **11,509,691** | **8,650,782** |
+
+对比基准为 v1.1.3-rc3 已发布 APK 中经过 AAPT 优化的 PNG。图片资源减少 **2,858,909 字节（24.8%）**；这不是整个新版 APK 的最终体积。源文件本身由 12,563,362 降至 8,650,782 字节。
+
+编码使用 libwebp 1.3.2 的 lossless preset 9、exact=1；等效命令为 `cwebp -lossless -z 9 -exact -mt -metadata none input.png -o output.webp`。原 PNG 可从提交 `a41ef412` 取回。六张转换图分别解码后与原图、旧 APK 内图片逐像素相同；没有缩放、调色或有损量化。素材来源仍见本页及 Git 历史。
+
+[Android 的无损 WebP 支持始于 API 18](https://developer.android.com/studio/write/convert-webp)，低于本项目最低 API 25。压缩只减少存储占用，解码后的位图内存不变。
 
 原始生成文件保留在 `/home/ubuntu/.codex/generated_images/01a16234-2c65-7221-a3a5-9a094926bf59/`；工作区副本在 `design/vehicle-2022/assets/`。
 

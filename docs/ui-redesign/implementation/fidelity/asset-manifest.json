@@ -1,22 +1,26 @@
 {
   "assets": [
     {
-      "file": "common/src/main/res/drawable-nodpi/corsair_scene.png",
-      "sha256": "72a9691048249fc86d5ede6da7cdc00e44ac828aa0a5633fc339da16979ea16c",
+      "file": "common/src/main/res/drawable-nodpi/corsair_scene.webp",
+      "sha256": "d300c3c9c76f6b053ea77a6ead8f2358a6ce3a3e5dded2e669ce6bc3db8b0345",
       "dimensions": [
         1620,
         971
       ],
-      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls.",
+      "source_png_sha256": "72a9691048249fc86d5ede6da7cdc00e44ac828aa0a5633fc339da16979ea16c",
+      "encoding": "Lossless WebP; decoded RGB pixels and dimensions match the source PNG exactly."
     },
     {
-      "file": "common/src/main/res/drawable-nodpi/corsair_scene_soft.png",
-      "sha256": "edc439a326124582eb7cab602525851161b224f06a31c3762dbb43da1b044cc3",
+      "file": "common/src/main/res/drawable-nodpi/corsair_scene_soft.webp",
+      "sha256": "dd378505a2b97baa85bd4b649c4f2a0396a5b3af9c616e05af604f5bf5e73fee",
       "dimensions": [
         1620,
         971
       ],
-      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls."
+      "source": "Image generation from the approved Lincoln Corsair design direction; transparent material layers remain separate from native controls.",
+      "source_png_sha256": "edc439a326124582eb7cab602525851161b224f06a31c3762dbb43da1b044cc3",
+      "encoding": "Lossless WebP; decoded RGB pixels and dimensions match the source PNG exactly."
     },
     {
       "file": "common/src/main/res/drawable-nodpi/glass_primary_material.png",
