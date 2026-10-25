@@ -40,6 +40,7 @@ object LincolnClusterOutput {
     private var lastNavManeuverToken: LincolnManeuverToken? = null
     private val maneuverTracker = LincolnManeuverTracker()
     private var lastNavSentNs = 0L
+    private var lastFilteredRevision: Long? = null
     private var lastMusicKey: String? = null
     private var lastRemainKey: String? = null
     private var remainOwned = false
@@ -91,6 +92,7 @@ object LincolnClusterOutput {
             lastNavKey = null
             lastRemainKey = null
             lastNavSentNs = 0L
+            lastFilteredRevision = null
         }
     }
     private val tick = object : Runnable {
@@ -134,6 +136,7 @@ object LincolnClusterOutput {
             lastNavManeuverToken = null
             maneuverTracker.reset("detached")
             lastNavSentNs = 0L
+            lastFilteredRevision = null
             lastMusicKey = null
             lastRemainKey = null
             lastSnapshot = null
@@ -213,6 +216,7 @@ object LincolnClusterOutput {
             "road='${snapshot.road}' song='${snapshot.song}' " +
             "playing=${snapshot.playing} remain=${snapshot.remainingMeters}/${snapshot.remainingSeconds} " +
             "routeActive=${snapshot.routeActive} routeEnded=${snapshot.routeEnded} " +
+            "endPending=${snapshot.routeEndPending} distanceRevision=${snapshot.distanceRevision} " +
             "progressGeneration=${snapshot.routeProgressGeneration} progressPending=${snapshot.routeProgressPending} " +
             "nav=$navEnabled music=$musicEnabled -> $lastReason")
         if (snapshot.routeEnded) {
@@ -220,7 +224,8 @@ object LincolnClusterOutput {
         } else {
             endedSinceNs = 0L
         }
-        if (navEnabled && snapshot.connected && !(snapshot.routeEnded && endSettled())) {
+        if (navEnabled && snapshot.connected &&
+            !(snapshot.routeEnded && !snapshot.routeEndPending && endSettled())) {
             sendNavLocked(app, snapshot)
             sendRemainLocked(app, snapshot)
         } else {
@@ -232,11 +237,9 @@ object LincolnClusterOutput {
 
     private fun sendNavLocked(app: Context, snapshot: CarPlayGlance.Snapshot) {
         if (snapshot.routeEnded) {
-            // Holding the last display packet prevents flicker, but an explicit end invalidates
-            // the next maneuver's identity immediately. A route reopened inside the settle window
-            // may reuse the same index with a shorter distance. Ignore any stale guidance fields
-            // on this ended snapshot and keep the successfully sent packet only for the hold.
-            maneuverTracker.reset("route-ended")
+            // Confirmed ends invalidate identity; transient NoRouteSet retains it. Ignore stale
+            // guidance fields in either case and keep only the last successfully sent packet.
+            if (!snapshot.routeEndPending) maneuverTracker.reset("route-ended")
             maintainNavLocked(app, snapshot)
             return
         }
@@ -249,7 +252,7 @@ object LincolnClusterOutput {
             return
         }
         val turn = LincolnClusterProtocol.turnCode(snapshot.maneuverType, snapshot.drivingSide)
-        val distance = LincolnClusterProtocol.roundDistance(snapshot.distanceMeters)
+        val formattedDistance = LincolnClusterProtocol.roundDistance(snapshot.distanceMeters)
         if (snapshot.maneuverType == null) {
             // No current instruction can mean three things: the iPhone's brief empty-maneuver frame
             // (every few seconds, and while rerouting), a route whose next turn is simply not
@@ -262,7 +265,7 @@ object LincolnClusterOutput {
             maintainNavLocked(app, snapshot)
             return
         }
-        if (turn == null || distance == null) {
+        if (turn == null || formattedDistance == null) {
             clearNavLocked(app)
             return
         }
@@ -276,8 +279,16 @@ object LincolnClusterOutput {
         }
         if (!navOwned) return
         val maneuverToken = maneuverTracker.update(
-            snapshot.maneuverIndex, turn, snapshot.road, distance, snapshot.routeProgressGeneration,
+            snapshot.maneuverIndex, turn, snapshot.road, snapshot.distanceMeters,
+            snapshot.routeProgressGeneration, snapshot.distanceRevision, nanoTime(),
+            stabilize = LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE,
         )
+        val distance = maneuverTracker.distanceMeters
+        if (distance != formattedDistance && snapshot.distanceRevision != lastFilteredRevision) {
+            Log.i(TAG, "nav distance held raw=${snapshot.distanceMeters} formatted=$formattedDistance " +
+                "sent=$distance samples=${maneuverTracker.pendingRiseSamples} index=${snapshot.maneuverIndex}")
+            lastFilteredRevision = snapshot.distanceRevision
+        }
         if (maneuverToken != lastNavManeuverToken &&
             LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE
         ) {
@@ -331,7 +342,7 @@ object LincolnClusterOutput {
             return
         }
         if (snapshot.routeEnded) {
-            if (!endSettled()) {
+            if (snapshot.routeEndPending || !endSettled()) {
                 repeatLastNavLocked(app)
                 return
             }

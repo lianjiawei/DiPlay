@@ -42,6 +42,9 @@ internal class BydHudRouteState(
      */
     private val keepAcrossNoRoute: Boolean = false,
     private val noRouteHideNs: Long = NO_ROUTE_HIDE_NS,
+    // Opt-in for glance consumers: hide the widget at once, but retain maneuver identity/cache
+    // through a brief NoRouteSet. Other HUD parsers keep their existing immediate-clear policy.
+    private val progressEndGraceNs: Long = 0,
 ) {
     private data class Maneuver(val type: Int, val drivingSide: Int, val afterRoad: String)
 
@@ -63,7 +66,13 @@ internal class BydHudRouteState(
      * tell "the driver finished" from "no new frame for a while".
      */
     private var endedExplicitly = false
-    private var progressRouteState: Int? = null
+    private var progressResumeObserved = false
+    private var progressEndSinceNs: Long? = null
+    private var progressEndResumeObserved = false
+    val progressEndPending: Boolean get() = progressEndSinceNs != null
+    /** Counts accepted phone distance frames, not snapshots, songs, or repeat timers. */
+    var distanceRevision: Long = 0
+        private set
     /** Local generation, not a route ID supplied by iAP2. Kept across clear() to avoid reuse. */
     var progressGeneration: Long = 0
         private set
@@ -73,6 +82,7 @@ internal class BydHudRouteState(
 
     fun accept(messageId: Int, payload: ByteArray): BydHudRouteChange {
         if (!validTlvs(payload)) return BydHudRouteChange.NONE
+        expireProgressEnd()
         return when (messageId) {
             ROUTE_GUIDANCE_UPDATE -> parseRouteUpdate(payload)
             ROUTE_GUIDANCE_MANEUVER_UPDATE -> parseManeuverUpdate(payload)
@@ -135,7 +145,10 @@ internal class BydHudRouteState(
         // Preserve a real end/disconnect in the next snapshot too: an output may already have
         // newer guidance when the end callback arrives and must discard that stale callback.
         // Reopening with the same maneuver index still needs a new baseline in that case.
-        if (routeActive || progressPending) progressGeneration++
+        if (routeActive || progressPending || progressEndPending) progressGeneration++
+        progressEndSinceNs = null
+        progressEndResumeObserved = false
+        progressResumeObserved = false
         endedExplicitly = true
         routeActive = false
         activeIndex = -1
@@ -148,7 +161,6 @@ internal class BydHudRouteState(
         lastRouteUpdateNs = null
         noRouteSinceNs = null
         holdingAcrossDrop = false
-        progressRouteState = null
         progressPending = false
         maneuvers.clear()
         return wasActive
@@ -165,6 +177,7 @@ internal class BydHudRouteState(
     }
 
     private fun activeManeuver(): Maneuver? {
+        expireProgressEnd()
         if (!routeActive || activeIndex < 0) return null
         val updated = lastRouteUpdateNs ?: return null
         if (nanoTime() - updated >= staleRouteNs) return null
@@ -179,6 +192,10 @@ internal class BydHudRouteState(
     private fun roadFor(maneuver: Maneuver): String = maneuver.afterRoad.ifEmpty { currentRoad }
 
     private fun parseRouteUpdate(data: ByteArray): BydHudRouteChange {
+        var state: Int? = null
+        forEachTlv(data) { type, value, length ->
+            if (type == 0x01 && length >= 1) state = data[value].toInt() and 0xff
+        }
         // A teardown NoRouteSet is not fresh guidance. Do not let repeated teardown frames
         // extend the retained instruction's lifetime or replace its road/arrival metadata.
         if (keepAcrossNoRoute) {
@@ -195,14 +212,27 @@ internal class BydHudRouteState(
             noRouteSinceNs = null
             holdingAcrossDrop = false
         }
+        // Do not let an end frame's old distance/text overwrite the retained maneuver.
+        if (state == 0 || state == 2) {
+            if (state == 0 && progressEndGraceNs > 0 &&
+                (routeActive || progressEndPending) && activeIndex >= 0
+            ) {
+                if (progressEndSinceNs == null) progressEndSinceNs = nanoTime()
+                val wasActive = routeActive
+                routeActive = false
+                endedExplicitly = true
+                progressEndResumeObserved = false
+                progressResumeObserved = false
+                return if (wasActive) BydHudRouteChange.CLEAR else BydHudRouteChange.NONE
+            }
+            return if (clear()) BydHudRouteChange.CLEAR else BydHudRouteChange.NONE
+        }
         lastRouteUpdateNs = nanoTime()
-        var state: Int? = null
         var distance: Int? = null
         var firstManeuver: Int? = null
         var listPresent = false
         forEachTlv(data) { type, value, valueLength ->
             when {
-                type == 0x01 && valueLength >= 1 -> state = data[value].toInt() and 0xff
                 type == 0x03 -> currentRoad = utf8(data, value, valueLength)
                 type == 0x05 && valueLength >= 8 -> arrivalEpochSeconds = u64(data, value).takeIf { it > 0 }
                 type == 0x06 && valueLength >= 8 -> remainingSeconds = u64(data, value).takeIf { it >= 0 }
@@ -217,19 +247,23 @@ internal class BydHudRouteState(
             }
         }
 
-        // Only NoRouteSet (0) and Arrived (2) end the route. A wireless handoff often sends
-        // NoRouteSet while the session is still coming back — keep the overlay instruction then.
-        if (state == 0 || state == 2) {
-            return if (clear()) BydHudRouteChange.CLEAR else BydHudRouteChange.NONE
-        }
         // iAP2 state 3=Loading, 5=Rerouting. These are explicit calculation signals even
         // when the app reuses the index and the new distance is smaller. Handle BEFORE the
         // empty-list early return. Adjacent loading/rerouting updates form one pending cycle.
         if (state != null) {
-            progressRouteState = state
-            if (state == 3 || state == 5) {
-                if (!progressPending) progressGeneration++
-                progressPending = true
+            when (state) {
+                1, 6 -> {
+                    if (progressPending) progressResumeObserved = true
+                    if (progressEndPending) progressEndResumeObserved = true
+                }
+                3, 5 -> {
+                    if (!progressPending) progressGeneration++
+                    progressPending = true
+                    progressResumeObserved = false
+                    progressEndResumeObserved = false
+                }
+                // Locating (4) and unknown ordinary states neither establish nor revoke a
+                // previously observed resume. A fresh distance is still required below.
             }
         }
         // The iPhone briefly sends an empty current list every few seconds and while rerouting. Keep the last
@@ -240,6 +274,19 @@ internal class BydHudRouteState(
             return BydHudRouteChange.NONE
         }
         if (firstManeuver != null) emptyListSinceNs = null
+        if (progressEndPending) {
+            // Status, text and music alone cannot resurrect a cancelled route using stale metres.
+            // A resumed current list or active status plus a fresh distance completes the grace.
+            if (firstManeuver != null) activeIndex = firstManeuver!!
+            if (state == null && firstManeuver != null && !progressPending) progressEndResumeObserved = true
+            if (!progressEndResumeObserved || distance == null || activeIndex < 0 || emptyListSinceNs != null) {
+                return BydHudRouteChange.NONE
+            }
+            progressEndSinceNs = null
+            progressEndResumeObserved = false
+            routeActive = true
+            endedExplicitly = false
+        }
         if (state != null) {
             routeActive = true
             endedExplicitly = false
@@ -249,17 +296,26 @@ internal class BydHudRouteState(
             routeActive = true
             endedExplicitly = false
         }
-        if (distance != null) distanceMeters = distance!!.coerceAtLeast(0)
+        if (distance != null) {
+            distanceMeters = distance!!.coerceAtLeast(0)
+            if (routeActive && activeIndex >= 0) distanceRevision++
+        }
         // Fields are deltas: RouteSet (1) / ProceedToRoute (6) and distance can arrive in
         // separate frames. A status-only update, cached maneuver details, or an empty list
         // must not establish the new baseline from the previous route's distance. Retain
         // cached index/details: an unchanged index need not be resent after a recalculation.
-        if (progressPending && (progressRouteState == 1 || progressRouteState == 6) &&
+        if (progressPending && progressResumeObserved &&
             distance != null && activeIndex >= 0 && emptyListSinceNs == null
         ) {
             progressPending = false
+            progressResumeObserved = false
         }
         return if (current() != null) BydHudRouteChange.GUIDANCE else BydHudRouteChange.NONE
+    }
+
+    private fun expireProgressEnd() {
+        val since = progressEndSinceNs ?: return
+        if (nanoTime() - since >= progressEndGraceNs) clear()
     }
 
     private fun parseManeuverUpdate(data: ByteArray): BydHudRouteChange {

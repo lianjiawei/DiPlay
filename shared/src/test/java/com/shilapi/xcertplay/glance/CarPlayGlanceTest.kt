@@ -80,7 +80,8 @@ class CarPlayGlanceTest {
         CarPlayGlance.onFrame(frame(0x5201) { u8(1, 1) })
         assertEquals(1, seen.size)
         CarPlayGlance.onFrame(frame(0x5201) { u32(0x0a, 200) })
-        assertEquals(before.copy(routeProgressGeneration = before.routeProgressGeneration + 1), seen.last())
+        assertEquals(before.copy(routeProgressGeneration = before.routeProgressGeneration + 1,
+            distanceRevision = before.distanceRevision + 1), seen.last())
         assertEquals(2, seen.size)
     }
 

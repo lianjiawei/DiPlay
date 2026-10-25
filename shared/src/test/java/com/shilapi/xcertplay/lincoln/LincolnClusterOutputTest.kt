@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.hud.BydHudRouteState
 import com.shilapi.xcertplay.iap2.body.Iap2BodyBuilder
 import com.shilapi.xcertplay.iap2.message.Iap2Messages
 import java.util.concurrent.CountDownLatch
@@ -319,7 +320,7 @@ class LincolnClusterOutputTest {
                 delayed = Thread {
                     try {
                         if (disconnect) CarPlayGlance.setConnected(false)
-                        else frame(0x5201) { u8(1, 0) }
+                        else frame(0x5201) { u8(1, 2) } // Confirmed arrival, not debounced NoRouteSet.
                     } catch (error: Throwable) {
                         failure.set(error)
                     }
@@ -459,15 +460,15 @@ class LincolnClusterOutputTest {
         assertEquals(256, advance(400))
         assertEquals(128, advance(200))
         val old = token(infos().last())
-        // Even a small increase must refresh: the receiver may have restarted at 200 m.
-        assertEquals(256, advance(205))
-        assertNotEquals(old, token(infos().last()))
-        assertEquals(256, advance(300)) // reroute below the original start, same index
+        assertEquals(128, advance(205))
+        assertEquals(old, token(infos().last()))
+        assertEquals(128, advance(300)) // First large correction is held.
+        assertEquals(256, advance(300)) // Second fresh confirmation establishes a new baseline.
         assertNotEquals(old, token(infos().last()))
         assertEquals(128, advance(150))
-        assertEquals(256, advance(300))
-        // The receiver has no clamp: even a 5 m correction above the baseline needs a new token.
+        assertEquals(128, advance(300))
         assertEquals(256, advance(305))
+        assertEquals(256, advance(2_000_000)) // Held at 305 until the next fresh sample.
         assertEquals(256, advance(2_000_000))
         assertEquals(128, advance(1_000_000))
         val count = infos().size
@@ -486,7 +487,7 @@ class LincolnClusterOutputTest {
         assertEquals(128, receiver.receive(infos().last()))
     }
 
-    @Test fun roundedDistanceIncreasesRefreshTheReceiverWithoutChangingTheDistance() {
+    @Test fun aOneMeterRoundingBoundaryCorrectionKeepsTheReceiverBaseline() {
         val receiver = FactoryNavigationReceiver()
         val current = guidance().copy(maneuverIndex = 7, distanceMeters = 2_000)
         send(current)
@@ -495,13 +496,13 @@ class LincolnClusterOutputTest {
         send(current.copy(distanceMeters = 1_499))
         assertEquals(179, receiver.receive(infos().last()))
         send(current.copy(distanceMeters = 1_500))
-        assertEquals(1_500, infos().last().getIntExtra("distance", -1))
-        assertEquals(256, receiver.receive(infos().last()))
+        assertEquals(1_400, infos().last().getIntExtra("distance", -1))
+        assertEquals(179, receiver.receive(infos().last()))
         val refreshed = token(infos().last())
-        assertNotEquals(original, refreshed)
+        assertEquals(original, refreshed)
         send(current.copy(distanceMeters = 1_499))
         assertEquals(1_400, infos().last().getIntExtra("distance", -1))
-        assertEquals(238, receiver.receive(infos().last()))
+        assertEquals(179, receiver.receive(infos().last()))
         assertEquals(refreshed, token(infos().last()))
         // Raw correction inside the same transmitted bucket needs no new identity.
         send(current.copy(distanceMeters = 1_498))
@@ -523,7 +524,7 @@ class LincolnClusterOutputTest {
         send(current.copy(distanceMeters = 205))
         assertEquals(256, receiver.receive(infos().last())) // formerly 262
         send(current.copy(distanceMeters = 100))
-        assertEquals(124, receiver.receive(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
     }
 
     @Test fun silentlyMissingTheFirstPacketDoesNotAssumeTheSenderBaselineWasReceived() {
@@ -534,7 +535,7 @@ class LincolnClusterOutputTest {
         send(current.copy(distanceMeters = 200))
         assertEquals(256, receiver.receive(infos().last()))
         send(current.copy(distanceMeters = 205))
-        assertEquals(205, infos().last().getIntExtra("distance", -1))
+        assertEquals(200, infos().last().getIntExtra("distance", -1))
         assertEquals(256, receiver.receive(infos().last())) // formerly 262
     }
 
@@ -608,6 +609,8 @@ class LincolnClusterOutputTest {
         send(current.copy(distanceMeters = 0))
         assertEquals(0, receiver.receive(infos().last()))
         send(current.copy(distanceMeters = 200))
+        now += 1_000_000_000L
+        send(current.copy(distanceMeters = 200))
         assertEquals(256, receiver.receive(infos().last()))
     }
 
@@ -663,7 +666,7 @@ class LincolnClusterOutputTest {
             send(current.copy(distanceMeters = 205))
             assertEquals(256, receiver.receive(infos().last()))
             send(current.copy(distanceMeters = 100))
-            assertEquals(124, receiver.receive(infos().last()))
+            assertEquals(128, receiver.receive(infos().last()))
         }
     }
 
@@ -856,15 +859,189 @@ class LincolnClusterOutputTest {
         assertEquals("example.other.cluster", infos().last().`package`)
         assertFalse(infos().last().hasExtra("latitude"))
         assertFalse(infos().last().hasExtra("longitude"))
+        frame(0x5201) { u32(0x0a, 201) }
+        assertEquals(201, infos().last().getIntExtra("distance", -1))
+    }
+
+    @Test fun rawIap2SmallRisesAreHeldAndKeepalivesAndSongsDoNotConfirmReroutes() {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "Road") }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+        val original = token(infos().last())
+        for (distance in listOf(580, 582, 575, 650)) {
+            now += 1_000_000_000L
+            frame(0x5201) { u32(0x0a, distance.toLong()) }
+        }
+        assertEquals(listOf(600, 580, 580, 575, 575), infos().map { it.getIntExtra("distance", -1) })
+        repeat(6) {
+            now += 1_000_000_000L
+            frame(0x5001) { group(0) { string(1, "Lyric $it") } }
+            sendPublished(CarPlayGlance.snapshot())
+            assertEquals(original, token(infos().last()))
+            assertEquals(575, infos().last().getIntExtra("distance", -1))
+        }
+        frame(0x5201) { u32(0x0a, 650) } // The second fresh large-rise frame confirms it.
+        val confirmed = token(infos().last())
+        assertNotEquals(original, confirmed)
+        assertEquals(650, infos().last().getIntExtra("distance", -1))
+        now += 1_000_000_000L
+        frame(0x5201) { u32(0x0a, 649) }
+        assertEquals(confirmed, token(infos().last()))
+        assertEquals(649, infos().last().getIntExtra("distance", -1))
+        val receiver = FactoryNavigationReceiver()
+        assertTrue(infos().map(receiver::receive).all { it in 0..256 })
+    }
+
+    @Test fun rawIap2BriefNoRouteSetRetainsBaselineAndCachedManeuverUntilFreshDistance() = withRouteClock {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "Road") }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+        frame(0x5201) { u32(0x0a, 300) }
+        val original = token(infos().last())
+        frame(0x5201) { u8(1, 0); u32(0x0a, 999); string(3, "Stale") }
+        assertTrue(CarPlayGlance.snapshot().routeEndPending)
+        now += 1_000_000_000L
+        frame(0x5201) { u8(1, 1) }
+        frame(0x5001) { group(0) { string(1, "Lyric") } }
+        assertEquals(300, infos().last().getIntExtra("distance", -1))
+        assertEquals(original, token(infos().last()))
+        frame(0x5201) { u32(0x0a, 290) } // No repeated 0x5202 or current-list required.
+        assertFalse(CarPlayGlance.snapshot().routeEndPending)
+        assertEquals(290, infos().last().getIntExtra("distance", -1))
+        assertEquals("Road", infos().last().getStringExtra("nextRoadName"))
+        assertEquals(original, token(infos().last()))
+        val receiver = FactoryNavigationReceiver()
+        assertEquals(123, infos().map(receiver::receive).last())
+        assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
+    }
+
+    @Test fun rawIap2NoRouteDeadlineSurvivesNoTimerRepeatedEndsAndStatusOnlyFrames() = withRouteClock {
+        for (resumeWithoutTick in listOf(false, true)) {
+            CarPlayGlance.setConnected(false)
+            CarPlayGlance.setConnected(true)
+            shadowOf(app).clearBroadcastIntents()
+            frame(0x5202) { u16(1, 7); u8(3, 2) }
+            frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+            val original = token(infos().last())
+            frame(0x5201) { u8(1, 0) }
+            now += 2_000_000_000L
+            frame(0x5201) { u8(1, 0) } // Must not extend the first deadline.
+            frame(0x5201) { u8(1, 1) } // Neither can a status-only resume.
+            now += 500_000_000L
+            if (!resumeWithoutTick) {
+                sendPublished(CarPlayGlance.snapshot())
+                assertEquals(LincolnClusterProtocol.STATE_OFF, states().last())
+            }
+            frame(0x5202) { u16(1, 7); u8(3, 2) }
+            frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 200) }
+            assertNotEquals(original, token(infos().last()))
+            assertEquals(200, infos().last().getIntExtra("distance", -1))
+        }
+    }
+
+    @Test fun noRouteResumeListAndDistanceCanArriveSeparatelyWithoutStatus() = withRouteClock {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+        val original = token(infos().last())
+        frame(0x5201) { u8(1, 0) }
+        frame(0x5201) { u16List(0x0d, listOf(7)) }
+        assertTrue(CarPlayGlance.snapshot().routeEndPending)
+        frame(0x5201) { u32(0x0a, 290) }
+        assertFalse(CarPlayGlance.snapshot().routeEndPending)
+        assertEquals(290, infos().last().getIntExtra("distance", -1))
+        assertEquals(original, token(infos().last()))
+    }
+
+    @Test fun locatingAndUnknownStatesDoNotCreateOrRevokeANoRouteResume() = withRouteClock {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+        frame(0x5201) { u32(0x0a, 300) }
+        val original = token(infos().last())
+        frame(0x5201) { u8(1, 0) }
+        frame(0x5201) { u8(1, 4) }
+        frame(0x5201) { u32(0x0a, 290) }
+        assertTrue(CarPlayGlance.snapshot().routeEndPending)
+        assertEquals(300, infos().last().getIntExtra("distance", -1))
+
+        frame(0x5201) { u8(1, 1) }
+        frame(0x5201) { u8(1, 4) }
+        frame(0x5201) { u8(1, 9) }
+        frame(0x5201) { u32(0x0a, 280) }
+        assertFalse(CarPlayGlance.snapshot().routeEndPending)
+        assertEquals(280, infos().last().getIntExtra("distance", -1))
+        assertEquals(original, token(infos().last()))
+    }
+
+    @Test fun locatingAndUnknownStatesDoNotRevokeARerouteResume() {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+        val original = token(infos().last())
+        frame(0x5201) { u8(1, 5) }
+        frame(0x5201) { u8(1, 1) }
+        frame(0x5201) { u8(1, 4) }
+        frame(0x5201) { u8(1, 9) }
+        frame(0x5201) { u32(0x0a, 200) }
+        assertFalse(CarPlayGlance.snapshot().routeProgressPending)
+        assertEquals(200, infos().last().getIntExtra("distance", -1))
+        assertNotEquals(original, token(infos().last()))
+    }
+
+    @Test fun realManeuverRerouteArrivalAndDisconnectOverrideNoRouteGrace() = withRouteClock {
+        for (boundary in listOf("maneuver", "reroute", "arrival", "disconnect")) {
+            CarPlayGlance.setConnected(false)
+            CarPlayGlance.setConnected(true)
+            frame(0x5202) { u16(1, 7); u8(3, 2) }
+            frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 600) }
+            val original = token(infos().last())
+            frame(0x5201) { u8(1, 0) }
+            when (boundary) {
+                "reroute" -> {
+                    frame(0x5201) { u8(1, 5) }
+                    frame(0x5201) { u16List(0x0d, listOf(7)); u32(0x0a, 100) }
+                    assertTrue(CarPlayGlance.snapshot().routeEndPending)
+                    assertEquals(original, token(infos().last()))
+                    assertEquals(600, infos().last().getIntExtra("distance", -1))
+                }
+                "arrival" -> frame(0x5201) { u8(1, 2) }
+                "disconnect" -> {
+                    CarPlayGlance.setConnected(false)
+                    CarPlayGlance.setConnected(true)
+                }
+            }
+            val index = if (boundary == "maneuver") 8 else 7
+            frame(0x5202) { u16(1, index); u8(3, 2) }
+            frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(index)); u32(0x0a, 200) }
+            assertNotEquals(boundary, original, token(infos().last()))
+            assertEquals(200, infos().last().getIntExtra("distance", -1))
+        }
+    }
+
+    private fun withRouteClock(test: () -> Unit) {
+        val route = CarPlayGlance.javaClass.getDeclaredField("route").apply { isAccessible = true }
+            .get(CarPlayGlance) as BydHudRouteState
+        val clock = route.javaClass.getDeclaredField("nanoTime").apply { isAccessible = true }
+        val original = clock.get(route)
+        try {
+            clock.set(route, { now })
+            test()
+        } finally {
+            CarPlayGlance.setConnected(false)
+            clock.set(route, original)
+        }
     }
 
     private fun frame(id: Int, block: Iap2BodyBuilder.() -> Unit) =
         CarPlayGlance.onFrame(Iap2Messages.buildRaw(id, block))
 
+    private var manualDistanceRevision = 0L
+
     private fun send(snapshot: CarPlayGlance.Snapshot) {
         LincolnClusterOutput.javaClass.getDeclaredMethod("onSnapshot", CarPlayGlance.Snapshot::class.java)
             .apply { isAccessible = true }
-            .invoke(LincolnClusterOutput, snapshot)
+            .invoke(LincolnClusterOutput, snapshot.copy(distanceRevision = ++manualDistanceRevision))
     }
 
     private fun sendPublished(snapshot: CarPlayGlance.Snapshot) {

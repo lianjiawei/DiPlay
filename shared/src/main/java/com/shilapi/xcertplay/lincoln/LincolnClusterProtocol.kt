@@ -172,17 +172,27 @@ internal data class LincolnManeuverToken(val latitude: Double, val longitude: Do
 /** Keeps each identity's transmitted distances non-increasing, even without receiver acknowledgements. */
 internal class LincolnManeuverTracker {
     private var identity: String? = null
-    private var lastDistanceMeters = 0
+    private var minimumRawMeters = 0
+    private var initialRawMeters = 0
+    private var lastRevision: Long? = null
+    private var smallRiseSinceNs: Long? = null
+    private var smallRiseSamples = 0
+    private var largeRiseSamples = 0
+    private var largeRiseSinceNs: Long? = null
     private var token: LincolnManeuverToken? = null
+    var distanceMeters: Int = 0
+        private set
+    val pendingRiseSamples: Int get() = maxOf(smallRiseSamples, largeRiseSamples)
     var resetReason: String = "first-guidance"
         private set
 
-    /** Use the distance actually transmitted: that is what the receiver uses as its baseline. */
+    /** Filter raw metres before applying the factory display rounding. */
     fun update(
-        maneuverIndex: Int, turn: String, road: String, distanceMeters: Int,
-        routeGeneration: Long = 0,
+        maneuverIndex: Int, turn: String, road: String, rawMeters: Int,
+        routeGeneration: Long, distanceRevision: Long, nowNs: Long,
+        stabilize: Boolean = true,
     ): LincolnManeuverToken {
-        require(distanceMeters in 0..LincolnClusterProtocol.MAX_DISTANCE_METERS)
+        require(rawMeters in 0..LincolnClusterProtocol.MAX_DISTANCE_METERS)
         val nextIdentity = if (maneuverIndex >= 0) {
             // The indexed maneuver survives road-name completion and instruction refinements.
             // A genuine route end resets this tracker separately from the held display packet.
@@ -192,29 +202,109 @@ internal class LincolnManeuverTracker {
             // instruction is only a heuristic identity; do not confuse it with an indexed id.
             "$routeGeneration:instruction:$turn|$road"
         }
-        // sendBroadcast succeeding does not acknowledge delivery. The receiver may miss the
-        // first sample or restart, establishing a SMALLER baseline than the sender remembers.
-        // New identity on EVERY transmitted increase ensures that any ordered subsequence of
-        // one identity is non-increasing, so its first received distance bounds the whole run.
-        // This deliberately restarts the bar on upward GPS corrections (including rounding
-        // boundaries), instead of falsifying the displayed distance or allowing a ratio > 256.
-        if (nextIdentity != identity || distanceMeters > lastDistanceMeters) {
-            resetReason = when {
-                token == null -> resetReason
-                nextIdentity != identity -> "maneuver-or-route-changed"
-                else -> "distance-increased"
-            }
+        val freshDistance = distanceRevision != lastRevision
+        lastRevision = distanceRevision
+        val formatted = checkNotNull(LincolnClusterProtocol.roundDistance(rawMeters))
+        if (nextIdentity != identity) {
+            if (token != null) resetReason = "maneuver-or-route-changed"
             identity = nextIdentity
-            token = LincolnManeuverToken.fresh()
+            start(rawMeters)
+        } else if (!stabilize) {
+            if (formatted > distanceMeters) {
+                resetReason = "distance-increased"
+                start(rawMeters)
+            } else distanceMeters = formatted
+            // The receiver setting can change during a session. Keep the raw baseline aligned
+            // so returning to the factory receiver cannot hold a custom receiver's value forever.
+            minimumRawMeters = rawMeters
+            clearRise()
+        } else if (rawMeters <= minimumRawMeters) {
+            minimumRawMeters = rawMeters
+            distanceMeters = minOf(distanceMeters, formatted)
+            clearRise()
+        } else if (initialRawMeters == 0 && freshDistance) {
+            // The first distance can be a placeholder zero. Do not pin a whole new leg at zero.
+            resetReason = "zero-baseline-recovered"
+            start(rawMeters)
+        } else if (freshDistance) {
+            // Duplicate published snapshots, keepalives and song updates cannot confirm a rise.
+            val riseMeters = rawMeters - minimumRawMeters
+            when {
+                riseMeters < MIN_PERSISTENT_RISE_METERS -> {
+                    // One-to-four-metre noise must not prime either later confirmation path.
+                    clearRise()
+                }
+                riseMeters < LARGE_RISE_METERS -> {
+                    // Crossing between the small and large bands starts a new confirmation.
+                    clearLargeRise()
+                    if (smallRiseSinceNs == null) smallRiseSinceNs = nowNs
+                    smallRiseSamples++
+                    if (smallRiseSamples >= MIN_PERSISTENT_RISE_SAMPLES &&
+                        nowNs - checkNotNull(smallRiseSinceNs) >= MAX_SMALL_RISE_HOLD_NS
+                    ) {
+                        resetReason = "persistent-distance-increase"
+                        start(rawMeters)
+                    }
+                }
+                else -> {
+                    clearSmallRise()
+                    if (largeRiseSinceNs == null) largeRiseSinceNs = nowNs
+                    largeRiseSamples++
+                    if (largeRiseSamples >= MIN_LARGE_RISE_SAMPLES &&
+                        nowNs - checkNotNull(largeRiseSinceNs) >= LARGE_RISE_CONFIRM_NS
+                    ) {
+                        resetReason = "confirmed-distance-increase"
+                        start(rawMeters)
+                    }
+                }
+            }
         }
-        lastDistanceMeters = distanceMeters
+        // Every transmitted distance under one token remains non-increasing. Therefore a receiver
+        // restarting or missing any prefix still cannot compute >256. Any accepted rise starts
+        // a new token; merely ignoring token changes while transmitting larger distances is unsafe.
         return checkNotNull(token)
+    }
+
+    private fun start(rawMeters: Int) {
+        token = LincolnManeuverToken.fresh()
+        minimumRawMeters = rawMeters
+        initialRawMeters = rawMeters
+        distanceMeters = checkNotNull(LincolnClusterProtocol.roundDistance(rawMeters))
+        clearRise()
+    }
+
+    private fun clearRise() {
+        clearSmallRise()
+        clearLargeRise()
+    }
+
+    private fun clearSmallRise() {
+        smallRiseSinceNs = null
+        smallRiseSamples = 0
+    }
+
+    private fun clearLargeRise() {
+        largeRiseSamples = 0
+        largeRiseSinceNs = null
     }
 
     fun reset(reason: String = "reset") {
         resetReason = reason
         identity = null
-        lastDistanceMeters = 0
+        minimumRawMeters = 0
+        initialRawMeters = 0
+        distanceMeters = 0
+        lastRevision = null
+        clearRise()
         token = null
+    }
+
+    private companion object {
+        const val LARGE_RISE_METERS = 50
+        const val MIN_PERSISTENT_RISE_METERS = 5
+        const val MIN_PERSISTENT_RISE_SAMPLES = 3
+        const val MIN_LARGE_RISE_SAMPLES = 2
+        const val LARGE_RISE_CONFIRM_NS = 1_000_000_000L
+        const val MAX_SMALL_RISE_HOLD_NS = 5_000_000_000L
     }
 }

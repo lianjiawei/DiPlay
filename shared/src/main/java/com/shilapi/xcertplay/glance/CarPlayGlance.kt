@@ -50,9 +50,13 @@ object CarPlayGlance {
         val routeProgressGeneration: Long = 0,
         /** Keep held cluster data until calculation ends and a fresh maneuver distance arrives. */
         val routeProgressPending: Boolean = false,
+        /** NoRouteSet is in its short debounce window; preserve the cluster baseline. */
+        val routeEndPending: Boolean = false,
+        /** New accepted distance frames only; a ticker or lyric cannot confirm a distance rise. */
+        val distanceRevision: Long = 0,
     )
 
-    private val route = BydHudRouteState()
+    private val route = BydHudRouteState(progressEndGraceNs = 2_500_000_000L)
     private val song = ClusterSongState()
     private var connected = false
     private var last = Snapshot()
@@ -148,6 +152,8 @@ object CarPlayGlance {
             playing = current?.playing ?: false,
             routeProgressGeneration = if (connected) route.progressGeneration else 0,
             routeProgressPending = connected && route.progressPending,
+            routeEndPending = connected && route.progressEndPending,
+            distanceRevision = if (connected) route.distanceRevision else 0,
         )
         if (next == last) return null
         last = next
