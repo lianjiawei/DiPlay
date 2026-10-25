@@ -12,6 +12,7 @@
 #   scripts/release-lincoln.sh                 # uses the version already in build.gradle.kts
 #   scripts/release-lincoln.sh --bump          # increments patch or RC number first
 #   scripts/release-lincoln.sh --bump --dry-run  # build and verify, publish nothing
+#   scripts/release-lincoln.sh --dry-run --skip-tests  # reuse an already-passed full test run
 #
 # Environment (defaults match this machine; override to move the build elsewhere):
 #   LINCOLN_KEYSTORE          release keystore path
@@ -38,14 +39,20 @@ FORK_REMOTE="${LINCOLN_FORK_REMOTE:-fork}"
 
 BUMP=0
 DRY_RUN=0
+SKIP_TESTS=0
 for arg in "$@"; do
   case "$arg" in
     --bump) BUMP=1 ;;
     --dry-run) DRY_RUN=1 ;;
+    --skip-tests) SKIP_TESTS=1 ;;
     -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+[ "$SKIP_TESTS" -eq 0 ] || [ "$DRY_RUN" -eq 1 ] || {
+  echo "error: --skip-tests is allowed only with --dry-run" >&2
+  exit 2
+}
 
 die() { echo "error: $*" >&2; exit 1; }
 step() { printf '\n== %s ==\n' "$*"; }
@@ -122,7 +129,6 @@ fi
 
 # --- 2. Tests and build ----------------------------------------------------------------
 
-step "Running unit tests"
 export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 if [ -z "${JAVA_HOME:-}" ] && [ -d /opt/homebrew/opt/openjdk@25 ]; then
   export JAVA_HOME=/opt/homebrew/opt/openjdk@25
@@ -134,7 +140,12 @@ export ANDROID_KEYSTORE_PASSWORD="$LINCOLN_KEYSTORE_PASSWORD"
 export ANDROID_KEY_ALIAS="$LINCOLN_KEY_ALIAS"
 export ANDROID_KEY_PASSWORD="$LINCOLN_KEY_PASSWORD"
 
-./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest --console=plain
+if [ "$SKIP_TESTS" -eq 0 ]; then
+  step "Running unit tests"
+  ./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest --console=plain
+else
+  step "Reusing the previously completed unit-test run"
+fi
 
 step "Building the signed release APK"
 ./gradlew :mobile:lintRelease :mobile:assembleRelease --console=plain
