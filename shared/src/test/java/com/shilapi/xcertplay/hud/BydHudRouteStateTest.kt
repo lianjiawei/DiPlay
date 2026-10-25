@@ -290,8 +290,11 @@ class BydHudRouteStateTest {
         assertEquals(false, state.progressPending)
         assertEquals(true, state.routeEnded())
         assertNull(state.currentApple())
-        state.accept(0x5201, tlvs(tlv(1, 3)))
         assertEquals(2L, state.progressGeneration)
+        state.accept(0x5201, tlvs(tlv(1, 2)))
+        assertEquals(2L, state.progressGeneration) // Repeated end is not a new boundary.
+        state.accept(0x5201, tlvs(tlv(1, 3)))
+        assertEquals(3L, state.progressGeneration)
         assertEquals(true, state.progressPending)
     }
 

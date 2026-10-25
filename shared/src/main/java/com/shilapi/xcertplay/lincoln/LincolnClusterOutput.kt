@@ -46,6 +46,7 @@ object LincolnClusterOutput {
     private var navSent = 0
     private var musicSent = 0
     private var remainSent = 0
+    private var supersededSnapshots = 0
     private var lastReason = "init"
     // Only diagnostics skip an unchanged state. Output maintenance still runs so a timer or
     // remaining-info switch can clear a readout even without another iPhone frame.
@@ -95,7 +96,7 @@ object LincolnClusterOutput {
     private val tick = object : Runnable {
         override fun run() {
             if (context == null) return
-            onSnapshot(CarPlayGlance.snapshot())
+            onPublishedSnapshot(CarPlayGlance.snapshot())
             tickHandler?.postDelayed(this, TICK_MILLIS)
         }
     }
@@ -105,14 +106,14 @@ object LincolnClusterOutput {
         val app = appContext.applicationContext
         context = app
         if (listener != null) return
-        val next: (CarPlayGlance.Snapshot) -> Unit = { onSnapshot(it) }
+        val next: (CarPlayGlance.Snapshot) -> Unit = { onPublishedSnapshot(it) }
         listener = next
         CarPlayGlance.addListener(next)
         com.shilapi.xcertplay.media.CarAudioOff.attach(app)
         com.shilapi.xcertplay.media.CarAudioOff.addListener(audioOffListener)
         startTicking()
         // A session may already be running when the setting is enabled.
-        onSnapshot(CarPlayGlance.snapshot())
+        onPublishedSnapshot(CarPlayGlance.snapshot())
     }
 
     fun detach() {
@@ -131,7 +132,7 @@ object LincolnClusterOutput {
             lastNavDistance = null
             lastNavRoad = ""
             lastNavManeuverToken = null
-            maneuverTracker.reset()
+            maneuverTracker.reset("detached")
             lastNavSentNs = 0L
             lastMusicKey = null
             lastRemainKey = null
@@ -145,7 +146,8 @@ object LincolnClusterOutput {
 
     fun statusLine(): String = synchronized(lock) {
         "navSent=$navSent musicSent=$musicSent remainSent=$remainSent" +
-            " navOwned=$navOwned musicOwned=$musicOwned remainOwned=$remainOwned"
+            " navOwned=$navOwned musicOwned=$musicOwned remainOwned=$remainOwned" +
+            " supersededSnapshots=$supersededSnapshots"
     }
 
     private fun startTicking() {
@@ -171,6 +173,19 @@ object LincolnClusterOutput {
         else -> "就绪"
     }
 
+    private fun onPublishedSnapshot(snapshot: CarPlayGlance.Snapshot) = synchronized(lock) {
+        // Read after acquiring the output lock; a newer callback can otherwise send first.
+        // Do not just drop a stale tick: the latest notification may be blocked elsewhere,
+        // but its published data is ready. Glance never holds its lock while calling us.
+        val current = CarPlayGlance.latestPublished()
+        if (snapshot !== current) {
+            supersededSnapshots++
+            Log.i(TAG, "coalesced superseded glance index=${snapshot.maneuverIndex} " +
+                "distance=${snapshot.distanceMeters} generation=${snapshot.routeProgressGeneration}")
+        }
+        onSnapshot(current)
+    }
+
     private fun onSnapshot(snapshot: CarPlayGlance.Snapshot) = synchronized(lock) {
         val app = context ?: return@synchronized
         val navEnabled = LincolnClusterSettings.navigation(app)
@@ -194,7 +209,8 @@ object LincolnClusterOutput {
             else -> "guidance $turn ${distance}m '${snapshot.road}'"
         }
         if (changed) Log.i(TAG, "glance connected=${snapshot.connected} maneuver=${snapshot.maneuverType} " +
-            "distance=${snapshot.distanceMeters} road='${snapshot.road}' song='${snapshot.song}' " +
+            "index=${snapshot.maneuverIndex} distance=${snapshot.distanceMeters} " +
+            "road='${snapshot.road}' song='${snapshot.song}' " +
             "playing=${snapshot.playing} remain=${snapshot.remainingMeters}/${snapshot.remainingSeconds} " +
             "routeActive=${snapshot.routeActive} routeEnded=${snapshot.routeEnded} " +
             "progressGeneration=${snapshot.routeProgressGeneration} progressPending=${snapshot.routeProgressPending} " +
@@ -220,7 +236,7 @@ object LincolnClusterOutput {
             // the next maneuver's identity immediately. A route reopened inside the settle window
             // may reuse the same index with a shorter distance. Ignore any stale guidance fields
             // on this ended snapshot and keep the successfully sent packet only for the hold.
-            maneuverTracker.reset()
+            maneuverTracker.reset("route-ended")
             maintainNavLocked(app, snapshot)
             return
         }
@@ -262,6 +278,13 @@ object LincolnClusterOutput {
         val maneuverToken = maneuverTracker.update(
             snapshot.maneuverIndex, turn, snapshot.road, distance, snapshot.routeProgressGeneration,
         )
+        if (maneuverToken != lastNavManeuverToken &&
+            LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE
+        ) {
+            Log.i(TAG, "nav progress baseline reason=${maneuverTracker.resetReason} " +
+                "index=${snapshot.maneuverIndex} generation=${snapshot.routeProgressGeneration} " +
+                "distance=$distance previousDistance=$lastNavDistance")
+        }
         val key = "$turn|$distance|$road|$maneuverToken|${snapshot.remainingMeters}|${snapshot.remainingSeconds}"
         val changed = key != lastNavKey
         // Repeat the current card at least once a second even when nothing changed: the cluster hides
@@ -284,7 +307,7 @@ object LincolnClusterOutput {
                 // fresh on the next valid sample. Also give held data a fresh identity: replaying
                 // its OLDER, LARGER distance under the failed packet's identity could overflow
                 // if a restarted receiver actually established its baseline from that packet.
-                maneuverTracker.reset()
+                maneuverTracker.reset("send-failed")
                 if (lastNavManeuverToken != null) lastNavManeuverToken = LincolnManeuverToken.fresh()
             }
         }
@@ -415,7 +438,7 @@ object LincolnClusterOutput {
             .putExtra(LincolnClusterProtocol.EXTRA_PLAYING, playing))
 
     private fun clearNavLocked(app: Context) {
-        maneuverTracker.reset()
+        maneuverTracker.reset("navigation-cleared")
         // Send OFF whenever the cluster was told ON, even if a later snapshot already dropped the
         // owned flag, so a finished route cannot leave "arrived" on the cluster.
         if (navStateOn != true) return

@@ -46,7 +46,7 @@ object CarPlayGlance {
         /** The separate iAP2 artist field. QQ Music and similar apps put the song name here. */
         val songArtist: String? = null,
         val playing: Boolean = false,
-        /** Local generation of explicit iAP2 Loading/Rerouting cycles; not a wire route ID. */
+        /** Local generation of explicit route/session boundaries; not a wire route ID. */
         val routeProgressGeneration: Long = 0,
         /** Keep held cluster data until calculation ends and a fresh maneuver distance arrives. */
         val routeProgressPending: Boolean = false,
@@ -91,6 +91,14 @@ object CarPlayGlance {
         changed?.let { notifyListeners(it) }
         return current
     }
+
+    /**
+     * Read the latest published state without notifying listeners or advancing expiry. A
+     * consumer calls this under its output lock so a delayed callback/timer read cannot send
+     * old state. Using the latest value also keeps output moving when its notification is
+     * still blocked in another consumer. Unlike snapshot(), this cannot notify recursively.
+     */
+    internal fun latestPublished(): Snapshot = synchronized(this) { last }
 
     fun onFrame(frame: Iap2Frame) {
         val changed = synchronized(this) {

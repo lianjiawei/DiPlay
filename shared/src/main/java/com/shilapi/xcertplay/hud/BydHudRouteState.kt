@@ -132,6 +132,10 @@ internal class BydHudRouteState(
 
     fun clear(): Boolean {
         val wasActive = routeActive
+        // Preserve a real end/disconnect in the next snapshot too: an output may already have
+        // newer guidance when the end callback arrives and must discard that stale callback.
+        // Reopening with the same maneuver index still needs a new baseline in that case.
+        if (routeActive || progressPending) progressGeneration++
         endedExplicitly = true
         routeActive = false
         activeIndex = -1

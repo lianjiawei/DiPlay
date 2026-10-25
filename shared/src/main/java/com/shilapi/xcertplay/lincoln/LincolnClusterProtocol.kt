@@ -174,6 +174,8 @@ internal class LincolnManeuverTracker {
     private var identity: String? = null
     private var lastDistanceMeters = 0
     private var token: LincolnManeuverToken? = null
+    var resetReason: String = "first-guidance"
+        private set
 
     /** Use the distance actually transmitted: that is what the receiver uses as its baseline. */
     fun update(
@@ -197,6 +199,11 @@ internal class LincolnManeuverTracker {
         // This deliberately restarts the bar on upward GPS corrections (including rounding
         // boundaries), instead of falsifying the displayed distance or allowing a ratio > 256.
         if (nextIdentity != identity || distanceMeters > lastDistanceMeters) {
+            resetReason = when {
+                token == null -> resetReason
+                nextIdentity != identity -> "maneuver-or-route-changed"
+                else -> "distance-increased"
+            }
             identity = nextIdentity
             token = LincolnManeuverToken.fresh()
         }
@@ -204,7 +211,8 @@ internal class LincolnManeuverTracker {
         return checkNotNull(token)
     }
 
-    fun reset() {
+    fun reset(reason: String = "reset") {
+        resetReason = reason
         identity = null
         lastDistanceMeters = 0
         token = null

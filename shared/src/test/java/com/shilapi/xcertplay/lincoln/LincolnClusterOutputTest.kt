@@ -7,6 +7,10 @@ import android.content.Intent
 import com.shilapi.xcertplay.glance.CarPlayGlance
 import com.shilapi.xcertplay.iap2.body.Iap2BodyBuilder
 import com.shilapi.xcertplay.iap2.message.Iap2Messages
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -112,6 +116,300 @@ class LincolnClusterOutputTest {
         assertNotEquals(firstToken, token(infos().last()))
         send(guidance().copy(maneuverIndex = 8, distanceMeters = 0, road = "Next Road"))
         assertEquals(0, receiver.receive(infos().last()))
+    }
+
+    @Test fun aDelayedLyricCallbackCannotReplayOldGuidanceAndRestartProgress() {
+        LincolnClusterSettings.setMusic(app, true)
+        LincolnClusterSettings.setRemaining(app, true)
+        CarPlayGlance.setConnected(true)
+        LincolnClusterOutput.detach()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>()
+        val slowConsumer: (CarPlayGlance.Snapshot) -> Unit = { snapshot ->
+            if (snapshot.songTitle == "Delayed lyric" && snapshot.distanceMeters == 125) {
+                entered.countDown()
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                    failure.set(AssertionError("Timed out releasing delayed metadata"))
+                }
+            }
+        }
+        // Listeners run outside the glance lock. Another consumer may delay an older music
+        // callback while a newer navigation frame reaches the instrument on another thread.
+        CarPlayGlance.addListener(slowConsumer)
+        LincolnClusterOutput.attach(app)
+        var delayed: Thread? = null
+        try {
+            frame(0x5001) { group(0) { string(1, "Original lyric") } }
+            frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "Road") }
+            frame(0x5201) {
+                u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400)
+                u32(7, 12_000); u64(6, 900)
+            }
+            frame(0x5201) { u32(0x0a, 125) }
+            delayed = Thread {
+                try {
+                    frame(0x5001) { group(0) { string(1, "Delayed lyric") } }
+                } catch (error: Throwable) {
+                    failure.set(error)
+                }
+            }.apply { start() }
+            assertTrue("The older callback must be held", entered.await(5, TimeUnit.SECONDS))
+            frame(0x5201) { u32(0x0a, 90); u32(7, 8_000); u64(6, 600) }
+            frame(0x5001) { group(0) { string(1, "Latest lyric") } }
+            release.countDown()
+            delayed.join(5_000)
+            assertFalse("Delayed callback must finish", delayed.isAlive)
+            failure.get()?.let { throw it }
+            frame(0x5201) { u32(0x0a, 80) }
+
+            assertEquals(listOf(400, 125, 90, 80), infos().map { it.getIntExtra("distance", -1) })
+            assertEquals(1, infos().map(::token).distinct().size)
+            val receiver = FactoryNavigationReceiver()
+            assertEquals(listOf(256, 80, 57, 51), infos().map(receiver::receive))
+            assertEquals(listOf("Original lyric", "Delayed lyric", "Latest lyric"),
+                shadowOf(app).broadcastIntents.filter { it.action == LincolnClusterProtocol.ACTION_MEDIA_INFO }
+                    .map { it.getStringExtra("title") })
+            assertEquals(listOf(12_000, 8_000),
+                shadowOf(app).broadcastIntents.filter { it.action == LincolnClusterProtocol.ACTION_NAV_REMAIN }
+                    .map { it.getIntExtra("remainDistance", -1) })
+        } finally {
+            release.countDown()
+            delayed?.join(5_000)
+            CarPlayGlance.removeListener(slowConsumer)
+        }
+    }
+
+    @Test fun aTimerReadSupersededBeforeDispatchCannotRestoreOldDistance() {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        frame(0x5201) { u32(0x0a, 125) }
+        val timerRead = CarPlayGlance.snapshot()
+        frame(0x5201) { u32(0x0a, 90) }
+        now += 1_000_000_000L
+        // The tick reads before taking the output lock. Navigation can publish in that gap.
+        sendPublished(timerRead)
+        sendPublished(CarPlayGlance.snapshot())
+        assertEquals(listOf(400, 125, 90, 90), infos().map { it.getIntExtra("distance", -1) })
+        assertEquals(1, infos().map(::token).distinct().size)
+        val receiver = FactoryNavigationReceiver()
+        assertEquals(listOf(256, 80, 57, 57), infos().map(receiver::receive))
+    }
+
+    @Test fun aSupersededTickUsesLatestGuidanceWithoutWaitingForItsDelayedNotification() {
+        CarPlayGlance.setConnected(true)
+        LincolnClusterOutput.detach()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>()
+        val slowConsumer: (CarPlayGlance.Snapshot) -> Unit = { snapshot ->
+            if (snapshot.distanceMeters == 100) {
+                entered.countDown()
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                    failure.set(AssertionError("Timed out releasing latest guidance notification"))
+                }
+            }
+        }
+        CarPlayGlance.addListener(slowConsumer)
+        LincolnClusterOutput.attach(app)
+        var delayed: Thread? = null
+        try {
+            frame(0x5202) { u16(1, 7); u8(3, 2) }
+            frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+            val timerRead = CarPlayGlance.snapshot()
+            delayed = Thread {
+                try {
+                    frame(0x5201) { u32(0x0a, 100) }
+                } catch (error: Throwable) {
+                    failure.set(error)
+                }
+            }.apply { start() }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            now += 1_000_000_000L
+            sendPublished(timerRead)
+            assertEquals("A due tick must not be lost while newer notification is delayed",
+                listOf(400, 100), infos().map { it.getIntExtra("distance", -1) })
+            // Reading the published value must not notify the blocked consumer recursively.
+            now += 1_000_000_000L
+            sendPublished(timerRead)
+            assertEquals(listOf(400, 100, 100), infos().map { it.getIntExtra("distance", -1) })
+            assertEquals(1, infos().map(::token).distinct().size)
+            release.countDown()
+            delayed.join(5_000)
+            assertFalse(delayed.isAlive)
+            failure.get()?.let { throw it }
+            assertEquals(3, infos().size)
+        } finally {
+            release.countDown()
+            delayed?.join(5_000)
+            CarPlayGlance.removeListener(slowConsumer)
+        }
+    }
+
+    @Test fun aCallbackWaitingForTheOutputLockCannotUndoTheNextManeuver() {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        val oldRead = CarPlayGlance.snapshot()
+        val outputLock = checkNotNull(LincolnClusterOutput.javaClass.getDeclaredField("lock")
+            .apply { isAccessible = true }.get(LincolnClusterOutput))
+        val failure = AtomicReference<Throwable?>()
+        val delayed = Thread {
+            try {
+                sendPublished(oldRead)
+            } catch (error: Throwable) {
+                failure.set(error)
+            }
+        }
+        try {
+            synchronized(outputLock) {
+                delayed.start()
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (delayed.state != Thread.State.BLOCKED && delayed.isAlive && System.nanoTime() < deadline) {
+                    Thread.sleep(1)
+                }
+                assertEquals("Older dispatch must already be waiting for the output lock",
+                    Thread.State.BLOCKED, delayed.state)
+                // The state source must not keep its own lock while entering this output.
+                // These real frames can advance and deliver even while a different writer waits.
+                frame(0x5202) { u16(1, 8); u8(3, 1) }
+                frame(0x5201) { u16List(0x0d, listOf(8)); u32(0x0a, 100) }
+            }
+            delayed.join(5_000)
+            assertFalse(delayed.isAlive)
+            failure.get()?.let { throw it }
+            val next = token(infos().last())
+            frame(0x5201) { u32(0x0a, 50) }
+            assertEquals(listOf(400, 100, 50), infos().map { it.getIntExtra("distance", -1) })
+            assertNotEquals(token(infos().first()), next)
+            assertEquals(next, token(infos().last()))
+            val receiver = FactoryNavigationReceiver()
+            assertEquals(listOf(256, 256, 128), infos().map(receiver::receive))
+        } finally {
+            delayed.join(5_000)
+        }
+    }
+
+    @Test fun supersededEndAndDisconnectStillResetTheNewRouteExactlyOnce() {
+        for (disconnect in listOf(false, true)) {
+            CarPlayGlance.setConnected(false)
+            CarPlayGlance.setConnected(true)
+            LincolnClusterOutput.detach()
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val failure = AtomicReference<Throwable?>()
+            val slowConsumer: (CarPlayGlance.Snapshot) -> Unit = { snapshot ->
+                if ((disconnect && !snapshot.connected) || (!disconnect && snapshot.routeEnded)) {
+                    entered.countDown()
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        failure.set(AssertionError("Timed out releasing route boundary"))
+                    }
+                }
+            }
+            CarPlayGlance.addListener(slowConsumer)
+            LincolnClusterOutput.attach(app)
+            shadowOf(app).clearBroadcastIntents()
+            var delayed: Thread? = null
+            try {
+                frame(0x5202) { u16(1, 7); u8(3, 2) }
+                frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+                frame(0x5201) { u32(0x0a, 200) }
+                val oldToken = token(infos().last())
+                delayed = Thread {
+                    try {
+                        if (disconnect) CarPlayGlance.setConnected(false)
+                        else frame(0x5201) { u8(1, 0) }
+                    } catch (error: Throwable) {
+                        failure.set(error)
+                    }
+                }.apply { start() }
+                assertTrue(entered.await(5, TimeUnit.SECONDS))
+                if (disconnect) CarPlayGlance.setConnected(true)
+                frame(0x5202) { u16(1, 7); u8(3, 2) }
+                frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 100) }
+                val nextToken = token(infos().last())
+                assertNotEquals("An end must survive callback coalescing", oldToken, nextToken)
+                release.countDown()
+                delayed.join(5_000)
+                assertFalse(delayed.isAlive)
+                failure.get()?.let { throw it }
+                frame(0x5201) { u32(0x0a, 50) }
+                assertEquals("A stale end must not reset the resumed route again", nextToken, token(infos().last()))
+                assertEquals(listOf(400, 200, 100, 50), infos().map { it.getIntExtra("distance", -1) })
+                val receiver = FactoryNavigationReceiver()
+                assertEquals(listOf(256, 128, 256, 128), infos().map(receiver::receive))
+                assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
+            } finally {
+                release.countDown()
+                delayed?.join(5_000)
+                CarPlayGlance.removeListener(slowConsumer)
+            }
+        }
+    }
+
+    @Test fun aStaleTickStillClearsEndedOrDisconnectedOutputWhileTerminalCallbackIsDelayed() {
+        LincolnClusterSettings.setMusic(app, true)
+        LincolnClusterSettings.setRemaining(app, true)
+        for (disconnect in listOf(false, true)) {
+            CarPlayGlance.setConnected(false)
+            CarPlayGlance.setConnected(true)
+            LincolnClusterOutput.detach()
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val failure = AtomicReference<Throwable?>()
+            val armed = AtomicBoolean(false)
+            val slowConsumer: (CarPlayGlance.Snapshot) -> Unit = { snapshot ->
+                if (armed.get() && ((disconnect && !snapshot.connected) || (!disconnect && snapshot.routeEnded))) {
+                    entered.countDown()
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        failure.set(AssertionError("Timed out releasing terminal state"))
+                    }
+                }
+            }
+            CarPlayGlance.addListener(slowConsumer)
+            LincolnClusterOutput.attach(app)
+            shadowOf(app).clearBroadcastIntents()
+            var delayed: Thread? = null
+            try {
+                frame(0x5001) { group(0) { string(1, "Current song") } }
+                frame(0x5202) { u16(1, 7); u8(3, 2) }
+                frame(0x5201) {
+                    u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400)
+                    u32(7, 12_000); u64(6, 900)
+                }
+                val timerRead = CarPlayGlance.snapshot()
+                armed.set(true)
+                delayed = Thread {
+                    try {
+                        if (disconnect) CarPlayGlance.setConnected(false)
+                        else frame(0x5201) { u8(1, 2) }
+                    } catch (error: Throwable) {
+                        failure.set(error)
+                    }
+                }.apply { start() }
+                assertTrue(entered.await(5, TimeUnit.SECONDS))
+                sendPublished(timerRead)
+                if (!disconnect) assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
+                now += 3_000_000_000L
+                sendPublished(timerRead)
+                assertEquals(listOf(LincolnClusterProtocol.STATE_ON, LincolnClusterProtocol.STATE_OFF), states())
+                val remaining = shadowOf(app).broadcastIntents.last { it.action == LincolnClusterProtocol.ACTION_NAV_REMAIN }
+                assertEquals(0, remaining.getIntExtra("remainDistance", -1))
+                assertEquals(0, remaining.getIntExtra("remainTime", -1))
+                val media = shadowOf(app).broadcastIntents.last { it.action == LincolnClusterProtocol.ACTION_MEDIA_INFO }
+                assertEquals(if (disconnect) "" else "Current song", media.getStringExtra("title"))
+                release.countDown()
+                delayed.join(5_000)
+                assertFalse(delayed.isAlive)
+                failure.get()?.let { throw it }
+                assertEquals(2, states().size)
+            } finally {
+                release.countDown()
+                delayed?.join(5_000)
+                CarPlayGlance.removeListener(slowConsumer)
+            }
+        }
     }
 
     @Test fun neverBroadcastsANegativeManeuverDistance() {
@@ -565,6 +863,12 @@ class LincolnClusterOutputTest {
 
     private fun send(snapshot: CarPlayGlance.Snapshot) {
         LincolnClusterOutput.javaClass.getDeclaredMethod("onSnapshot", CarPlayGlance.Snapshot::class.java)
+            .apply { isAccessible = true }
+            .invoke(LincolnClusterOutput, snapshot)
+    }
+
+    private fun sendPublished(snapshot: CarPlayGlance.Snapshot) {
+        LincolnClusterOutput.javaClass.getDeclaredMethod("onPublishedSnapshot", CarPlayGlance.Snapshot::class.java)
             .apply { isAccessible = true }
             .invoke(LincolnClusterOutput, snapshot)
     }
