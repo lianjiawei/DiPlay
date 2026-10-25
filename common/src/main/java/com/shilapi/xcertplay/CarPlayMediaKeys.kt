@@ -25,6 +25,8 @@ import com.shilapi.xcertplay.compat.AudioFocusRequestCompat
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.hud.BydOutputSettings
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
+import com.shilapi.xcertplay.media.NavigationPlayback
+import com.shilapi.xcertplay.media.NavigationPlaybackSnapshot
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import java.util.concurrent.Executors
 import java.util.concurrent.Executor
@@ -42,8 +44,12 @@ internal object CarPlayMediaKeys {
     private const val TAG = "DiPlay-MediaKeys"
     private const val ACTIONS = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
         PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
-    /** How long after an interruption starts the head unit's own media index write is sampled. */
-    private const val INTERRUPTION_CAPTURE_MILLIS = 1200L
+    /**
+     * How long after an interruption starts the head unit's own media index write is sampled.
+     * The MEK/SYNC+ policy writes it almost immediately. Sampling before the pause debounce also
+     * covers short prompts without leaving their lower index behind.
+     */
+    private const val INTERRUPTION_CAPTURE_MILLIS = 120L
     /** Ignore focus blips shorter than this; a real assistant turn lasts far longer. */
     private const val ASSISTANT_PAUSE_DELAY_MILLIS = 150L
     /** Let the head unit finish moving its output back before music resumes. */
@@ -95,6 +101,8 @@ internal object CarPlayMediaKeys {
     private var mediaButtonReceiverRegistered = false
     private var appContext: Context? = null
     private var mediaAudioActive = false
+    /** Injectable only so focus-policy tests do not need to open a real AudioTrack. */
+    internal var navigationPlaybackSnapshot: () -> NavigationPlaybackSnapshot = NavigationPlayback::snapshot
     private var nowPlaying = CarPlayNowPlaying()
     private var elapsedUpdatedAt = 0L
     private var artwork: Bitmap? = null
@@ -373,6 +381,20 @@ internal object CarPlayMediaKeys {
         if (!current) return
         Log.i(TAG, "audio focus change=$change")
         WheelKeyLog.note("media keys audio focus change=$change")
+        if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
+            val navigation = navigationPlaybackSnapshot()
+            if (navigation.active && !navigation.priorityVoiceActive) {
+                // Some automotive policies briefly take focus while DiPlay's own guidance track
+                // moves onto or off the navigation bus. It is not an external assistant turn:
+                // pausing the iPhone and forwarding an interruption here defeats the separate
+                // "lower music during navigation" setting, especially for the final prompt.
+                val line = "media keys ignored self navigation focus change=$change " +
+                    "stream=${navigation.legacyStreamType ?: "usage"}"
+                Log.i(TAG, line)
+                WheelKeyLog.note(line)
+                return
+            }
+        }
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {

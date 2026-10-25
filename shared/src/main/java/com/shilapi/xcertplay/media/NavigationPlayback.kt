@@ -3,7 +3,7 @@ package com.shilapi.xcertplay.media
 /** A null stream means usage routing, fallback, or conflicting active legacy routes. */
 data class NavigationPlaybackSnapshot(val active: Boolean, val legacyStreamType: Int?, val priorityVoiceActive: Boolean = false)
 
-/** Foreground UI can poll this snapshot; it never requests focus or changes volume itself. */
+/** Consumers can poll this snapshot; it never requests focus or changes volume itself. */
 object NavigationPlayback {
     private val tracker = NavigationPlaybackTracker()
     fun snapshot(): NavigationPlaybackSnapshot = tracker.snapshot()

@@ -7,6 +7,8 @@ import android.view.Surface
 import com.shilapi.xcertplay.compat.AudioFocusRequestCompat
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
+import com.shilapi.xcertplay.media.NavigationPlayback
+import com.shilapi.xcertplay.media.NavigationPlaybackSnapshot
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import org.junit.After
 import org.junit.Before
@@ -31,6 +33,7 @@ class CarPlayMediaFocusForwardingTest {
     private val sinks = mutableListOf<AndroidMediaSink>()
 
     @Before fun enableFocusAndGrantRequests() {
+        CarPlayMediaKeys.navigationPlaybackSnapshot = { NavigationPlaybackSnapshot(false, null) }
         AirPlayPersistence.saveDisableMediaKeyAudioFocus(app, false)
         shadowOf(app.getSystemService(AudioManager::class.java))
             .setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
@@ -40,6 +43,7 @@ class CarPlayMediaFocusForwardingTest {
         controllers.forEach(CarPlayMediaKeys::detach)
         sinks.forEach(AndroidMediaSink::close)
         CarPlayBackgroundSession.clear()
+        CarPlayMediaKeys.navigationPlaybackSnapshot = NavigationPlayback::snapshot
         AirPlayPersistence.saveDisableMediaKeyAudioFocus(app, false)
         shadowOf(Looper.getMainLooper()).idle()
     }
@@ -57,6 +61,47 @@ class CarPlayMediaFocusForwardingTest {
         listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
         verify(sink).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
         verify(sink).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_GAIN)
+    }
+
+    @Test fun selfNavigationFocusLossDoesNotReachTheSinkOrPauseThePhone() {
+        val controller = mock(CarPlayController::class.java).also(controllers::add)
+        val sink = spy(AndroidMediaSink()).also(sinks::add)
+        val listener = start(controller, sink)
+        CarPlayMediaKeys.navigationPlaybackSnapshot = {
+            NavigationPlaybackSnapshot(active = true, legacyStreamType = 14)
+        }
+
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS)
+
+        verify(sink, never()).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        verify(controller, never()).sendMediaButton(com.shilapi.xcertplay.airplay.CarPlayMediaButton.PAUSE)
+    }
+
+    @Test fun priorityVoiceDuringNavigationStillUsesInterruptionProtection() {
+        val controller = mock(CarPlayController::class.java).also(controllers::add)
+        val sink = spy(AndroidMediaSink()).also(sinks::add)
+        val listener = start(controller, sink)
+        CarPlayMediaKeys.navigationPlaybackSnapshot = {
+            NavigationPlaybackSnapshot(active = true, legacyStreamType = 14, priorityVoiceActive = true)
+        }
+
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+
+        verify(sink).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+    }
+
+    @Test fun exclusiveInterruptionDuringNavigationIsNotMistakenForGuidance() {
+        val controller = mock(CarPlayController::class.java).also(controllers::add)
+        val sink = spy(AndroidMediaSink()).also(sinks::add)
+        val listener = start(controller, sink)
+        CarPlayMediaKeys.navigationPlaybackSnapshot = {
+            NavigationPlaybackSnapshot(active = true, legacyStreamType = 14)
+        }
+
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+
+        verify(sink).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
     }
 
     @Test fun oldControllerAndOldRequestCallbacksCannotAffectReplacementSink() {
@@ -153,6 +198,19 @@ class CarPlayMediaFocusForwardingTest {
         // The MEK/SYNC+ head unit lowers the media index while its own assistant speaks.
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
         shadowOf(Looper.getMainLooper()).idleFor(1200, TimeUnit.MILLISECONDS)
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        assertEquals(12, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+    }
+
+    @Test fun headUnitVolumeWriteDuringAShortInterruptionIsUndone() {
+        val controller = mock(CarPlayController::class.java).also(controllers::add)
+        val sink = spy(AndroidMediaSink()).also(sinks::add)
+        val listener = start(controller, sink)
+        val audio = app.getSystemService(AudioManager::class.java)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 12, 0)
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, 5, 0)
+        shadowOf(Looper.getMainLooper()).idleFor(150, TimeUnit.MILLISECONDS)
         listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
         assertEquals(12, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
     }

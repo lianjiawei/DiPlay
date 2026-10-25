@@ -136,6 +136,10 @@ internal class AudioFocusCoordinator(
                 return@synchronized
             }
             runCatching { report("Audio: focus change=$change activeTracks=${active.size}") }
+            if (isSelfNavigationFocusLoss(change)) {
+                runCatching { report("Audio: focus change=$change ignored during CarPlay navigation") }
+                return@synchronized
+            }
             when (change) {
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                     setMediaVolume(DUCKED_VOLUME)
@@ -183,6 +187,10 @@ internal class AudioFocusCoordinator(
         // exactly why the assistant's route switch went unnoticed.
         synchronized(this) {
             if (closed) return
+            if (isSelfNavigationFocusLoss(change)) {
+                runCatching { report("Audio: external focus change=$change ignored during CarPlay navigation") }
+                return
+            }
             when (change) {
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
@@ -195,6 +203,15 @@ internal class AudioFocusCoordinator(
             // because the envelope is already armed above.
             if (request != null) currentListener.onAudioFocusChange(change)
         }
+    }
+
+    private fun isSelfNavigationFocusLoss(change: Int): Boolean {
+        // Automotive navigation policies conventionally surface the MAY_DUCK form. A full
+        // transient loss is reserved for calls and other exclusive interruptions and must retain
+        // the existing protection even when a guidance tail happens to be active at the same time.
+        if (change != AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) return false
+        val navigation = NavigationPlayback.snapshot()
+        return navigation.active && !navigation.priorityVoiceActive
     }
 
     /**
