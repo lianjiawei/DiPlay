@@ -584,6 +584,8 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
     private var activeDisplaySize: DisplaySize? = null
     private var pendingDisplaySize: DisplaySize? = null
+    /** The pending size was derived from system-bar insets after a session used the raw window. */
+    private var pendingProjectionViewportCorrection = false
     private var sessionDisplay: CarPlaySessionDisplay? = null
     private var touchOutsideContent = false
     private var displayScalePercent = 100
@@ -806,8 +808,10 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
     private val applyDisplaySize = Runnable {
         val size = pendingDisplaySize ?: return@Runnable
+        val projectionViewportCorrection = pendingProjectionViewportCorrection
         pendingDisplaySize = null
-        applyDisplaySize(size)
+        pendingProjectionViewportCorrection = false
+        applyDisplaySize(size, projectionViewportCorrection)
     }
 
     private val textureListener = object : TextureView.SurfaceTextureListener {
@@ -5766,16 +5770,33 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     private fun scheduleDisplaySize(width: Int, height: Int) {
         if (width <= 0 || height <= 0 || shuttingDown.get()) return
-        val size = displaySizeForCurrentWindow(DisplaySize(width, height))
-        if (size == pendingDisplaySize) return
+        val measured = DisplaySize(width, height)
+        val size = displaySizeForCurrentWindow(measured)
+        val display = sessionDisplay
+        val projectionViewportCorrection = isStartupProjectionViewportCorrection(
+            unifiedHome = unifiedHome,
+            connectionRequested = unifiedConnectionRequested,
+            projectionVisible = unifiedProjectionVisible,
+            multiWindow = isMultiWindowActive(),
+            measured = ProjectionViewportSize(measured.width, measured.height),
+            resolved = ProjectionViewportSize(size.width, size.height),
+            sessionWindow = display?.let { ProjectionViewportSize(it.windowWidth, it.windowHeight) },
+        )
+        if (size == pendingDisplaySize) {
+            pendingProjectionViewportCorrection =
+                pendingProjectionViewportCorrection || projectionViewportCorrection
+            return
+        }
         mainHandler.removeCallbacks(applyDisplaySize)
         if (size == activeDisplaySize && !displayLayoutChanged()) {
             pendingDisplaySize = null
+            pendingProjectionViewportCorrection = false
             // A rotation back can cancel the last pending resize after teardown has finished.
             maybeStartCarPlay()
             return
         }
         pendingDisplaySize = size
+        pendingProjectionViewportCorrection = projectionViewportCorrection
         // With a turning screen's square canvas nothing reconnects, so the turn need not wait for the size to settle.
         mainHandler.postDelayed(applyDisplaySize,
             if (sessionDisplay?.viewAreas?.turnsWithScreen == true) 0L else DISPLAY_CHANGE_DEBOUNCE_MILLIS)
@@ -5838,7 +5859,9 @@ open class CarPlayHostActivity : ComponentActivity() {
     private fun statusBarShown(): Boolean? =
         ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(WindowInsetsCompat.Type.statusBars())
 
-    private fun applyDisplaySize(size: DisplaySize) {
+    private fun applyDisplaySize(size: DisplaySize) = applyDisplaySize(size, false)
+
+    private fun applyDisplaySize(size: DisplaySize, projectionViewportCorrection: Boolean) {
         val display = sessionDisplay
         if (display != null && applyViewArea(size, display)) return
         val layoutChanged = displayLayoutChanged(size)
@@ -5866,6 +5889,16 @@ open class CarPlayHostActivity : ComponentActivity() {
                     "${previous.width}x${previous.height} -> ${size.width}x${size.height}",
             )
             maybeStartCarPlay()
+        } else if (display != null && !layoutChanged && projectionViewportCorrection) {
+            // Unified home measures edge-to-edge while connecting. Some ROMs publish the visible
+            // system-bar insets one layout later, after a controller has already been created for
+            // the raw screen. This is the final projection viewport, not a reversing-camera/PiP
+            // shrink: renegotiate once so a shown top bar does not create side pillarboxes.
+            val message = "Projection viewport settled ${display.windowWidth}x${display.windowHeight} -> " +
+                "${size.width}x${size.height}; renegotiating before projection"
+            appendLog(message)
+            Log.i(TAG, message)
+            restartCarPlay(brandString(R.string.getting_carplay_ready))
         } else if (display != null && !layoutChanged &&
             statusBarHiddenByAnotherWindow(display, size.width, size.height, statusBarShown())) {
             val message = "Display changed ${previous.width}x${previous.height} -> ${size.width}x${size.height} " +
@@ -7094,6 +7127,25 @@ internal fun statusBarHiddenByAnotherWindow(display: CarPlaySessionDisplay, widt
         width == display.windowWidth && height > display.windowHeight
 
 internal data class ProjectionViewportSize(val width: Int, val height: Int)
+
+/**
+ * A unified-home session may start before a visible system bar publishes its inset. Only the exact
+ * raw startup window may be corrected here: a genuinely smaller measured window remains the
+ * reversing-camera/PiP case and keeps the existing session.
+ */
+internal fun isStartupProjectionViewportCorrection(
+    unifiedHome: Boolean,
+    connectionRequested: Boolean,
+    projectionVisible: Boolean,
+    multiWindow: Boolean,
+    measured: ProjectionViewportSize,
+    resolved: ProjectionViewportSize,
+    sessionWindow: ProjectionViewportSize?,
+): Boolean {
+    if (!unifiedHome || !connectionRequested || projectionVisible || multiWindow || sessionWindow == null) return false
+    if (measured != sessionWindow || resolved == measured) return false
+    return resolved.width in 1..measured.width && resolved.height in 1..measured.height
+}
 
 /** Returns the projection content size after Android fits visible bars and a cutout. */
 internal fun projectionViewportSize(

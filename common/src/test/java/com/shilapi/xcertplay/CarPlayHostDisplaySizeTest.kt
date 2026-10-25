@@ -90,6 +90,18 @@ class CarPlayHostDisplaySizeTest {
         assertEquals(2, keepLogs())
     }
 
+    @Test fun settledProjectionViewportRebuildsInsteadOfKeepingTheRawCanvas() {
+        startSession(windowWidth = 2640, windowHeight = 1200)
+
+        applySize(2486, 1046, projectionViewportCorrection = true)
+
+        assertEquals(size(2486, 1046), getField("activeDisplaySize"))
+        assertEquals(1, getField("restartGeneration"))
+        assertTrue(getField("handshakeResetInProgress") as Boolean)
+        assertNull(getField("sessionDisplay"))
+        assertEquals(0, keepLogs())
+    }
+
     @Test fun aNarrowWindowIsNotTreatedAsScreenRotation() {
         val display = startSession()
         applySize(700, 990)
@@ -532,9 +544,17 @@ class CarPlayHostDisplaySizeTest {
         .getDeclaredConstructor(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
         .apply { isAccessible = true }.newInstance(width, height)
 
-    private fun applySize(width: Int, height: Int) {
-        activity.javaClass.getDeclaredMethod("applyDisplaySize", sizeClass)
-            .apply { isAccessible = true }.invoke(activity, size(width, height))
+    private fun applySize(width: Int, height: Int, projectionViewportCorrection: Boolean = false) {
+        if (projectionViewportCorrection) {
+            activity.javaClass.getDeclaredMethod(
+                "applyDisplaySize",
+                sizeClass,
+                Boolean::class.javaPrimitiveType,
+            ).apply { isAccessible = true }.invoke(activity, size(width, height), true)
+        } else {
+            activity.javaClass.getDeclaredMethod("applyDisplaySize", sizeClass)
+                .apply { isAccessible = true }.invoke(activity, size(width, height))
+        }
     }
 
     private fun scheduleSize(width: Int, height: Int) {

@@ -84,4 +84,42 @@ class ProjectionViewportSizeTest {
             ),
         )
     }
+
+    @Test fun lateVisibleBarsCorrectTheExactRawStartupWindow() {
+        assertEquals(
+            true,
+            isStartupProjectionViewportCorrection(
+                unifiedHome = true,
+                connectionRequested = true,
+                projectionVisible = false,
+                multiWindow = false,
+                measured = ProjectionViewportSize(2640, 1200),
+                resolved = ProjectionViewportSize(2486, 1046),
+                sessionWindow = ProjectionViewportSize(2640, 1200),
+            ),
+        )
+    }
+
+    @Test fun aRealSmallerWindowIsNotAStartupBarCorrection() {
+        assertEquals(
+            false,
+            isStartupProjectionViewportCorrection(
+                unifiedHome = true,
+                connectionRequested = true,
+                projectionVisible = false,
+                multiWindow = false,
+                measured = ProjectionViewportSize(2486, 1046),
+                resolved = ProjectionViewportSize(2332, 892),
+                sessionWindow = ProjectionViewportSize(2640, 1200),
+            ),
+        )
+    }
+
+    @Test fun visibleProjectionAndMultiWindowNeverUseStartupCorrection() {
+        val measured = ProjectionViewportSize(2640, 1200)
+        val resolved = ProjectionViewportSize(2486, 1046)
+        val session = ProjectionViewportSize(2640, 1200)
+        assertEquals(false, isStartupProjectionViewportCorrection(true, true, true, false, measured, resolved, session))
+        assertEquals(false, isStartupProjectionViewportCorrection(true, true, false, true, measured, resolved, session))
+    }
 }
