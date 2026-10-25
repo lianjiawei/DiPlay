@@ -8,6 +8,7 @@ import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.roundToInt
 import androidx.core.widget.doAfterTextChanged
@@ -129,7 +130,26 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
             dp(configuration.screenWidthDp - 2 * FidelitySettingsMetrics.CONTENT_PAD_DP)).coerceAtLeast(1)
         val availableHeight = dp(configuration.screenHeightDp - 2 * GlassChrome.CONTROL_GAP_DP).coerceAtLeast(1)
         val verticalInsets = decor.paddingTop + decor.paddingBottom
-        for (view in listOfNotNull(content, panel("parentPanel"), panel("contentPanel"))) {
+
+        // Some OEM Android themes put three AlertDialog actions in a narrow panel at the side.
+        // That leaves a large empty content area and turns even short labels into a tall
+        // button column. Simple message dialogs always use the same reading order on every OEM:
+        // title, message, then a full-width adaptive action row. GlassDialogActions still stacks
+        // genuinely long actions when the complete row cannot fit.
+        val parentPanel = panel("parentPanel")
+        val topPanel = panel("topPanel")
+        val contentPanel = panel("contentPanel")
+        val buttonPanel = panel("buttonPanel")
+        (parentPanel as? LinearLayout)?.orientation = LinearLayout.VERTICAL
+        for (view in listOfNotNull(topPanel, contentPanel, buttonPanel)) {
+            view.layoutParams = view.layoutParams.apply {
+                this.width = ViewGroup.LayoutParams.MATCH_PARENT
+                this.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                if (this is LinearLayout.LayoutParams) weight = 0f
+            }
+            view.requestLayout()
+        }
+        for (view in listOfNotNull(content, parentPanel, contentPanel)) {
             view.minimumHeight = 0
             view.layoutParams = view.layoutParams.apply {
                 height = ViewGroup.LayoutParams.WRAP_CONTENT

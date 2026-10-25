@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.update.UpdateAvailability
@@ -123,6 +124,67 @@ class DiagnosticDialogLayoutTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun savedReportOverridesOemSideActionsInPortraitAndLandscape() {
+        val app = RuntimeEnvironment.getApplication()
+        try {
+            for ((name, qualifiers) in listOf(
+                "portrait" to "zh-rCN-w400dp-h840dp-port-xhdpi",
+                "landscape" to "zh-rCN-w800dp-h480dp-land-mdpi",
+            )) {
+                RuntimeEnvironment.setQualifiers(qualifiers)
+                RuntimeEnvironment.setFontScale(1.3f)
+                DiPlayPreferences.saveAutoConnect(app, false)
+                UpdateAvailability.saveBackgroundChecksEnabled(app, false)
+                val controller = Robolectric.buildActivity(
+                    DiPlayActivity::class.java,
+                    Intent(app, DiPlayActivity::class.java).putExtra("page", "diagnostics"),
+                ).setup().visible()
+                try {
+                    val dialog = savedDialog(controller.get())
+                    shadowOf(Looper.getMainLooper()).idle()
+                    val decor = dialog.window!!.decorView as ViewGroup
+                    val parentPanel = frameworkPanel<LinearLayout>(decor, "parentPanel")
+                    val contentPanel = frameworkPanel<View>(decor, "contentPanel")
+                    val buttonPanel = frameworkPanel<View>(decor, "buttonPanel")
+
+                    // Model the Huawei/OEM layout shown in the field report: message on the left
+                    // and a narrow, full-height action panel on the right.
+                    parentPanel.orientation = LinearLayout.HORIZONTAL
+                    contentPanel.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    buttonPanel.layoutParams = LinearLayout.LayoutParams(128, ViewGroup.LayoutParams.MATCH_PARENT)
+
+                    // Message changes are re-fitted by GlassDialogBuilder after OEM layout passes.
+                    decor.findViewById<TextView>(android.R.id.message).text = "$path "
+                    shadowOf(Looper.getMainLooper()).idle()
+                    measure(dialog)
+
+                    assertEquals("Actions belong below the message: $name", LinearLayout.VERTICAL, parentPanel.orientation)
+                    assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, buttonPanel.layoutParams.width)
+                    assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, buttonPanel.layoutParams.height)
+                    val rects = listOf(AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_POSITIVE)
+                        .map(dialog::getButton)
+                        .map { action ->
+                            Rect(0, 0, action.width, action.height).also {
+                                decor.offsetDescendantRectToMyCoords(action, it)
+                            }
+                        }
+                    assertEquals("Short actions stay in one row: $name", 1, rects.map { it.top }.distinct().size)
+                    assertEquals("Actions use equal widths: $name", 1, rects.map { it.width() }.distinct().size)
+                    assertTrue("Action row stays inside the dialog: $name", rects.all {
+                        it.left >= 0 && it.right <= decor.width && it.bottom <= decor.height
+                    })
+                    capture(decor, "$name-oem-side-actions-fixed")
+                    dialog.dismiss()
+                } finally {
+                    controller.pause().stop().destroy()
+                }
+            }
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+            RuntimeEnvironment.setQualifiers("en")
+        }
+    }
+
     private fun savedDialog(activity: DiPlayActivity): AlertDialog = DiPlayActivity::class.java
         .getDeclaredMethod("showSavedDiagnosticReport", DiagnosticExportStore.SavedReport::class.java, String::class.java, String::class.java)
         .apply { isAccessible = true }.invoke(activity, DiagnosticExportStore.SavedReport(uri), report, path) as AlertDialog
@@ -144,6 +206,11 @@ class DiagnosticDialogLayoutTest {
             File("build/reports/diagnostic-dialog/$name.png").apply { parentFile.mkdirs() }
                 .outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { image.recycle() }
+    }
+    private inline fun <reified T : View> frameworkPanel(decor: View, name: String): T {
+        val id = decor.resources.getIdentifier(name, "id", "android")
+        assertNotEquals("Framework panel $name is available", 0, id)
+        return decor.findViewById(id)
     }
     private fun descendants(view: View): Sequence<View> = sequence {
         yield(view)
