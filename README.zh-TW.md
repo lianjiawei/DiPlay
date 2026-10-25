@@ -1,75 +1,87 @@
-# DiPlay
+# CarPlay for Lincoln / Ford
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
+[主說明](README.md) · [簡體中文](README.zh-CN.md)
 
-為相容的比亞迪 Android 車機提供有線與無線 CarPlay，採用熟悉的 DiAuto 介面。DiPlay 是獨立應用程式，正式版套件名稱為 `com.shihab.diplay`。
+這是為 Lincoln、Ford Android 車機調整的 CarPlay 接收器，支援 USB 與無線連線。安裝後的應用程式名稱是 **CarPlay**，正式版套件名稱是 `cn.manstep.phonemirrorBox`。
 
-> 專案以比亞迪汽車為主要支援對象。其他品牌可能可以執行，但不在一般支援範圍內；特定韌體的個別整合不代表整個品牌受到支援。
+本分支以 [xcertplay](https://github.com/shilapi/xcertplay) / DiPlay 為基礎持續開發，但已獨立維護介面、車型支援、套件名稱、簽章、版本及更新頻道，不使用上游 DiPlay 的 APK 或更新來源。
 
-[下載與繁體中文網站](https://shihabal3amri.github.io/DiPlay/zh-Hant/) · [0.2.20 版本](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.20) · [回報問題](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
+> 這是個人維護的實驗專案，並非 Apple、Lincoln 或 Ford 官方產品。各車型、車機韌體及 iOS 版本的相容性可能不同，請停車後測試。
 
-![DiPlay 主畫面](site/assets/home.png)
+## 專案資訊
 
-## 開始使用
-
-請將 DiPlay 安裝在**車機上，而非 iPhone**。車機需要允許安裝 APK，且 Android 版本須為 7.1 以上（API 25+）；Android 7.1–8.1 尚待實車驗證。使用時無須越獄、轉接盒、Mac、帳號或遠端認證伺服器。
-
-有線與無線 CarPlay 的核心功能不需要 ADB。部分儀表板、車輛資料、方向盤或停車影片功能需要相容韌體及已授權的網路 ADB，請依各設定的說明操作。
-
-1. 停車後安裝 APK，開啟 DiPlay 並授予所需權限。
-2. 無線模式可選車載熱點、Wi-Fi Direct 或現有 Wi-Fi／同一區域網路；有線模式請使用支援資料傳輸的 USB 連接埠與傳輸線。
-3. 在 iPhone 上接受 CarPlay 提示。連線前先關閉其他手機投影應用程式。
-
-完整步驟請見[安裝與連線指南](docs/INSTALL.zh-TW.md)。
-
-## 切換為繁體中文
-
-開啟 **設定 → 語言 → 應用程式語言**，選擇 **繁體中文**，再按 **套用**。也可選擇 **跟隨系統**。
-
-Android 13 以上會與 Android 的個別應用程式語言設定同步；Android 7.1–12 由 DiPlay 儲存語言選擇。繁體中文使用臺灣用語；香港、澳門及明確指定 `Hant` 的語言選擇共用這份翻譯，並未提供獨立的地區版本。DiPlay 的語言選擇控制其自身介面，CarPlay 內的應用程式語言則由 iPhone 及各應用程式管理。
-
-選用的 **DiPlay Home** 啟動器與 **DiPlay map host** 範例也提供繁體中文，依各自的 Android 系統語言顯示，不共用主要 DiPlay 應用程式的語言偏好。第三方小工具與應用程式名稱由提供者決定。
-
-## 主要功能與 0.2.20 更新
-
-- 有線 USB 與無線 CarPlay，使用本機認證。
-- 相容韌體上的比亞迪抬頭顯示器（HUD）與儀表板導航提示。
-- 解析度、影格率、圖示與文字大小調整；依設定說明，在重新連線後套用。
-- 0.2.20 修正音訊時脈偏快或偏慢的車機上音樂每隔一分鐘左右停頓的問題，車機送到聽筒的通話改用揚聲器播放，有線 CarPlay 也能在 USB 音訊驅動程式佔用 iPhone 的車機上，以及點「儲存並重新連線」後順利啟動。
-- 「自動開啟熱點」支援更多車機，儀表板上的 CarPlay 地圖支援更多比亞迪韌體（包括豹 5 Ultra）；診斷報告會記錄最近一次當機，以及收到的方向盤與媒體按鍵。
-- 可在 **設定 → 關於 → 在手機上備份或還原** 透過 QR 碼備份設定，更新時可選其他安裝程式。
-- 本機診斷報告匯出，只有在你選擇分享後才會傳送。
-- 實驗性選項預設關閉，請停車後依說明測試。
-
-[英文版本說明](docs/RELEASE-NOTES-0.2.20.md)與[驗證紀錄](docs/VALIDATION.md)記錄完整變更、已知限制及尚待實車測試的項目。自動化測試通過不代表所有車型、iOS、Siri 或通話情境都已驗證。
-
-## 繁體中文文件
-
-| 文件 | 內容 |
+| 項目 | 目前內容 |
 | --- | --- |
-| [安裝與連線](docs/INSTALL.zh-TW.md) | 首次使用、權限、USB、熱點及 Wi-Fi 模式 |
-| [設定與疑難排解](docs/SETTINGS.zh-TW.md) | 設定分類、重新連線、畫面與聲音、診斷回報 |
-| [隱私權與診斷](docs/PRIVACY.zh-TW.md) | 資料儲存、權限、報告分享及更新檢查 |
-| [從原始碼建置](docs/BUILD.zh-TW.md) | Windows／Android Studio、建置環境、APK 路徑及認證素材 |
-| [翻譯維護](docs/LOCALIZATION.zh-TW.md) | 臺灣用語、資源檢查與文件同步方式 |
-| [本次繁體中文驗證紀錄](docs/VALIDATION.zh-TW.md) | 測試、建置結果及完整 CI 的未解失敗 |
+| 應用程式名稱 | CarPlay |
+| 目前正式版 | 1.1.8 |
+| Release 套件名稱 | `cn.manstep.phonemirrorBox` |
+| Debug 套件名稱 | `cn.manstep.phonemirrorBox.hudtest` |
+| 最低系統 | Android 7.1（API 25） |
+| 主要硬體 | Lincoln/Ford Freescale MEK / i.MX8 Android 車機 |
+| 開發分支 | `lincoln-0.2.20` |
 
-進階車型整合可參考[比亞迪導航](docs/BYD_NAVIGATION.md)、[Wi-Fi Direct 舊版限制](docs/ANDROID9_WIFI_DIRECT.md)及[現有 Wi-Fi 指南](docs/EXISTING_WIFI.md)；這些深入文件目前為英文。
+## 下載與線上更新
 
-## 相容性與公開預覽版限制
+- [GitHub 最新正式版](https://github.com/lianjiawei/DiPlay/releases/latest)
+- [1.1.8 中國大陸鏡像 APK](https://weclaw-agent.cloud/diplay-updates/assets/v1.1.8/CarPlay-1.1.8.apk)
+- [1.1.8 更新說明](docs/RELEASE-NOTES-1.1.8.md)
+- [專案倉庫](https://github.com/lianjiawei/DiPlay)
 
-這是**未經 Apple 認證的公開預覽版**。公開 APK 包含從公開 Carlinkit 韌體取得的實驗性配件身分，並非為 DiPlay 新核發的 MFi 身分；內含私密金鑰可被擷取。未來 iOS 是否接受、各車機的可靠性及該身分是否適合公開散布，仍有未解問題。
+應用程式內的更新位於 **設定 → 關於 → 檢查更新**。程式會先讀取 `https://weclaw-agent.cloud/diplay-updates/releases.json`，鏡像無法使用時再改用 `https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30`。鏡像同時提供 APK 與 `SHA256SUMS.txt`，下載後仍會檢查檔案雜湊、套件名稱及 Android 簽章。
 
-Wi-Fi Direct 在 Android 7.1–9 使用依賴韌體的舊版路徑，無法驗證實際協商頻率；Android 10 以上可驗證。車機支援連上 5 GHz Wi-Fi，不代表能建立 5 GHz Wi-Fi Direct 群組。遇到卡頓可先使用車載熱點、30 fps、預設圖示大小及較低解析度，保留 HEVC 關閉。
+## Lincoln / Ford 調整
 
-更新時使用相同套件與相符簽章才能保留設定及配對資料；請勿只憑 APK 檔名判斷更新相容性。安裝限制取決於車機韌體。
+- 重新設計橫向主畫面及設定；待連線、連線中、已連線和重新連線共用同一主畫面。
+- 主畫面可選 Lincoln 或 Ford Logo。
+- 可選 Corsair（冒險家）、Nautilus（航海家）、Aviator（飛行家）或自訂背景。
+- 支援目標車機的音訊關閉鍵、方向盤切歌鍵及中控切歌鍵。
+- 相容原車儀錶可顯示下一轉向、距離、路名、1.1.8 新增的路口進度條，以及歌曲或歌詞文字。
+- 針對目標 i.MX8 車機調整影片輸出、音訊行為和流暢模式。
+- 不適用於 Lincoln/Ford 硬體的上游車型專用選項會在目標車機上隱藏。
 
-## 回報問題
+## 其他主要功能
 
-重現問題後，開啟 **設定 → 診斷 → 儲存診斷報告**，記錄故障時間並檢查 TXT 內容，再附到[相關問題](https://github.com/shihabal3amri/DiPlay/issues)或[新增問題](https://github.com/shihabal3amri/DiPlay/issues/new/choose)。請提供車型／車機、Android／DiLink／完整韌體版本、iPhone／iOS、連線方式、相關設定與重現步驟。不要公開熱點密碼或認證檔案。詳見[診斷回報步驟](docs/SETTINGS.zh-TW.md#匯出診斷報告與回報問題)。
+- USB、車機熱點、Wi-Fi Direct、現有 Wi-Fi / 同一區域網路 CarPlay。
+- 解析度、影格率、圖示/文字大小、畫面、Dock、系統列及 CarPlay 日夜模式設定。
+- 導航播報時降低媒體音量，並可調整降低幅度與恢復時間。
+- Siri、通話、語音訊息與車機麥克風相容處理。
+- 設定搜尋、分類設定、QR Code 備份/還原和本機診斷報告。
+- 深色車機介面支援 1280×720、1920×720、超寬螢幕和手機橫向視窗。
 
-## 原始碼與授權
+## 安裝與升級
 
-專案基於 [xcertplay](https://github.com/shilapi/xcertplay)（GPL-3.0）。主畫面、設定介面及網站改編自 [DiAuto](https://github.com/shihabal3amri/DiAuto)（AGPL-3.0）；相關授權位於 `docs/licenses`。散布修改版本時請保留[第三方聲明與授權](docs/THIRD_PARTY_NOTICES.md)。CarPlay 與其圖示屬於 Apple Inc.；專案不代表 Apple 或比亞迪的認可。
+1. 將 APK 下載到 Android 車機，不要安裝在 iPhone。
+2. 允許車機安裝未知來源應用程式。
+3. 開啟 CarPlay，依指引允許藍牙、Wi-Fi/定位及麥克風權限。
+4. 選擇連線方式，並在 iPhone 上接受 CarPlay。
 
-一般原始碼／CI 建置預設不包含執行時認證素材；獨立連線測試需要外部素材。Git 與公開原始碼壓縮檔排除認證私密金鑰、Android 簽章金鑰及本機設定；將認證素材打包進 APK 後，接收者仍可擷取。詳見[建置指南](docs/BUILD.zh-TW.md)。
+基礎 CarPlay 不需要 root；依賴特定韌體的擴充功能會明確標示 ADB 或實驗性需求。
+
+目前 1.1.x 正式版使用相同套件名稱與簽章，可直接覆蓋並保留設定。早期 `com.corsairplay` 套件、簽章不同的第三方同名 APK、Debug 與正式版不能互相覆蓋。若 Android 顯示簽章衝突，請先備份設定並確認舊 APK 來源；解除安裝會清除應用程式資料。
+
+## 從原始碼開發
+
+主要應用程式模組是 `:mobile`。開發環境需要 Android Studio、JDK 25、Android SDK Platform 37、Build-Tools 36.0.0、Platform-Tools 及 NDK 28.2.13676358。完整步驟請見[建置文件](docs/BUILD.md)。
+
+```sh
+./gradlew :mobile:assembleDebug
+```
+
+一般原始碼 APK 不包含 CarPlay 執行身分，只適合開發和介面測試。可獨立連接 iPhone 的建置必須從 Git 倉庫外提供執行身分；正式發布還需要本分支自己的 Android 簽章金鑰。私密金鑰、keystore 和本機設定都不會進入 Git。
+
+## 診斷與回報
+
+遇到問題時，開啟 **設定 → 診斷 → 儲存診斷報告**。報告通常儲存在 `Downloads/Lincoln`，不會自動上傳。回報前請移除熱點密碼和裝置識別資料，並提供車型、車機 Android/韌體、iPhone/iOS、連線方式、重現步驟及故障時間。
+
+本倉庫目前未啟用 GitHub Issues；需要回報時，請從 [lianjiawei/DiPlay 專案首頁](https://github.com/lianjiawei/DiPlay)查看最新聯絡方式。
+
+## 風險與授權
+
+- 本專案未經 Apple 認證；公開 APK 內含實驗性 CarPlay 配件身分，取得 APK 的人可以擷取它。
+- iOS、車機韌體或儀錶應用程式更新後，相容行為可能改變。
+- 車機專用功能只在相應硬體與韌體存在時生效，不代表支援所有 Lincoln 或 Ford 車型。
+- 駕駛途中請勿調整設定或查看診斷資料。
+
+專案以 xcertplay 為基礎，主體遵循 GPL-3.0；部分介面及資料改編自 DiAuto，相關內容遵循 AGPL-3.0。散布 APK 或修改版時必須保留原有著作權、授權條款及對應原始碼。請參閱[中文授權說明](LICENSE-NOTICE.zh-CN.md)及[第三方聲明](docs/THIRD_PARTY_NOTICES.md)。
+
+CarPlay 是 Apple Inc. 的商標；Lincoln 與 Ford 是各自權利人的商標。本專案與這些公司沒有從屬或認可關係。
