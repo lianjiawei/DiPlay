@@ -790,6 +790,9 @@ class DiPlayActivity : CarPlayHostActivity() {
     private fun applyFullscreenMode() {
         if (projectionIsVisible) { applyProjectionWindowAppearance(); return }
         val multiWindow = Build.VERSION.SDK_INT >= 24 && isInMultiWindowMode
+        // Projection may have enabled decor fitting for visible bars. Home owns its own inset
+        // padding and full-bleed background, so always restore its edge-to-edge window policy.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             isAppearanceLightStatusBars = palette.systemBarIconsAreDark
             isAppearanceLightNavigationBars = palette.systemBarIconsAreDark

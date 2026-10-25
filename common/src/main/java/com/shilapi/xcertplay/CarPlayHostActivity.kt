@@ -73,6 +73,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -5174,7 +5175,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private fun currentActivitySize(): DisplaySize? {
         val view = videoView
         if (view != null && view.width > 0 && view.height > 0) {
-            return DisplaySize(view.width, view.height)
+            return displaySizeForCurrentWindow(DisplaySize(view.width, view.height))
         }
         return activeDisplaySize
     }
@@ -5765,7 +5766,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     private fun scheduleDisplaySize(width: Int, height: Int) {
         if (width <= 0 || height <= 0 || shuttingDown.get()) return
-        val size = DisplaySize(width, height)
+        val size = displaySizeForCurrentWindow(DisplaySize(width, height))
         if (size == pendingDisplaySize) return
         mainHandler.removeCallbacks(applyDisplaySize)
         if (size == activeDisplaySize && !displayLayoutChanged()) {
@@ -5782,6 +5783,55 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     private fun isMultiWindowActive(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInMultiWindowMode
+    }
+
+    /**
+     * The unified home stays edge-to-edge while CarPlay connects behind it. Projection does not:
+     * when either system bar remains visible, Android fits the projection root inside that bar.
+     * Negotiate against that final viewport now so revealing projection cannot add pillarboxes.
+     */
+    private fun displaySizeForCurrentWindow(measured: DisplaySize): DisplaySize {
+        if (!unifiedHome || !unifiedConnectionRequested || unifiedProjectionVisible) return measured
+        val multiWindow = isMultiWindowActive()
+        val topHidden = hideTopBar && !multiWindow
+        val bottomHidden = hideBottomBar && !multiWindow
+        if (topHidden && bottomHidden) return measured
+
+        val rootInsets = ViewCompat.getRootWindowInsets(window.decorView)
+        val viewport = if (rootInsets != null) {
+            projectionViewportSize(
+                windowWidth = measured.width,
+                windowHeight = measured.height,
+                hideTopBar = topHidden,
+                hideBottomBar = bottomHidden,
+                statusBars = if (topHidden) Insets.NONE else
+                    rootInsets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars()),
+                navigationBars = if (bottomHidden) Insets.NONE else
+                    rootInsets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars()),
+                displayCutout = rootInsets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout()),
+            )
+        } else {
+            ProjectionViewportSize(measured.width, measured.height)
+        }
+
+        // Some Android 7/8 head-unit builds expose bars through the legacy visible frame but return
+        // zero compat insets. Use that only as a fallback and keep all runtime APIs API-25 safe.
+        val resolved = if (viewport.width == measured.width && viewport.height == measured.height) {
+            val visible = android.graphics.Rect()
+            window.decorView.getWindowVisibleDisplayFrame(visible)
+            val widthLoss = measured.width - visible.width()
+            val heightLoss = measured.height - visible.height()
+            if (visible.width() in 1..measured.width && visible.height() in 1..measured.height &&
+                (widthLoss > 0 || heightLoss > 0) &&
+                widthLoss <= measured.width / 4 && heightLoss <= measured.height / 4) {
+                ProjectionViewportSize(visible.width(), visible.height())
+            } else {
+                viewport
+            }
+        } else {
+            viewport
+        }
+        return DisplaySize(resolved.width, resolved.height)
     }
 
 
@@ -7042,6 +7092,50 @@ internal fun statusBarHiddenByAnotherWindow(display: CarPlaySessionDisplay, widt
     statusBarShown: Boolean?): Boolean =
     !display.hideTopBar && display.statusBarShown == true && statusBarShown == false &&
         width == display.windowWidth && height > display.windowHeight
+
+internal data class ProjectionViewportSize(val width: Int, val height: Int)
+
+/** Returns the projection content size after Android fits visible bars and a cutout. */
+internal fun projectionViewportSize(
+    windowWidth: Int,
+    windowHeight: Int,
+    hideTopBar: Boolean,
+    hideBottomBar: Boolean,
+    statusBars: Insets,
+    navigationBars: Insets,
+    displayCutout: Insets = Insets.NONE,
+): ProjectionViewportSize {
+    if (windowWidth <= 0 || windowHeight <= 0 || hideTopBar && hideBottomBar) {
+        return ProjectionViewportSize(windowWidth, windowHeight)
+    }
+    val left = maxOf(
+        if (hideTopBar) 0 else statusBars.left,
+        if (hideBottomBar) 0 else navigationBars.left,
+        displayCutout.left,
+    )
+    val top = maxOf(
+        if (hideTopBar) 0 else statusBars.top,
+        if (hideBottomBar) 0 else navigationBars.top,
+        displayCutout.top,
+    )
+    val right = maxOf(
+        if (hideTopBar) 0 else statusBars.right,
+        if (hideBottomBar) 0 else navigationBars.right,
+        displayCutout.right,
+    )
+    val bottom = maxOf(
+        if (hideTopBar) 0 else statusBars.bottom,
+        if (hideBottomBar) 0 else navigationBars.bottom,
+        displayCutout.bottom,
+    )
+    val width = windowWidth - left - right
+    val height = windowHeight - top - bottom
+    return if (width > 0 && height > 0) {
+        ProjectionViewportSize(width, height)
+    } else {
+        ProjectionViewportSize(windowWidth, windowHeight)
+    }
+}
 
 /** Process-local hand-off for keeping the CarPlay session alive while no Activity is visible. */
 internal object CarPlayBackgroundSession {
