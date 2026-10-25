@@ -65,6 +65,26 @@ class CarPlayGlanceTest {
     }
 
     @Test
+    fun calculationNotifiesConsumersEvenWhenAllVisibleGuidanceIsUnchanged() {
+        CarPlayGlance.setConnected(true)
+        CarPlayGlance.onFrame(frame(0x5202) { u16(1, 7); u8(3, 2) })
+        CarPlayGlance.onFrame(frame(0x5201) { u8(1, 1); u32(0x0a, 200); u16List(0x0d, listOf(7)) })
+        val before = CarPlayGlance.snapshot()
+        val seen = mutableListOf<CarPlayGlance.Snapshot>()
+        CarPlayGlance.listener = { seen += it }
+        CarPlayGlance.onFrame(frame(0x5201) { u8(1, 5) })
+        assertEquals(before.copy(routeProgressGeneration = before.routeProgressGeneration + 1,
+            routeProgressPending = true), seen.single())
+        // Repeats do not emit a new generation or clear the pending condition.
+        CarPlayGlance.onFrame(frame(0x5201) { u8(1, 5) })
+        CarPlayGlance.onFrame(frame(0x5201) { u8(1, 1) })
+        assertEquals(1, seen.size)
+        CarPlayGlance.onFrame(frame(0x5201) { u32(0x0a, 200) })
+        assertEquals(before.copy(routeProgressGeneration = before.routeProgressGeneration + 1), seen.last())
+        assertEquals(2, seen.size)
+    }
+
+    @Test
     fun expiredGuidanceClearsWithoutAnotherFrameAndNotifiesTheWidget() {
         withRouteClock { advance ->
             CarPlayGlance.setConnected(true)

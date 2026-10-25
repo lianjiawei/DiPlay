@@ -46,6 +46,10 @@ object CarPlayGlance {
         /** The separate iAP2 artist field. QQ Music and similar apps put the song name here. */
         val songArtist: String? = null,
         val playing: Boolean = false,
+        /** Local generation of explicit iAP2 Loading/Rerouting cycles; not a wire route ID. */
+        val routeProgressGeneration: Long = 0,
+        /** Keep held cluster data until calculation ends and a fresh maneuver distance arrives. */
+        val routeProgressPending: Boolean = false,
     )
 
     private val route = BydHudRouteState()
@@ -134,6 +138,8 @@ object CarPlayGlance {
             songTitle = current?.line,
             songArtist = current?.artist,
             playing = current?.playing ?: false,
+            routeProgressGeneration = if (connected) route.progressGeneration else 0,
+            routeProgressPending = connected && route.progressPending,
         )
         if (next == last) return null
         last = next

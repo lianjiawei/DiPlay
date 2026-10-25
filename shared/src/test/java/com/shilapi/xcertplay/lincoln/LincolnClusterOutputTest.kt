@@ -1,11 +1,16 @@
 package com.shilapi.xcertplay.lincoln
 
 import android.app.Application
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.iap2.body.Iap2BodyBuilder
+import com.shilapi.xcertplay.iap2.message.Iap2Messages
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -22,6 +27,7 @@ class LincolnClusterOutputTest {
     private var now = 1_000_000_000L
 
     @Before fun setUp() {
+        LincolnClusterSettings.setClusterPackage(app, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         LincolnClusterSettings.setNavigation(app, true)
         LincolnClusterSettings.setMusic(app, false)
         LincolnClusterSettings.setRemaining(app, false)
@@ -34,6 +40,7 @@ class LincolnClusterOutputTest {
     @After fun tearDown() {
         LincolnClusterOutput.detach()
         LincolnClusterSettings.setNavigation(app, false)
+        LincolnClusterSettings.setClusterPackage(app, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         CarPlayGlance.setConnected(false)
         shadowOf(app).clearBroadcastIntents()
     }
@@ -80,35 +87,40 @@ class LincolnClusterOutputTest {
         assertEquals(expected, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
     }
 
-    @Test fun sendsAndMaintainsFactoryPerManeuverBargraphSteps() {
+    @Test fun receiverCalculatesProgressAcrossUpdatesQuietFramesAndNextManeuver() {
+        val receiver = FactoryNavigationReceiver()
         send(guidance().copy(maneuverIndex = 7, distanceMeters = 400))
-        assertEquals("256", infos().last()
-            .getStringExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS))
+        assertEquals(256, receiver.receive(infos().last()))
+        assertFalse(infos().last().hasExtra("BargraphSteps"))
+        val firstToken = token(infos().last())
 
         now += 1_000_000_000L
         send(guidance().copy(maneuverIndex = 7, distanceMeters = 200))
-        assertEquals("128", infos().last()
-            .getStringExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS))
+        assertEquals(128, receiver.receive(infos().last()))
+        assertEquals(firstToken, token(infos().last()))
 
         // A temporary empty list must keep both the card and its last progress value.
         now += 1_000_000_000L
         send(quiet())
-        assertEquals("128", infos().last()
-            .getStringExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS))
+        assertEquals(128, receiver.receive(infos().last()))
+        assertEquals(firstToken, token(infos().last()))
 
         // The next iAP2 maneuver gets a fresh full-scale bar even when its distance is larger.
         now += 1_000_000_000L
         send(guidance().copy(maneuverIndex = 8, distanceMeters = 600, road = "Next Road"))
-        assertEquals("256", infos().last()
-            .getStringExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS))
+        assertEquals(256, receiver.receive(infos().last()))
+        assertNotEquals(firstToken, token(infos().last()))
+        send(guidance().copy(maneuverIndex = 8, distanceMeters = 0, road = "Next Road"))
+        assertEquals(0, receiver.receive(infos().last()))
     }
 
     @Test fun neverBroadcastsANegativeManeuverDistance() {
+        val receiver = FactoryNavigationReceiver()
         send(guidance().copy(maneuverIndex = 7, distanceMeters = 400))
+        receiver.receive(infos().last())
         now += 1_000_000_000L
         send(guidance().copy(maneuverIndex = 7, distanceMeters = 200))
-        assertEquals("128", infos().last()
-            .getStringExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS))
+        assertEquals(128, receiver.receive(infos().last()))
 
         send(guidance().copy(maneuverIndex = 7, distanceMeters = -1))
         assertEquals("A bad sample must not be broadcast", 2, infos().size)
@@ -117,8 +129,304 @@ class LincolnClusterOutputTest {
         send(guidance().copy(maneuverIndex = 7, distanceMeters = 300))
         assertEquals(300, infos().last()
             .getIntExtra(LincolnClusterProtocol.EXTRA_DISTANCE, -1))
-        assertEquals("256", infos().last()
-            .getStringExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS))
+        assertEquals(256, receiver.receive(infos().last()))
+    }
+
+    @Test fun legacyExtraDoesNotDriveTheFactoryReceiver() {
+        val receiver = FactoryNavigationReceiver()
+        val legacy = Intent("com.baidu.car.navi.INFO")
+            .putExtra("name", "turn_right").putExtra("nextRoadName", "Test Road")
+            .putExtra("distance", 400).putExtra("BargraphSteps", "256")
+        assertEquals(1, receiver.receive(legacy))
+        assertEquals(1, receiver.receive(legacy.putExtra("distance", 200).putExtra("BargraphSteps", "128")))
+    }
+
+    @Test fun sameLookingNextManeuverIsSentImmediatelyWithANewIdentity() {
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        send(current)
+        val old = token(infos().last())
+        // No distance, road, arrow or time change; the iAP2 index alone changed.
+        send(current.copy(maneuverIndex = 8))
+        assertEquals(2, infos().size)
+        assertNotEquals(old, token(infos().last()))
+    }
+
+    @Test fun rerouteAndGpsCorrectionsKeepTheReceiverRatioWithinRange() {
+        val receiver = FactoryNavigationReceiver()
+        fun advance(distance: Int): Int {
+            now += 1_000_000_000L
+            send(guidance().copy(maneuverIndex = 7, distanceMeters = distance))
+            return receiver.receive(infos().last())
+        }
+        assertEquals(256, advance(400))
+        assertEquals(128, advance(200))
+        val old = token(infos().last())
+        // Even a small increase must refresh: the receiver may have restarted at 200 m.
+        assertEquals(256, advance(205))
+        assertNotEquals(old, token(infos().last()))
+        assertEquals(256, advance(300)) // reroute below the original start, same index
+        assertNotEquals(old, token(infos().last()))
+        assertEquals(128, advance(150))
+        assertEquals(256, advance(300))
+        // The receiver has no clamp: even a 5 m correction above the baseline needs a new token.
+        assertEquals(256, advance(305))
+        assertEquals(256, advance(2_000_000))
+        assertEquals(128, advance(1_000_000))
+        val count = infos().size
+        send(guidance().copy(distanceMeters = Int.MAX_VALUE))
+        assertEquals(count, infos().size)
+    }
+
+    @Test fun zeroFirstDistanceRecoversAndRatioUsesTheDistanceActuallyTransmitted() {
+        val receiver = FactoryNavigationReceiver()
+        send(guidance().copy(maneuverIndex = 7, distanceMeters = 0))
+        assertEquals(1, receiver.receive(infos().last()))
+        send(guidance().copy(maneuverIndex = 7, distanceMeters = 1_099))
+        assertEquals(1_000, infos().last().getIntExtra("distance", -1))
+        assertEquals(256, receiver.receive(infos().last()))
+        send(guidance().copy(maneuverIndex = 7, distanceMeters = 500))
+        assertEquals(128, receiver.receive(infos().last()))
+    }
+
+    @Test fun roundedDistanceIncreasesRefreshTheReceiverWithoutChangingTheDistance() {
+        val receiver = FactoryNavigationReceiver()
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 2_000)
+        send(current)
+        assertEquals(256, receiver.receive(infos().last()))
+        val original = token(infos().last())
+        send(current.copy(distanceMeters = 1_499))
+        assertEquals(179, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 1_500))
+        assertEquals(1_500, infos().last().getIntExtra("distance", -1))
+        assertEquals(256, receiver.receive(infos().last()))
+        val refreshed = token(infos().last())
+        assertNotEquals(original, refreshed)
+        send(current.copy(distanceMeters = 1_499))
+        assertEquals(1_400, infos().last().getIntExtra("distance", -1))
+        assertEquals(238, receiver.receive(infos().last()))
+        assertEquals(refreshed, token(infos().last()))
+        // Raw correction inside the same transmitted bucket needs no new identity.
+        send(current.copy(distanceMeters = 1_498))
+        assertEquals(refreshed, token(infos().last()))
+    }
+
+    @Test fun aRestartedReceiverNeverExceedsFullScaleOnASmallDistanceIncrease() {
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        var receiver = FactoryNavigationReceiver()
+        send(current)
+        assertEquals(256, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 200))
+        assertEquals(128, receiver.receive(infos().last()))
+        // Only the instrument restarts. DiPlay receives no notification or acknowledgement.
+        receiver = FactoryNavigationReceiver()
+        now += 1_000_000_000L
+        send(quiet())
+        assertEquals(256, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 205))
+        assertEquals(256, receiver.receive(infos().last())) // formerly 262
+        send(current.copy(distanceMeters = 100))
+        assertEquals(124, receiver.receive(infos().last()))
+    }
+
+    @Test fun silentlyMissingTheFirstPacketDoesNotAssumeTheSenderBaselineWasReceived() {
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        val receiver = FactoryNavigationReceiver()
+        send(current) // The OS accepted this packet, but the receiver does not consume it.
+        assertEquals(1, infos().size)
+        send(current.copy(distanceMeters = 200))
+        assertEquals(256, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 205))
+        assertEquals(205, infos().last().getIntExtra("distance", -1))
+        assertEquals(256, receiver.receive(infos().last())) // formerly 262
+    }
+
+    @Test fun orderedPacketLossAndReceiverRestartsKeepTheUnclampedRatioBounded() {
+        val current = guidance().copy(maneuverIndex = 7)
+        val distances = listOf(400, 200, 205, 100, 99, 105, 0, 1, 0, 2_000,
+            1_499, 1_500, 1_498, 99_999, 100_001, 99_999, 2_000_000, 1_000_000, 0)
+        for (distance in distances) {
+            now += 1_000_000_000L
+            send(current.copy(distanceMeters = distance))
+        }
+        val packets = infos()
+        assertEquals(distances.size, packets.size)
+        // A fresh receiver may first see ANY packet. Try varied subsequent loss patterns too.
+        for (start in packets.indices) for (stride in 1..4) {
+            val receiver = FactoryNavigationReceiver()
+            for (index in start until packets.size step stride) {
+                val progress = receiver.receive(packets[index])
+                assertTrue("start=$start stride=$stride packet=$index progress=$progress", progress in 0..256)
+            }
+        }
+    }
+
+    @Test fun roadNameCompletionAndInstructionRefinementPreserveAnIndexedManeuver() {
+        val current = guidance().copy(maneuverIndex = 7, road = "", distanceMeters = 400)
+        val receiver = FactoryNavigationReceiver()
+        send(current)
+        assertEquals(256, receiver.receive(infos().last()))
+        val original = token(infos().last())
+        send(current.copy(road = "Completed Road", distanceMeters = 200))
+        assertEquals("Completed Road", infos().last().getStringExtra("nextRoadName"))
+        assertEquals(128, receiver.receive(infos().last()))
+        assertEquals(original, token(infos().last()))
+        send(current.copy(road = "Refined Road", maneuverType = 1, distanceMeters = 100))
+        assertEquals("turn_left", infos().last().getStringExtra("name"))
+        assertEquals(64, receiver.receive(infos().last()))
+        assertEquals(original, token(infos().last()))
+        send(current.copy(maneuverIndex = 8, road = "Refined Road", maneuverType = 1, distanceMeters = 100))
+        assertEquals(256, receiver.receive(infos().last()))
+        assertNotEquals(original, token(infos().last()))
+    }
+
+    @Test fun aBriefExplicitEndResetsTheNextBaselineWhileKeepingTheHeldCard() {
+        val receiver = FactoryNavigationReceiver()
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        send(current)
+        receiver.receive(infos().last())
+        send(current.copy(distanceMeters = 200))
+        assertEquals(128, receiver.receive(infos().last()))
+        val original = token(infos().last())
+        send(ended())
+        now += 1_000_000_000L
+        // Even stale non-null fields on the ended snapshot must not replace the held packet.
+        send(current.copy(routeEnded = true, maneuverIndex = 99, distanceMeters = 999))
+        assertEquals(200, infos().last().getIntExtra("distance", -1))
+        assertEquals(original, token(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
+        assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
+        // Reopen before 2.5 s, with the same index and road, but a shorter new leg.
+        send(current.copy(distanceMeters = 100))
+        assertEquals(256, receiver.receive(infos().last())) // formerly 64
+        assertNotEquals(original, token(infos().last()))
+        assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
+    }
+
+    @Test fun aReusedIndexAfterZeroStartsANewManeuverEvenBelowTheOldBaseline() {
+        val receiver = FactoryNavigationReceiver()
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        send(current)
+        assertEquals(256, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 0))
+        assertEquals(0, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 200))
+        assertEquals(256, receiver.receive(infos().last()))
+    }
+
+    @Test fun freshNavigationGetsANewBaselineEvenWhenTheClusterOutlivesDiPlay() {
+        val receiver = FactoryNavigationReceiver()
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        send(current)
+        receiver.receive(infos().last())
+        send(current.copy(distanceMeters = 200))
+        assertEquals(128, receiver.receive(infos().last()))
+        val old = token(infos().last())
+        send(ended())
+        now += 3_000_000_000L
+        send(ended())
+        send(current.copy(distanceMeters = 200))
+        assertEquals(256, receiver.receive(infos().last()))
+        assertNotEquals(old, token(infos().last()))
+        val endedToken = token(infos().last())
+        // Restart only DiPlay; the original receiver's cached coordinates survive.
+        LincolnClusterOutput.detach()
+        LincolnClusterOutput.attach(app)
+        send(current.copy(distanceMeters = 100))
+        assertEquals(256, receiver.receive(infos().last()))
+        assertNotEquals(endedToken, token(infos().last()))
+    }
+
+    @Test fun alternativeReceiversDoNotReceiveOpaqueCoordinateTokens() {
+        LincolnClusterSettings.setClusterPackage(app, "com.example.other.cluster")
+        send(guidance())
+        now += 1_000_000_000L
+        send(quiet())
+        for (intent in infos()) {
+            assertEquals("com.example.other.cluster", intent.`package`)
+            assertEquals(300, intent.getIntExtra("distance", -1))
+            assertFalse(intent.hasExtra("latitude"))
+            assertFalse(intent.hasExtra("longitude"))
+            assertFalse(intent.hasExtra("BargraphSteps"))
+        }
+    }
+
+    @Test fun rejectedStartPacketsCannotLeaveTheReceiverWithASmallerBaseline() {
+        for (failedAction in listOf(LincolnClusterProtocol.ACTION_NAV_STATE, LincolnClusterProtocol.ACTION_NAV_INFO)) {
+            var reject = true
+            withBroadcastFailures { reject && it.action == failedAction }
+            val receiver = FactoryNavigationReceiver()
+            val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+            send(current)
+            assertTrue("The rejected start must not reach the receiver", infos().isEmpty())
+            reject = false
+            send(current.copy(distanceMeters = 200))
+            assertEquals(256, receiver.receive(infos().last()))
+            // Without resetting an unsent baseline this small correction produces 262.
+            send(current.copy(distanceMeters = 205))
+            assertEquals(256, receiver.receive(infos().last()))
+            send(current.copy(distanceMeters = 100))
+            assertEquals(124, receiver.receive(infos().last()))
+        }
+    }
+
+    @Test fun failedClearKeepsTheLastSuccessfulPacketForQuietGuidance() {
+        var rejectOff = false
+        withBroadcastFailures {
+            rejectOff && it.action == LincolnClusterProtocol.ACTION_NAV_STATE &&
+                it.getStringExtra("state") == LincolnClusterProtocol.STATE_OFF
+        }
+        val receiver = FactoryNavigationReceiver()
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        send(current)
+        receiver.receive(infos().last())
+        send(current.copy(distanceMeters = 200))
+        assertEquals(128, receiver.receive(infos().last()))
+        val previous = token(infos().last())
+        rejectOff = true
+        send(current.copy(distanceMeters = -1))
+        val count = infos().size
+        now += 1_000_000_000L
+        send(quiet())
+        assertEquals(count + 1, infos().size)
+        assertEquals(previous, token(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 100))
+        assertEquals(256, receiver.receive(infos().last()))
+        assertNotEquals(previous, token(infos().last()))
+    }
+
+    @Test fun anAmbiguousSendFailureCannotReplayALargerDistanceUnderTheSameIdentity() {
+        var receiver = FactoryNavigationReceiver()
+        var failAfterDelivery = false
+        var deliveredProgress: Int? = null
+        LincolnClusterOutput.detach()
+        LincolnClusterOutput.attach(object : ContextWrapper(app) {
+            override fun getApplicationContext(): Context = this
+            override fun sendBroadcast(intent: Intent) {
+                super.sendBroadcast(intent)
+                if (failAfterDelivery && intent.action == LincolnClusterProtocol.ACTION_NAV_INFO) {
+                    deliveredProgress = receiver.receive(intent)
+                    throw SecurityException("Injected failure with an ambiguous delivery outcome")
+                }
+            }
+        })
+        shadowOf(app).clearBroadcastIntents()
+        val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
+        send(current)
+        assertEquals(256, receiver.receive(infos().last()))
+        receiver = FactoryNavigationReceiver()
+        failAfterDelivery = true
+        send(current.copy(distanceMeters = 150))
+        assertEquals(256, deliveredProgress)
+        val attempted = token(infos().last())
+        failAfterDelivery = false
+        now += 1_000_000_000L
+        send(quiet())
+        assertEquals(400, infos().last().getIntExtra("distance", -1))
+        assertNotEquals(attempted, token(infos().last()))
+        assertEquals(256, receiver.receive(infos().last())) // formerly 682
+        send(current.copy(distanceMeters = 100))
+        assertEquals(256, receiver.receive(infos().last()))
     }
 
     @Test fun sendsTheBoundedLyricWithoutAddingTheSongName() {
@@ -134,10 +442,143 @@ class LincolnClusterOutputTest {
         assertTrue(media.getBooleanExtra(LincolnClusterProtocol.EXTRA_PLAYING, false))
     }
 
+    @Test fun rawIap2CalculationResetsAReusedIndexOnlyAfterFreshResumedDistance() {
+        for (calculationState in listOf(3, 5)) {
+            CarPlayGlance.setConnected(false)
+            CarPlayGlance.setConnected(true)
+            shadowOf(app).clearBroadcastIntents()
+            val receiver = FactoryNavigationReceiver()
+            frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "Road") }
+            frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+            assertEquals(256, receiver.receive(infos().last()))
+            frame(0x5201) { u32(0x0a, 200) }
+            assertEquals(128, receiver.receive(infos().last()))
+            val oldToken = token(infos().last())
+
+            now += 1_000_000_000L
+            frame(0x5201) { u8(1, calculationState); u16List(0x0d, emptyList()) }
+            assertEquals(128, receiver.receive(infos().last()))
+            frame(0x5201) { u8(1, calculationState); u16List(0x0d, listOf(7)); u32(0x0a, 180) }
+            now += 1_000_000_000L
+            frame(0x5201) { u8(1, 1) } // Resume alone cannot use the cached 180 m.
+            frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "New Road") }
+            frame(0x5001) { group(0) { string(1, "New Song") } }
+            assertEquals(oldToken, token(infos().last()))
+            assertEquals(200, infos().last().getIntExtra("distance", -1))
+            assertEquals("Road", infos().last().getStringExtra("nextRoadName"))
+            assertEquals(128, receiver.receive(infos().last()))
+
+            // No end event, no index change and no distance increase: explicit calculation
+            // still gives the next valid instruction a new baseline, through real TLV parsing.
+            frame(0x5201) { u32(0x0a, 100) }
+            assertNotEquals(oldToken, token(infos().last()))
+            assertEquals("New Road", infos().last().getStringExtra("nextRoadName"))
+            assertEquals(256, receiver.receive(infos().last()))
+            val newToken = token(infos().last())
+            frame(0x5201) { u8(1, 1); u32(0x0a, 50) }
+            assertEquals(newToken, token(infos().last()))
+            assertEquals(128, receiver.receive(infos().last()))
+            assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
+        }
+    }
+
+    @Test fun rawIap2RerouteWithIdenticalVisibleFieldsStillResetsImmediately() {
+        CarPlayGlance.setConnected(true)
+        val receiver = FactoryNavigationReceiver()
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        receiver.receive(infos().last())
+        frame(0x5201) { u32(0x0a, 200) }
+        assertEquals(128, receiver.receive(infos().last()))
+        val oldToken = token(infos().last())
+        val count = infos().size
+        frame(0x5201) { u8(1, 5) }
+        frame(0x5201) { u8(1, 5) }
+        assertEquals(count, infos().size)
+        frame(0x5201) { u8(1, 1); u32(0x0a, 200) }
+        assertEquals(count + 1, infos().size)
+        assertNotEquals(oldToken, token(infos().last()))
+        assertEquals(256, receiver.receive(infos().last()))
+        val next = token(infos().last())
+        frame(0x5201) { u8(1, 1); u32(0x0a, 100) }
+        assertEquals(next, token(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
+    }
+
+    @Test fun rawIap2OrdinaryGapsAndShorterDistancesDoNotGuessAReroute() {
+        CarPlayGlance.setConnected(true)
+        val receiver = FactoryNavigationReceiver()
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        receiver.receive(infos().last())
+        val original = token(infos().last())
+        frame(0x5201) { u8(1, 1); u16List(0x0d, emptyList()) }
+        frame(0x5201) { u16List(0x0d, listOf(7)); u32(0x0a, 200) }
+        assertEquals(128, receiver.receive(infos().last()))
+        frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "Road name completed") }
+        frame(0x5201) { u8(1, 4); u32(0x0a, 100) }
+        frame(0x5201) { u8(1, 1) }
+        assertEquals(original, token(infos().last()))
+        assertEquals(64, receiver.receive(infos().last()))
+        // Without any boundary signal this is indistinguishable from continuing the old leg.
+        frame(0x5201) { u32(0x0a, 50) }
+        assertEquals(original, token(infos().last()))
+        assertEquals(32, receiver.receive(infos().last()))
+    }
+
+    @Test fun aPendingRecalculationDoesNotPreventExplicitEndOrDisconnect() {
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        frame(0x5201) { u8(1, 5) }
+        frame(0x5201) { u8(1, 2) }
+        now += 3_000_000_000L
+        send(CarPlayGlance.snapshot())
+        assertEquals(LincolnClusterProtocol.STATE_OFF, states().last())
+
+        // A fresh session does not inherit the pending gate or require a new RouteSet field.
+        CarPlayGlance.setConnected(false)
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u16List(0x0d, listOf(7)); u32(0x0a, 100) }
+        assertEquals(100, infos().last().getIntExtra("distance", -1))
+        assertEquals(LincolnClusterProtocol.STATE_ON, states().last())
+        frame(0x5201) { u8(1, 3) }
+        CarPlayGlance.setConnected(false)
+        assertEquals(LincolnClusterProtocol.STATE_OFF, states().last())
+    }
+
+    @Test fun customReceiversKeepTheirExistingGuidanceFlowDuringRecalculation() {
+        LincolnClusterSettings.setClusterPackage(app, "example.other.cluster")
+        CarPlayGlance.setConnected(true)
+        frame(0x5202) { u16(1, 7); u8(3, 2) }
+        frame(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        frame(0x5201) { u8(1, 5); u32(0x0a, 200) }
+        assertEquals(200, infos().last().getIntExtra("distance", -1))
+        assertEquals("example.other.cluster", infos().last().`package`)
+        assertFalse(infos().last().hasExtra("latitude"))
+        assertFalse(infos().last().hasExtra("longitude"))
+    }
+
+    private fun frame(id: Int, block: Iap2BodyBuilder.() -> Unit) =
+        CarPlayGlance.onFrame(Iap2Messages.buildRaw(id, block))
+
     private fun send(snapshot: CarPlayGlance.Snapshot) {
         LincolnClusterOutput.javaClass.getDeclaredMethod("onSnapshot", CarPlayGlance.Snapshot::class.java)
             .apply { isAccessible = true }
             .invoke(LincolnClusterOutput, snapshot)
+    }
+
+    private fun withBroadcastFailures(shouldFail: (Intent) -> Boolean) {
+        LincolnClusterOutput.detach()
+        LincolnClusterOutput.attach(object : ContextWrapper(app) {
+            override fun getApplicationContext(): Context = this
+            override fun sendBroadcast(intent: Intent) {
+                if (shouldFail(intent)) throw SecurityException("Injected broadcast rejection")
+                super.sendBroadcast(intent)
+            }
+        })
+        shadowOf(app).clearBroadcastIntents()
     }
 
     private fun guidance() = CarPlayGlance.Snapshot(
@@ -155,4 +596,34 @@ class LincolnClusterOutputTest {
 
     private fun infos(): List<Intent> = shadowOf(app).broadcastIntents
         .filter { it.action == LincolnClusterProtocol.ACTION_NAV_INFO }
+
+    private fun token(intent: Intent): Pair<Double, Double> {
+        // getDoubleExtra must really work; strings or floats silently fall back to zero in the APK.
+        val latitude = intent.getDoubleExtra("latitude", 0.0)
+        val longitude = intent.getDoubleExtra("longitude", 0.0)
+        assertTrue(latitude in 1.0..2.0 && longitude in 1.0..2.0)
+        return latitude to longitude
+    }
+
+    /**
+     * Independent consumer contract from InstrumentPanel_Optional 1.0 runtime DEX:
+     * INFO adapter at code_item 0x23aea0, NavPresenterImpl.sendNaviInfo at 0x223850.
+     * Deliberately keeps its actual default=1 and lack of clamping. Do not "fix" this fixture
+     * to match the sender: it reproduces the old ineffective-extra bug and validates our packets.
+     */
+    private class FactoryNavigationReceiver {
+        private var latitude = 0.0
+        private var longitude = 0.0
+        private var initialDistance = 0
+
+        fun receive(intent: Intent): Int {
+            val distance = intent.getIntExtra("distance", 0)
+            val nextLatitude = intent.getDoubleExtra("latitude", 0.0)
+            val nextLongitude = intent.getDoubleExtra("longitude", 0.0)
+            if (latitude != nextLatitude || longitude != nextLongitude) initialDistance = distance
+            latitude = nextLatitude
+            longitude = nextLongitude
+            return if (initialDistance == 0) 1 else (distance.toFloat() / initialDistance * 256f).toInt()
+        }
+    }
 }

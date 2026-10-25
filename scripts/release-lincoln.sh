@@ -10,7 +10,7 @@
 #
 # Usage:
 #   scripts/release-lincoln.sh                 # uses the version already in build.gradle.kts
-#   scripts/release-lincoln.sh --bump          # increments the last version number first
+#   scripts/release-lincoln.sh --bump          # increments patch or RC number first
 #   scripts/release-lincoln.sh --bump --dry-run  # build and verify, publish nothing
 #
 # Environment (defaults match this machine; override to move the build elsewhere):
@@ -54,8 +54,10 @@ step() { printf '\n== %s ==\n' "$*"; }
 
 step "Checking prerequisites"
 command -v git >/dev/null || die "git is not installed"
-command -v gh  >/dev/null || die "the GitHub CLI (gh) is not installed"
-gh auth status >/dev/null 2>&1 || die "gh is not logged in; run: gh auth login"
+if [ "$DRY_RUN" -eq 0 ]; then
+  command -v gh >/dev/null || die "the GitHub CLI (gh) is not installed"
+  gh auth status >/dev/null 2>&1 || die "gh is not logged in; run: gh auth login"
+fi
 
 [ -f "$LINCOLN_KEYSTORE" ] || die "release keystore not found: $LINCOLN_KEYSTORE"
 [ -f "$DIPLAY_AUTH_ASSETS_DIR/offline-mfi/identity.pk8" ] || die "missing $DIPLAY_AUTH_ASSETS_DIR/offline-mfi/identity.pk8"
@@ -87,13 +89,15 @@ current_version="$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' "$GRADLE_FILE" | he
 
 next_version="$current_version"
 if [ "$BUMP" -eq 1 ]; then
-  # Increment the last numeric component: 0.2.20 -> 0.2.21
-  next_version="$(printf '%s' "$current_version" | awk -F. '{
-      if (NF < 2) { print $0 ".1"; next }
-      last = $NF + 1
-      $NF = ""
-      printf "%s%s\n", $0, last
-    }' OFS=.)"
+  # Keep a release-candidate line on the same product version: 1.1.8-rc1 -> 1.1.8-rc2.
+  # Stable versions still increment their patch component: 0.2.20 -> 0.2.21.
+  if [[ "$current_version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-rc([0-9]+)$ ]]; then
+    next_version="${BASH_REMATCH[1]}-rc$((BASH_REMATCH[2] + 1))"
+  elif [[ "$current_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    next_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+  else
+    die "could not bump unsupported version $current_version"
+  fi
   [ "$next_version" != "$current_version" ] || die "could not bump version $current_version"
 
   current_code="$(sed -n 's/^ *versionCode = \([0-9]*\)/\1/p' "$GRADLE_FILE" | head -1)"
@@ -201,10 +205,14 @@ notes_args=(--notes "Lincoln/Ford build $next_version.")
 if [ -f "$NOTES_FILE" ]; then
   notes_args=(--notes-file "$NOTES_FILE")
 fi
+release_kind_args=()
+if [[ "$next_version" =~ -rc[0-9]+$ ]]; then
+  release_kind_args=(--prerelease)
+fi
 gh release create "$TAG" \
   "$RELEASE_DIR/$APK_NAME" "$RELEASE_DIR/SHA256SUMS.txt" \
   --repo "$FORK_SLUG" --target "$TARGET_SHA" \
-  --title "Lincoln $next_version" "${notes_args[@]}"
+  --title "CarPlay $next_version" "${release_kind_args[@]}" "${notes_args[@]}"
 
 step "Done"
 cat <<EOF

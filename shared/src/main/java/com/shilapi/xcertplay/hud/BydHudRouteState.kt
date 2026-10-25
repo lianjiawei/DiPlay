@@ -63,6 +63,13 @@ internal class BydHudRouteState(
      * tell "the driver finished" from "no new frame for a while".
      */
     private var endedExplicitly = false
+    private var progressRouteState: Int? = null
+    /** Local generation, not a route ID supplied by iAP2. Kept across clear() to avoid reuse. */
+    var progressGeneration: Long = 0
+        private set
+    /** A calculation invalidated the baseline; wait for resumed guidance with a fresh distance. */
+    var progressPending: Boolean = false
+        private set
 
     fun accept(messageId: Int, payload: ByteArray): BydHudRouteChange {
         if (!validTlvs(payload)) return BydHudRouteChange.NONE
@@ -137,6 +144,8 @@ internal class BydHudRouteState(
         lastRouteUpdateNs = null
         noRouteSinceNs = null
         holdingAcrossDrop = false
+        progressRouteState = null
+        progressPending = false
         maneuvers.clear()
         return wasActive
     }
@@ -209,6 +218,16 @@ internal class BydHudRouteState(
         if (state == 0 || state == 2) {
             return if (clear()) BydHudRouteChange.CLEAR else BydHudRouteChange.NONE
         }
+        // iAP2 state 3=Loading, 5=Rerouting. These are explicit calculation signals even
+        // when the app reuses the index and the new distance is smaller. Handle BEFORE the
+        // empty-list early return. Adjacent loading/rerouting updates form one pending cycle.
+        if (state != null) {
+            progressRouteState = state
+            if (state == 3 || state == 5) {
+                if (!progressPending) progressGeneration++
+                progressPending = true
+            }
+        }
         // The iPhone briefly sends an empty current list every few seconds and while rerouting. Keep the last
         // maneuver (and the cached 0x5202 details, which are never resent) and hide it only if the list stays
         // empty; the bridges' 1 s tick clears the outputs once current() turns null.
@@ -227,6 +246,15 @@ internal class BydHudRouteState(
             endedExplicitly = false
         }
         if (distance != null) distanceMeters = distance!!.coerceAtLeast(0)
+        // Fields are deltas: RouteSet (1) / ProceedToRoute (6) and distance can arrive in
+        // separate frames. A status-only update, cached maneuver details, or an empty list
+        // must not establish the new baseline from the previous route's distance. Retain
+        // cached index/details: an unchanged index need not be resent after a recalculation.
+        if (progressPending && (progressRouteState == 1 || progressRouteState == 6) &&
+            distance != null && activeIndex >= 0 && emptyListSinceNs == null
+        ) {
+            progressPending = false
+        }
         return if (current() != null) BydHudRouteChange.GUIDANCE else BydHudRouteChange.NONE
     }
 

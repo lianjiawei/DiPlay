@@ -50,39 +50,6 @@ class LincolnClusterProtocolTest {
     }
 
     @Test
-    fun calculatesFactoryBargraphStepsFromThisManeuversStartDistance() {
-        assertEquals(256, LincolnClusterProtocol.bargraphSteps(400, 400))
-        assertEquals(192, LincolnClusterProtocol.bargraphSteps(300, 400))
-        assertEquals(128, LincolnClusterProtocol.bargraphSteps(200, 400))
-        assertEquals(0, LincolnClusterProtocol.bargraphSteps(0, 400))
-        assertEquals(256, LincolnClusterProtocol.bargraphSteps(500, 400))
-        assertEquals(1, LincolnClusterProtocol.bargraphSteps(0, 0))
-        assertEquals(1, LincolnClusterProtocol.bargraphSteps(300, 0))
-        assertEquals(0, LincolnClusterProtocol.bargraphSteps(-1, 0))
-    }
-
-    @Test
-    fun resetsProgressForANewManeuverAndForARerouteThatGetsFartherAway() {
-        val progress = LincolnManeuverProgress()
-        assertEquals(256, progress.update(7, "turn_right", "Main Street", 400))
-        assertEquals(128, progress.update(7, "turn_right", "Main Street", 200))
-        assertEquals(256, progress.update(8, "turn_left", "Second Street", 600))
-        assertEquals(128, progress.update(8, "turn_left", "Second Street", 300))
-
-        // A reroute may reuse the same iAP2 index and remain below the old start distance.
-        assertEquals(256, progress.update(8, "turn_left", "Second Street", 400))
-        assertEquals(128, progress.update(8, "turn_left", "Second Street", 200))
-
-        // Small GPS corrections must not repeatedly restart the progress bar.
-        assertEquals(131, progress.update(8, "turn_left", "Second Street", 205))
-
-        // Future callers cannot overflow the reroute delta even with malformed extreme input.
-        progress.reset()
-        assertEquals(1, progress.update(9, "turn_front", "", 0))
-        assertEquals(256, progress.update(9, "turn_front", "", Int.MAX_VALUE))
-    }
-
-    @Test
     fun sanitizesRoadNamesToTheReceiversNineteenUnitLimit() {
         assertEquals("Main Street", LincolnClusterProtocol.sanitizeRoadName("Main Street"))
         assertNull(LincolnClusterProtocol.sanitizeRoadName("   "))

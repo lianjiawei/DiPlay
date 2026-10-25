@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.lincoln
 
 import java.text.BreakIterator
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Lincoln/Ford instrument-cluster forwarding, reverse-engineered from the field build
@@ -31,8 +32,10 @@ object LincolnClusterProtocol {
     const val EXTRA_NAME = "name"
     const val EXTRA_DISTANCE = "distance"
     const val EXTRA_ROAD = "nextRoadName"
-    /** Factory instrument progress, encoded as a decimal string in its vendor Bundle. */
-    const val EXTRA_BARGRAPH_STEPS = "BargraphSteps"
+    // The verified broadcast receiver uses these doubles ONLY to identify a maneuver. It computes
+    // BargraphSteps itself; that downstream vendor-Bundle key is not a broadcast input.
+    const val EXTRA_MANEUVER_LATITUDE = "latitude"
+    const val EXTRA_MANEUVER_LONGITUDE = "longitude"
     const val EXTRA_REMAIN_DISTANCE = "remainDistance"
     const val EXTRA_REMAIN_TIME = "remainTime"
     const val EXTRA_TITLE = "title"
@@ -47,9 +50,6 @@ object LincolnClusterProtocol {
 
     const val SOURCE_NAME = "CarPlay"
     const val SOURCE_TYPE = 1
-
-    /** Full scale used by the factory instrument's per-maneuver progress bar. */
-    const val BARGRAPH_FULL_SCALE = 256
 
     /** The factory cluster truncates its primary street-name slot at 19 UTF-16 units. */
     const val MAX_ROAD_NAME_CHARS = 19
@@ -90,17 +90,6 @@ object LincolnClusterProtocol {
             meters < 100_000 -> meters / 100 * 100
             else -> meters / 1_000 * 1_000
         }
-    }
-
-    /** Matches the factory instrument: remaining distance divided by this maneuver's start distance. */
-    fun bargraphSteps(distanceMeters: Int, maneuverStartMeters: Int): Int {
-        if (distanceMeters < 0) return 0
-        // The factory presenter initializes this field to 1 until it has a maneuver baseline. A
-        // transient first frame with distance 0 must not look like a completed maneuver.
-        if (maneuverStartMeters <= 0) return 1
-        if (distanceMeters == 0) return 0
-        return ((distanceMeters.toLong() * BARGRAPH_FULL_SCALE) / maneuverStartMeters)
-            .coerceIn(0L, BARGRAPH_FULL_SCALE.toLong()).toInt()
     }
 
     fun sanitizeRoadName(text: String?): String? = sanitizeText(text, MAX_ROAD_NAME_CHARS)
@@ -162,40 +151,62 @@ object LincolnClusterProtocol {
     const val MAX_REMAIN_DISTANCE_METERS = 10_000_000
 }
 
-/** Keeps the factory progress bar's start distance separate for each iAP2 maneuver. */
-internal class LincolnManeuverProgress {
-    private var identity: String? = null
-    private var startDistanceMeters = 0
-    private var lastDistanceMeters = 0
+/**
+ * Opaque identity for the verified instrument receiver, NOT a geographic position. Its INFO
+ * adapter passes latitude/longitude only to NavPresenterImpl's equality check; neither coordinate
+ * reaches the vehicle service. Our current iAP2 model has maneuver ids, not maneuver coordinates.
+ * Never substitute the vehicle's moving GPS position: that would restart the bar at every fix.
+ */
+internal data class LincolnManeuverToken(val latitude: Double, val longitude: Double) {
+    companion object {
+        fun fresh(): LincolnManeuverToken {
+            val uuid = UUID.randomUUID()
+            // Nonzero, finite doubles in [1, 2), with enough identity bits to avoid reusing the
+            // receiver's cached token even if DiPlay restarts while the cluster stays alive.
+            fun component(bits: Long) = Double.fromBits(0x3ff0000000000000L or (bits and 0x000fffffffffffffL))
+            return LincolnManeuverToken(component(uuid.mostSignificantBits), component(uuid.leastSignificantBits))
+        }
+    }
+}
 
-    fun update(maneuverIndex: Int, turn: String, road: String, distanceMeters: Int): Int {
+/** Keeps each identity's transmitted distances non-increasing, even without receiver acknowledgements. */
+internal class LincolnManeuverTracker {
+    private var identity: String? = null
+    private var lastDistanceMeters = 0
+    private var token: LincolnManeuverToken? = null
+
+    /** Use the distance actually transmitted: that is what the receiver uses as its baseline. */
+    fun update(
+        maneuverIndex: Int, turn: String, road: String, distanceMeters: Int,
+        routeGeneration: Long = 0,
+    ): LincolnManeuverToken {
+        require(distanceMeters in 0..LincolnClusterProtocol.MAX_DISTANCE_METERS)
         val nextIdentity = if (maneuverIndex >= 0) {
-            "$maneuverIndex|$turn|$road"
+            // The indexed maneuver survives road-name completion and instruction refinements.
+            // A genuine route end resets this tracker separately from the held display packet.
+            "$routeGeneration:index:$maneuverIndex"
         } else {
-            // Older callers and tests may not have an iAP2 index. The visible instruction is the
-            // safest fallback; an increase beyond the recorded start still resets a reroute.
-            "$turn|$road"
+            // Current iAP2 guidance always has an index. For older callers without one, the
+            // instruction is only a heuristic identity; do not confuse it with an indexed id.
+            "$routeGeneration:instruction:$turn|$road"
         }
-        val reroutedFartherAway = lastDistanceMeters > 0 &&
-            distanceMeters.toLong() - lastDistanceMeters.toLong() >= REROUTE_RESET_METERS
-        if (nextIdentity != identity ||
-            (startDistanceMeters <= 0 && distanceMeters > 0) || reroutedFartherAway) {
+        // sendBroadcast succeeding does not acknowledge delivery. The receiver may miss the
+        // first sample or restart, establishing a SMALLER baseline than the sender remembers.
+        // New identity on EVERY transmitted increase ensures that any ordered subsequence of
+        // one identity is non-increasing, so its first received distance bounds the whole run.
+        // This deliberately restarts the bar on upward GPS corrections (including rounding
+        // boundaries), instead of falsifying the displayed distance or allowing a ratio > 256.
+        if (nextIdentity != identity || distanceMeters > lastDistanceMeters) {
             identity = nextIdentity
-            startDistanceMeters = distanceMeters.coerceAtLeast(0)
+            token = LincolnManeuverToken.fresh()
         }
-        lastDistanceMeters = distanceMeters.coerceAtLeast(0)
-        return LincolnClusterProtocol.bargraphSteps(lastDistanceMeters, startDistanceMeters)
+        lastDistanceMeters = distanceMeters
+        return checkNotNull(token)
     }
 
     fun reset() {
         identity = null
-        startDistanceMeters = 0
         lastDistanceMeters = 0
-    }
-
-    private companion object {
-        // Route guidance can drift by a few metres as GPS settles. A 50 m jump is large enough to
-        // mean a reroute while still catching a detour that remains below the maneuver's old start.
-        const val REROUTE_RESET_METERS = 50
+        token = null
     }
 }

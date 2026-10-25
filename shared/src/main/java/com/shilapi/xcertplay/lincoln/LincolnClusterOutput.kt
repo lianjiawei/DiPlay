@@ -36,8 +36,9 @@ object LincolnClusterOutput {
     private var lastNavTurn: String? = null
     private var lastNavDistance: Int? = null
     private var lastNavRoad: String = ""
-    private var lastNavBargraphSteps: Int? = null
-    private val maneuverProgress = LincolnManeuverProgress()
+    // Identity for the next held packet; renewed after an ambiguous data-send failure.
+    private var lastNavManeuverToken: LincolnManeuverToken? = null
+    private val maneuverTracker = LincolnManeuverTracker()
     private var lastNavSentNs = 0L
     private var lastMusicKey: String? = null
     private var lastRemainKey: String? = null
@@ -129,8 +130,8 @@ object LincolnClusterOutput {
             lastNavTurn = null
             lastNavDistance = null
             lastNavRoad = ""
-            lastNavBargraphSteps = null
-            maneuverProgress.reset()
+            lastNavManeuverToken = null
+            maneuverTracker.reset()
             lastNavSentNs = 0L
             lastMusicKey = null
             lastRemainKey = null
@@ -196,6 +197,7 @@ object LincolnClusterOutput {
             "distance=${snapshot.distanceMeters} road='${snapshot.road}' song='${snapshot.song}' " +
             "playing=${snapshot.playing} remain=${snapshot.remainingMeters}/${snapshot.remainingSeconds} " +
             "routeActive=${snapshot.routeActive} routeEnded=${snapshot.routeEnded} " +
+            "progressGeneration=${snapshot.routeProgressGeneration} progressPending=${snapshot.routeProgressPending} " +
             "nav=$navEnabled music=$musicEnabled -> $lastReason")
         if (snapshot.routeEnded) {
             if (endedSinceNs == 0L) endedSinceNs = nanoTime()
@@ -213,6 +215,23 @@ object LincolnClusterOutput {
     }
 
     private fun sendNavLocked(app: Context, snapshot: CarPlayGlance.Snapshot) {
+        if (snapshot.routeEnded) {
+            // Holding the last display packet prevents flicker, but an explicit end invalidates
+            // the next maneuver's identity immediately. A route reopened inside the settle window
+            // may reuse the same index with a shorter distance. Ignore any stale guidance fields
+            // on this ended snapshot and keep the successfully sent packet only for the hold.
+            maneuverTracker.reset()
+            maintainNavLocked(app, snapshot)
+            return
+        }
+        if (snapshot.routeProgressPending &&
+            LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE
+        ) {
+            // Preserve the last successful packet through calculation. Neither a state-only
+            // frame nor new maneuver text may use its stale distance as the new baseline.
+            maintainNavLocked(app, snapshot)
+            return
+        }
         val turn = LincolnClusterProtocol.turnCode(snapshot.maneuverType, snapshot.drivingSide)
         val distance = LincolnClusterProtocol.roundDistance(snapshot.distanceMeters)
         if (snapshot.maneuverType == null) {
@@ -232,10 +251,6 @@ object LincolnClusterOutput {
             return
         }
         val road = LincolnClusterProtocol.sanitizeRoadName(snapshot.road).orEmpty()
-        val bargraphSteps = maneuverProgress.update(
-            snapshot.maneuverIndex, turn, road, snapshot.distanceMeters.coerceAtLeast(0),
-        )
-        val key = "$turn|$distance|$road|${snapshot.remainingMeters}|${snapshot.remainingSeconds}"
         if (navStateOn != true) {
             if (broadcast(app, Intent(LincolnClusterProtocol.ACTION_NAV_STATE)
                     .putExtra(LincolnClusterProtocol.EXTRA_STATE, LincolnClusterProtocol.STATE_ON))) {
@@ -244,28 +259,33 @@ object LincolnClusterOutput {
             }
         }
         if (!navOwned) return
+        val maneuverToken = maneuverTracker.update(
+            snapshot.maneuverIndex, turn, snapshot.road, distance, snapshot.routeProgressGeneration,
+        )
+        val key = "$turn|$distance|$road|$maneuverToken|${snapshot.remainingMeters}|${snapshot.remainingSeconds}"
         val changed = key != lastNavKey
         // Repeat the current card at least once a second even when nothing changed: the cluster hides
         // a nav card it has not heard about within a few seconds, so a long leg or a red light made it
         // blink out and back. The standalone bridge that this firmware ships with re-sent every second.
         val due = nanoTime() - lastNavSentNs >= REPEAT_NAV_NS
         if (changed || due) {
-            val info = Intent(LincolnClusterProtocol.ACTION_NAV_INFO)
-                .putExtra(LincolnClusterProtocol.EXTRA_NAME, turn)
-                .putExtra(LincolnClusterProtocol.EXTRA_DISTANCE, distance)
-                .putExtra(LincolnClusterProtocol.EXTRA_ROAD, road)
-                // The factory presenter writes this exact key as a decimal String to its vendor
-                // Bundle. Extra fields are ignored by older simplified receivers.
-                .putExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS, bargraphSteps.toString())
+            val info = navigationIntent(app, turn, distance, road, maneuverToken)
             if (broadcast(app, info)) {
                 lastNavKey = key
                 lastNavTurn = turn
                 lastNavDistance = distance
                 lastNavRoad = road
-                lastNavBargraphSteps = bargraphSteps
+                lastNavManeuverToken = maneuverToken
                 lastNavSentNs = nanoTime()
                 navSent++
                 if (changed) Log.i(TAG, "nav INFO $turn ${distance}m '${snapshot.road}' (#$navSent)")
+            } else {
+                // Failure does not tell us whether the receiver processed the packet. Start
+                // fresh on the next valid sample. Also give held data a fresh identity: replaying
+                // its OLDER, LARGER distance under the failed packet's identity could overflow
+                // if a restarted receiver actually established its baseline from that packet.
+                maneuverTracker.reset()
+                if (lastNavManeuverToken != null) lastNavManeuverToken = LincolnManeuverToken.fresh()
             }
         }
     }
@@ -309,16 +329,31 @@ object LincolnClusterOutput {
         val turn = lastNavTurn ?: return
         val distance = lastNavDistance ?: return
         if (nanoTime() - lastNavSentNs < REPEAT_NAV_NS) return
-        val info = Intent(LincolnClusterProtocol.ACTION_NAV_INFO)
-            .putExtra(LincolnClusterProtocol.EXTRA_NAME, turn)
-            .putExtra(LincolnClusterProtocol.EXTRA_DISTANCE, distance)
-            .putExtra(LincolnClusterProtocol.EXTRA_ROAD, lastNavRoad)
-            .putExtra(LincolnClusterProtocol.EXTRA_BARGRAPH_STEPS,
-                lastNavBargraphSteps?.toString() ?: return)
+        val token = lastNavManeuverToken ?: return
+        val info = navigationIntent(app, turn, distance, lastNavRoad, token)
         if (broadcast(app, info)) {
             lastNavSentNs = nanoTime()
             navSent++
         }
+    }
+
+    private fun navigationIntent(
+        app: Context, turn: String, distance: Int, road: String, token: LincolnManeuverToken,
+    ): Intent {
+        val targetPackage = LincolnClusterSettings.clusterPackage(app)
+        return Intent(LincolnClusterProtocol.ACTION_NAV_INFO)
+            .setPackage(targetPackage)
+            .putExtra(LincolnClusterProtocol.EXTRA_NAME, turn)
+            .putExtra(LincolnClusterProtocol.EXTRA_DISTANCE, distance)
+            .putExtra(LincolnClusterProtocol.EXTRA_ROAD, road)
+            .apply {
+                // Only this inspected adapter is known to use the coordinate slots as identity,
+                // not location. Keep the checked target even if settings change before dispatch.
+                if (targetPackage == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE) {
+                    putExtra(LincolnClusterProtocol.EXTRA_MANEUVER_LATITUDE, token.latitude)
+                    putExtra(LincolnClusterProtocol.EXTRA_MANEUVER_LONGITUDE, token.longitude)
+                }
+            }
     }
 
     /**
@@ -380,8 +415,7 @@ object LincolnClusterOutput {
             .putExtra(LincolnClusterProtocol.EXTRA_PLAYING, playing))
 
     private fun clearNavLocked(app: Context) {
-        maneuverProgress.reset()
-        lastNavBargraphSteps = null
+        maneuverTracker.reset()
         // Send OFF whenever the cluster was told ON, even if a later snapshot already dropped the
         // owned flag, so a finished route cannot leave "arrived" on the cluster.
         if (navStateOn != true) return
@@ -393,6 +427,7 @@ object LincolnClusterOutput {
             lastNavTurn = null
             lastNavDistance = null
             lastNavRoad = ""
+            lastNavManeuverToken = null
             lastNavSentNs = 0L
             Log.i(TAG, "nav cleared")
         }
@@ -420,7 +455,7 @@ object LincolnClusterOutput {
     }
 
     private fun broadcast(app: Context, intent: Intent): Boolean = runCatching {
-        intent.setPackage(LincolnClusterSettings.clusterPackage(app))
+        if (intent.`package` == null) intent.setPackage(LincolnClusterSettings.clusterPackage(app))
         app.sendBroadcast(intent)
         true
     }.getOrElse {

@@ -226,6 +226,75 @@ class BydHudRouteStateTest {
         assertEquals(false, silent.routeActive())
     }
 
+    @Test
+    fun `calculation signals survive empty lists and wait for a fresh resumed distance`() {
+        val state = populatedState()
+        val before = state.current()
+        state.accept(0x5201, tlvs(tlv(1, 3), tlv(0x0d)))
+        assertEquals(1L, state.progressGeneration)
+        assertEquals(true, state.progressPending)
+        assertEquals(before, state.current()) // Preserve existing HUD grace behaviour.
+        state.accept(0x5201, tlvs(tlv(1, 5), tlv(0x0a, 0, 0, 0, 20)))
+        state.accept(0x5201, tlvs(tlv(1, 5)))
+        assertEquals(1L, state.progressGeneration)
+        assertEquals(true, state.progressPending)
+
+        state.accept(0x5201, tlvs(tlv(1, 1), tlv(0x0d, 0, 1)))
+        assertEquals(true, state.progressPending) // Cached distance belongs to the old route.
+        state.accept(0x5202, tlvs(tlv(1, 0, 1), tlv(3, 2)))
+        assertEquals(true, state.progressPending)
+        state.accept(0x5201, tlvs(tlv(0x0a, 0, 0, 0, 10)))
+        assertEquals(false, state.progressPending)
+        assertEquals(10, state.currentApple()!!.distanceMeters)
+        assertEquals(1L, state.progressGeneration)
+
+        state.accept(0x5201, tlvs(tlv(1, 5)))
+        assertEquals(2L, state.progressGeneration) // A later calculation is distinct.
+        state.accept(0x5201, tlvs(tlv(1, 6), tlv(0x0a, 0, 0, 0, 5)))
+        assertEquals(false, state.progressPending)
+    }
+
+    @Test
+    fun `ordinary empty lists locating metadata and unknown states do not invent a new route`() {
+        val state = populatedState()
+        for (status in listOf(1, 4, 6, 255)) {
+            state.accept(0x5201, tlvs(tlv(1, status), tlv(0x0d)))
+            state.accept(0x5201, tlvs(tlv(0x0d, 0, 1), tlv(0x0a, 0, 0, 0, 20)))
+            state.accept(0x5202, tlvs(tlv(1, 0, 1), tlv(3, 2), tlv(4, *utf8z("Road"))))
+            assertEquals(0L, state.progressGeneration)
+            assertEquals(false, state.progressPending)
+        }
+        // Whole-frame validation precedes the new state handling too.
+        state.accept(0x5201, tlvs(tlv(1, 5), byteArrayOf(0, 8, 0, 1, 1)))
+        assertEquals(0L, state.progressGeneration)
+    }
+
+    @Test
+    fun `an empty list or locating state cannot finish a pending calculation`() {
+        val state = populatedState()
+        state.accept(0x5201, tlvs(tlv(1, 5)))
+        state.accept(0x5201, tlvs(tlv(1, 4), tlv(0x0a, 0, 0, 0, 15)))
+        assertEquals(true, state.progressPending)
+        state.accept(0x5201, tlvs(tlv(1, 1), tlv(0x0d), tlv(0x0a, 0, 0, 0, 10)))
+        state.accept(0x5201, tlvs(tlv(0x0d, 0, 1)))
+        assertEquals(true, state.progressPending)
+        state.accept(0x5201, tlvs(tlv(0x0a, 0, 0, 0, 5)))
+        assertEquals(false, state.progressPending)
+    }
+
+    @Test
+    fun `route end cancels pending calculation without reusing its generation`() {
+        val state = populatedState()
+        state.accept(0x5201, tlvs(tlv(1, 5)))
+        state.accept(0x5201, tlvs(tlv(1, 2)))
+        assertEquals(false, state.progressPending)
+        assertEquals(true, state.routeEnded())
+        assertNull(state.currentApple())
+        state.accept(0x5201, tlvs(tlv(1, 3)))
+        assertEquals(2L, state.progressGeneration)
+        assertEquals(true, state.progressPending)
+    }
+
     private fun utf8z(value: String): IntArray =
         (value.toByteArray(Charsets.UTF_8).map { it.toInt() and 0xff } + 0).toIntArray()
 
