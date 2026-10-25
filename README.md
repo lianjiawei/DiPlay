@@ -26,21 +26,15 @@
 - 应用名称、包名、发布签名和版本线均为本分支独立维护。
 - 首页和设置已按横屏车机重新设计，连接过程统一在一个主页中呈现。
 - 增加林肯/福特 Logo、车型背景、方向盘/车机按键及原车仪表适配。
-- 在线更新优先使用自建国内镜像，GitHub 作为备用源。
+- 支持在应用内检查、下载和安装更新。
 
 ## 下载与更新
 
 - [GitHub 最新正式版](https://github.com/lianjiawei/DiPlay/releases/latest)
-- [CarPlay 1.1.8 国内下载](https://weclaw-agent.cloud/diplay-updates/assets/v1.1.8/CarPlay-1.1.8.apk)
 - [CarPlay 1.1.8 更新说明](docs/RELEASE-NOTES-1.1.8.md)
 - [项目仓库](https://github.com/lianjiawei/DiPlay)
 
-应用内更新位于 **设置 → 关于 → 检查更新**。更新顺序为：
-
-1. 国内镜像：`https://weclaw-agent.cloud/diplay-updates/releases.json`
-2. GitHub 备用源：`https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30`
-
-国内镜像同时提供 APK 和 `SHA256SUMS.txt`，车机无需连接 GitHub 即可检查和下载。应用仍会校验 SHA-256、包名和 Android 签名；镜像不可用或数据不完整时才回退到 GitHub。
+应用内更新位于 **设置 → 关于 → 检查更新**，支持直接检查、下载和安装新版本。下载完成后会校验文件、包名和 Android 签名。
 
 ## 主要功能
 

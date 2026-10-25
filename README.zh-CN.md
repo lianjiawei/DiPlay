@@ -16,14 +16,13 @@
 | Debug 包名 | `cn.manstep.phonemirrorBox.hudtest` |
 | 主要硬件 | 林肯/福特 Freescale MEK / i.MX8 Android 车机 |
 
-## 下载和更新源
+## 下载和在线更新
 
 - [GitHub 最新正式版](https://github.com/lianjiawei/DiPlay/releases/latest)
-- [1.1.8 国内直连 APK](https://weclaw-agent.cloud/diplay-updates/assets/v1.1.8/CarPlay-1.1.8.apk)
 - [1.1.8 更新说明](docs/RELEASE-NOTES-1.1.8.md)
 - [项目仓库](https://github.com/lianjiawei/DiPlay)
 
-应用内更新优先访问国内镜像 `https://weclaw-agent.cloud/diplay-updates/releases.json`，失败后才访问本仓库 GitHub Releases。两个来源都必须同时提供 APK 和 `SHA256SUMS.txt`，应用会继续检查文件校验值、包名和签名。
+应用内更新位于 **设置 → 关于 → 检查更新**，支持直接检查、下载和安装新版本。下载完成后会校验文件、包名和签名。
 
 ## 林肯/福特优化
 

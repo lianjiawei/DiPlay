@@ -23,11 +23,10 @@
 ## 下載與線上更新
 
 - [GitHub 最新正式版](https://github.com/lianjiawei/DiPlay/releases/latest)
-- [1.1.8 中國大陸鏡像 APK](https://weclaw-agent.cloud/diplay-updates/assets/v1.1.8/CarPlay-1.1.8.apk)
 - [1.1.8 更新說明](docs/RELEASE-NOTES-1.1.8.md)
 - [專案倉庫](https://github.com/lianjiawei/DiPlay)
 
-應用程式內的更新位於 **設定 → 關於 → 檢查更新**。程式會先讀取 `https://weclaw-agent.cloud/diplay-updates/releases.json`，鏡像無法使用時再改用 `https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page=30`。鏡像同時提供 APK 與 `SHA256SUMS.txt`，下載後仍會檢查檔案雜湊、套件名稱及 Android 簽章。
+應用程式內的更新位於 **設定 → 關於 → 檢查更新**，支援直接檢查、下載及安裝新版本。下載完成後會檢查檔案、套件名稱及 Android 簽章。
 
 ## Lincoln / Ford 調整
 
