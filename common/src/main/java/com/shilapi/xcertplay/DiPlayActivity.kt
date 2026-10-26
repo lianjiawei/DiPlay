@@ -289,6 +289,14 @@ class DiPlayActivity : CarPlayHostActivity() {
     private var updatePrompt: UpdatePromptDialog? = null
     private var updatePromptForDownload = false
     private val automaticUpdatePrompt = Runnable { showUpdatePrompt(automatic = true) }
+    private var upToDateFeedbackGeneration = 0
+    private val clearUpToDateFeedback = Runnable {
+        if (updateStage == UpdateStage.UP_TO_DATE &&
+            upToDateFeedbackGeneration == updateGeneration && !isFinishing && !isDestroyed) {
+            updateStage = UpdateStage.IDLE
+            refreshUpdateRow()
+        }
+    }
     private var updateStorageDialog: AlertDialog? = null
     internal var updateStorageWorker: (Runnable) -> Unit = UpdateStorage::execute
     private var updateSavedPath: String? = null
@@ -755,6 +763,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         wallpaperProgress = null
         updatePromptResumed = false
         handler.removeCallbacks(automaticUpdatePrompt)
+        handler.removeCallbacks(clearUpToDateFeedback)
         updatePrompt?.dismiss()
         updatePrompt = null
         updateHistoryDialog?.dismiss()
@@ -2801,7 +2810,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         })
     }
 
-    private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING, READY, FAILED }
+    private enum class UpdateStage { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, VERIFYING, READY, FAILED }
     private enum class HistoryStage { IDLE, CHECKING, DOWNLOADING, VERIFYING }
 
     private fun openBackup(from: SettingsCategory = SettingsCategory.ABOUT) {
@@ -2934,7 +2943,7 @@ class DiPlayActivity : CarPlayHostActivity() {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }.also { updateStatusLabel = it })
         when (updateStage) {
-            UpdateStage.IDLE, UpdateStage.FAILED, UpdateStage.CHECKING ->
+            UpdateStage.IDLE, UpdateStage.FAILED, UpdateStage.CHECKING, UpdateStage.UP_TO_DATE ->
                 container.addView(button(brandString(R.string.update_check), false) { checkForUpdates() }
                     .also { updateCheckButton = it }, matchButton(0, 60))
             UpdateStage.AVAILABLE -> container.addView(
@@ -3001,20 +3010,15 @@ class DiPlayActivity : CarPlayHostActivity() {
                 addView(action,LinearLayout.LayoutParams(0,-2,1f).apply { if(index>0)marginStart=dp(FidelitySettingsMetrics.ROW_GAP_DP) })
             }
         }
-        val status=updateStatusLabel
-        if(status!=null) {
-            container.removeView(status)
-            container.addView(GlassEqualHeightRow(this).apply {
-                gravity=Gravity.CENTER_VERTICAL
-                addView(status,LinearLayout.LayoutParams(0,-2,.44f).apply { marginEnd=dp(FidelitySettingsMetrics.ROW_GAP_DP) })
-                addView(actionRow,LinearLayout.LayoutParams(0,-2,.56f))
-            },0,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(FidelitySettingsMetrics.CONTENT_PAD_DP) })
-        } else container.addView(actionRow,LinearLayout.LayoutParams(-1,-2))
+        val statusIndex = updateStatusLabel?.let(container::indexOfChild)?.takeIf { it >= 0 } ?: -1
+        container.addView(actionRow, (statusIndex + 1).coerceAtMost(container.childCount),
+            LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(FidelitySettingsMetrics.CONTENT_PAD_DP) })
     }
 
     private fun checkForUpdates() {
-        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING ||
+        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.UP_TO_DATE || updateStage == UpdateStage.DOWNLOADING ||
             updateStage == UpdateStage.VERIFYING || historyStage != HistoryStage.IDLE) return
+        handler.removeCallbacks(clearUpToDateFeedback)
         if (updateNetworkUnavailable()) {
             updateMessage = brandString(R.string.update_no_network)
             updateStage = UpdateStage.FAILED
@@ -3035,8 +3039,10 @@ class DiPlayActivity : CarPlayHostActivity() {
                         availableUpdate = release
                         if (release == null) {
                             UpdateAvailability.clear(this)
-                            updateMessage = brandString(R.string.update_up_to_date)
-                            updateStage = UpdateStage.IDLE
+                            updateMessage = null
+                            updateStage = UpdateStage.UP_TO_DATE
+                            upToDateFeedbackGeneration = generation
+                            handler.postDelayed(clearUpToDateFeedback, UPDATE_SUCCESS_FEEDBACK_MILLIS)
                         } else {
                             UpdateAvailability.save(this, release)
                             updateRelease = release
@@ -3482,20 +3488,25 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun isUpdateCheckStage(stage: UpdateStage?): Boolean = when (stage) {
-        UpdateStage.IDLE, UpdateStage.CHECKING, UpdateStage.FAILED -> true
+        UpdateStage.IDLE, UpdateStage.CHECKING, UpdateStage.UP_TO_DATE, UpdateStage.FAILED -> true
         else -> false
     }
 
     private fun refreshUpdateLabels() {
         updateStatusLabel?.apply {
-            text = updateMessage ?: if(updateStage==UpdateStage.IDLE && updateNetworkUnavailable())brandString(R.string.update_no_network)else ""
+            text = updateMessage.orEmpty()
             visibility=if(text.isNullOrBlank())View.GONE else View.VISIBLE
-            val drawable=getDrawable(R.drawable.ic_dp_connection)?.mutate()?.apply { setTint(if(updateNetworkUnavailable())WARNING else ACCENT);setBounds(0,0,dp(FidelitySettingsMetrics.ROW_ICON_DP),dp(FidelitySettingsMetrics.ROW_ICON_DP)) }
-            setCompoundDrawablesRelative(drawable,null,null,null);compoundDrawablePadding=dp(FidelitySettingsMetrics.ROW_GAP_DP)
+            setCompoundDrawablesRelative(null,null,null,null)
         }
         updateCheckButton?.apply {
-            text = brandString(if (updateStage == UpdateStage.CHECKING) R.string.update_checking else R.string.update_check)
-            isEnabled = updateStage != UpdateStage.CHECKING && historyStage == HistoryStage.IDLE
+            text = brandString(when (updateStage) {
+                UpdateStage.CHECKING -> R.string.update_checking
+                UpdateStage.UP_TO_DATE -> R.string.update_up_to_date
+                UpdateStage.FAILED -> R.string.update_retry
+                else -> R.string.update_check
+            })
+            isEnabled = updateStage != UpdateStage.CHECKING && updateStage != UpdateStage.UP_TO_DATE &&
+                historyStage == HistoryStage.IDLE
         }
         historyActionButton?.isEnabled = updateStage != UpdateStage.CHECKING &&
             updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING
@@ -7729,5 +7740,6 @@ class DiPlayActivity : CarPlayHostActivity() {
         private const val NOTE_ATTACH_GAP_DP = 6
         private const val SETTINGS_UPDATE_GAP_DP = 10
         private const val SETTINGS_BLOCK_GAP_DP = 16
+        private const val UPDATE_SUCCESS_FEEDBACK_MILLIS = 4_000L
     }
 }

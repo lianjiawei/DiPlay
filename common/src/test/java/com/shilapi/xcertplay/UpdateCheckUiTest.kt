@@ -17,6 +17,7 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.time.Duration
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -76,8 +77,12 @@ class UpdateCheckUiTest {
         idle()
         assertSame(page, field<View>(screen, "rootScroll"))
         assertSame(button, checkButton(screen))
+        assertFalse(button.isEnabled)
+        assertEquals(screen.getString(R.string.update_up_to_date), button.text.toString())
+        assertEquals("", status(screen))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(4))
+        assertEquals(screen.getString(R.string.update_check), button.text.toString())
         assertTrue(button.isEnabled)
-        assertEquals(screen.getString(R.string.update_up_to_date), status(screen))
     }
 
     @Test fun dnsFailureAndTimeoutHaveFriendlyMessagesAndRetainThePage() {
@@ -114,7 +119,8 @@ class UpdateCheckUiTest {
         button.performClick()
         workers.removeAt(0).run()
         idle()
-        assertEquals(screen.getString(R.string.update_up_to_date), status(screen))
+        assertEquals(screen.getString(R.string.update_up_to_date), button.text.toString())
+        assertEquals("", status(screen))
         assertSame(button, checkButton(screen))
     }
 
