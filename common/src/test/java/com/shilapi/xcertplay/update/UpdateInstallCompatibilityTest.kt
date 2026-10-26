@@ -79,6 +79,16 @@ class UpdateInstallCompatibilityTest {
         }
     }
 
+    @Test fun providerAllowsVerifiedHistoricalDownloads() {
+        val context = RuntimeEnvironment.getApplication()
+        val historical = File(context.cacheDir, "history/test/DiPlay-old.apk").apply {
+            parentFile!!.mkdirs()
+            writeBytes(byteArrayOf(1))
+        }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.update-apks", historical)
+        assertEquals(true, uri.authority!!.endsWith(".update-apks"))
+    }
+
     @Test fun swappedPublicCopyFallsBackToTheProviderUri() {
         val started = install(publicUriReadable = true, installers = 0, publicBytes = byteArrayOf(2))
         assertEquals(true, started.data!!.authority!!.endsWith(".update-apks"))

@@ -99,7 +99,6 @@ import com.shilapi.xcertplay.update.UpdateClient
 import com.shilapi.xcertplay.update.InternetNetworkSelector
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseLookup
-import com.shilapi.xcertplay.update.UpdateReleaseNotes
 import com.shilapi.xcertplay.update.UpdateNetworkStatus
 import java.io.File
 import java.io.IOException
@@ -336,6 +335,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     @Volatile private var historyProgress: Int? = null
     @Volatile private var historyGeneration = 0
     private var historyMessage: String? = null
+    private var historyInstallerFile: File? = null
     private var carButtonCard: LinearLayout? = null
     private var bydAdbControls: LinearLayout? = null
     private var adbSwitchChangePending = false
@@ -781,6 +781,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     override fun onDestroy() {
         updateStorageDialog?.dismiss()
         updateFile?.parentFile?.let { UpdateStorage.release(applicationContext, it) }
+        releaseHistoryInstaller()
         handler.removeCallbacks(automaticUpdatePrompt)
         updatePrompt?.dismiss()
         updatePrompt = null
@@ -3151,18 +3152,9 @@ class DiPlayActivity : CarPlayHostActivity() {
     private fun confirmHistoryDownload(release: UpdateRelease) {
         if (!isUpdatePage()) return
         updateHistoryDialog?.dismiss()
-        val notes = UpdateReleaseNotes.plainText(release.releaseNotes)
-            .ifBlank { brandString(R.string.update_history_notes_missing) }
-        val message = brandString(R.string.update_history_confirm, release.apkName) +
-            "\n\n" + brandString(R.string.update_history_notes_title) + "\n" + notes
-        updateHistoryDialog = appDialogBuilder()
-            .setTitle(release.tagName)
-            .setMessage(message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(brandString(R.string.update_history_action)) { _, _ ->
-                requestHistoryDownload(release)
-            }
-            .show()
+        val prompt = HistoryReleaseDialog(this, release) { requestHistoryDownload(release) }
+        updateHistoryDialog = prompt.dialog
+        prompt.show()
     }
 
     private fun requestHistoryDownload(release: UpdateRelease) {
@@ -3189,6 +3181,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     private fun downloadHistoryRelease(release: UpdateRelease) {
         if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING ||
             updateStage == UpdateStage.PREPARING_INSTALL) return
+        releaseHistoryInstaller()
         historyStage = HistoryStage.DOWNLOADING
         historyProgress = null
         historyMessage = null
@@ -3216,23 +3209,23 @@ class DiPlayActivity : CarPlayHostActivity() {
                 if (!UpdateChecksums.matches(expected, release.apkName, actual)) {
                     throw IOException("Checksum mismatch for ${release.apkName}")
                 }
-                UpdateApkExport.copyToSystemDownloads(applicationContext, apkFile)
-            }
-            attempt?.let { UpdateStorage.discard(applicationContext, it) }
+                apkFile to UpdateApkExport.copyToSystemDownloads(applicationContext, apkFile)
+            }.onFailure { attempt?.let { UpdateStorage.discard(applicationContext, it) } }
             runOnUiThread {
-                if (generation != historyGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                if (generation != historyGeneration || isFinishing || isDestroyed) {
+                    outcome.getOrNull()?.first?.parentFile?.let { UpdateStorage.release(applicationContext, it) }
+                    return@runOnUiThread
+                }
                 historyStage = HistoryStage.IDLE
                 outcome.fold(
-                    { saved ->
+                    { (file, saved) ->
                         historyMessage = brandString(R.string.update_saved_to, saved.path)
                         if (isUpdatePage()) {
+                            historyInstallerFile = file
                             render()
-                            updateHistoryDialog?.dismiss()
-                            updateHistoryDialog = appDialogBuilder()
-                            .setTitle(brandString(R.string.update_history_saved_title))
-                            .setMessage(brandString(R.string.update_saved_to, saved.path))
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show()
+                            showHistoryDownloadComplete(file, saved.path)
+                        } else {
+                            file.parentFile?.let { UpdateStorage.release(applicationContext, it) }
                         }
                     },
                     { failure ->
@@ -3242,6 +3235,77 @@ class DiPlayActivity : CarPlayHostActivity() {
                 )
             }
         }, "diplay-history-download").start()
+    }
+
+    private fun showHistoryDownloadComplete(file: File, savedPath: String, installFailure: Boolean = false) {
+        if (!isUpdatePage() || historyInstallerFile !== file) return
+        updateHistoryDialog?.dismiss()
+        var openingInstaller = false
+        val message = buildString {
+            append(brandString(R.string.update_saved_to, savedPath))
+            append("\n\n")
+            append(brandString(R.string.update_history_downgrade_warning))
+            if (installFailure) {
+                append("\n\n")
+                append(brandString(R.string.update_history_install_failed))
+            }
+        }
+        val dialog = appDialogBuilder()
+            .setTitle(brandString(R.string.update_history_saved_title))
+            .setMessage(message)
+            .setNegativeButton(brandString(R.string.update_history_keep_file), null)
+            .setPositiveButton(brandString(R.string.update_history_open_installer)) { _, _ ->
+                openingInstaller = true
+                installHistoryRelease(file, savedPath)
+            }
+            .create()
+        dialog.setOnDismissListener {
+            if (updateHistoryDialog === dialog) updateHistoryDialog = null
+            if (!openingInstaller && historyInstallerFile === file) releaseHistoryInstaller()
+        }
+        updateHistoryDialog = dialog
+        dialog.show()
+    }
+
+    private fun installHistoryRelease(file: File, savedPath: String) {
+        updateInstallWorker(Runnable {
+            val protection = runCatching { UpdateStorage.protectInstaller(applicationContext, file) }
+            runOnUiThread {
+                if (historyInstallerFile !== file || isFinishing || isDestroyed) return@runOnUiThread
+                protection.fold(
+                    { startHistoryInstaller(file, savedPath) },
+                    {
+                        Log.w("DiPlay-Update", "history installation protection failed", it)
+                        showHistoryDownloadComplete(file, savedPath, installFailure = true)
+                    },
+                )
+            }
+        })
+    }
+
+    private fun startHistoryInstaller(file: File, savedPath: String) {
+        try {
+            val uri = updateInstallerUri(file)
+            val view = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val installers = packageManager.queryIntentActivities(view, PackageManager.MATCH_DEFAULT_ONLY).size
+            val launch = if (installers > 1) Intent.createChooser(view, null) else view
+            updateInstallerLauncher(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            Log.i("DiPlay-Update", "history install started: installers=$installers")
+            historyInstallerFile = null
+            file.parentFile?.let { UpdateStorage.release(applicationContext, it) }
+        } catch (failure: RuntimeException) {
+            Log.w("DiPlay-Update", "history install failed to start", failure)
+            showHistoryDownloadComplete(file, savedPath, installFailure = true)
+        }
+    }
+
+    private fun releaseHistoryInstaller() {
+        val file = historyInstallerFile ?: return
+        historyInstallerFile = null
+        file.parentFile?.let { UpdateStorage.release(applicationContext, it) }
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {

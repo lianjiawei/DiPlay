@@ -863,7 +863,7 @@
     <string name="update_failed">Update failed</string>
     <string name="update_available_home">Update available</string>
     <string name="update_saved_to">Saved to %1$s</string>
-    <string name="update_history_download">Download older versions</string>
+    <string name="update_history_download">Older versions</string>
     <string name="update_history_checking">Loading versions…</string>
     <string name="update_history_empty">No downloadable versions were found.</string>
     <string name="update_history_failed">Could not load older versions.</string>
@@ -875,6 +875,10 @@
     <string name="update_history_downloading">Downloading old version · %1$d%%</string>
     <string name="update_history_verifying">Verifying old-version APK…</string>
     <string name="update_history_saved_title">Download complete</string>
+    <string name="update_history_keep_file">Keep file</string>
+    <string name="update_history_open_installer">Install</string>
+    <string name="update_history_downgrade_warning">Android may block installing an older version. Uninstalling the current version first may erase app data.</string>
+    <string name="update_history_install_failed">Could not open the Android installer. The APK is still saved in Downloads.</string>
     <string name="update_history_permission_denied">Storage permission is required to save into the system Downloads folder.</string>
     <string name="backup_title">Back up settings</string>
     <string name="backup_open">Back up or restore on a phone</string>

@@ -512,6 +512,77 @@ class UpdatePromptFlowTest {
         assertNull(prompt(c.get()))
     }
 
+    @Test fun historyDownloadCompletionCanOpenTheInstallerWithoutAnotherDownload() {
+        val published = serveUpdate(validChecksum = { true })
+        val c = screen()
+        c.get().updateInstallWorker = { it.run() }
+        c.get().updateInstallerUri = { android.net.Uri.parse("content://${c.get().packageName}.update-apks/history.apk") }
+        var launched: Intent? = null
+        c.get().updateInstallerLauncher = { launched = it }
+
+        ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "downloadHistoryRelease",
+            ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, published))
+        awaitHistory(c.get())
+        val dialog = requireNotNull(ReflectionHelpers.getField<AlertDialog?>(c.get(), "updateHistoryDialog"))
+        assertEquals(c.get().getString(R.string.update_history_keep_file),
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).text)
+        assertEquals(c.get().getString(R.string.update_history_open_installer),
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertNull(launched)
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        idle()
+        assertEquals(Intent.ACTION_VIEW, launched?.action)
+        assertEquals("application/vnd.android.package-archive", launched?.type)
+        assertNull(ReflectionHelpers.getField<File?>(c.get(), "historyInstallerFile"))
+    }
+
+    @Test fun keepingAHistoricalDownloadNeverOpensTheInstaller() {
+        val published = serveUpdate(validChecksum = { true })
+        val c = screen()
+        var launches = 0
+        c.get().updateInstallerLauncher = { launches++ }
+
+        ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "downloadHistoryRelease",
+            ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, published))
+        awaitHistory(c.get())
+        val dialog = requireNotNull(ReflectionHelpers.getField<AlertDialog?>(c.get(), "updateHistoryDialog"))
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+        idle()
+        assertEquals(0, launches)
+        assertNull(ReflectionHelpers.getField<File?>(c.get(), "historyInstallerFile"))
+        assertTrue(ReflectionHelpers.getField<String>(c.get(), "historyMessage").isNotBlank())
+    }
+
+    @Test fun historicalInstallerFailureRetriesOnlyInstallation() {
+        val published = serveUpdate(validChecksum = { true })
+        val c = screen()
+        val requests = mutableListOf<String>()
+        c.get().updateConnection = { url -> requests += url.toString(); url.openConnection() }
+        c.get().updateInstallWorker = { it.run() }
+        c.get().updateInstallerUri = { android.net.Uri.parse("content://${c.get().packageName}.update-apks/history.apk") }
+        c.get().updateInstallerLauncher = { throw android.content.ActivityNotFoundException("test") }
+
+        ReflectionHelpers.callInstanceMethod<Unit>(c.get(), "downloadHistoryRelease",
+            ReflectionHelpers.ClassParameter.from(UpdateRelease::class.java, published))
+        awaitHistory(c.get())
+        ReflectionHelpers.getField<AlertDialog>(c.get(), "updateHistoryDialog")
+            .getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        idle()
+        val retry = requireNotNull(ReflectionHelpers.getField<AlertDialog?>(c.get(), "updateHistoryDialog"))
+        assertTrue(retry.isShowing)
+        assertTrue(retry.findViewById<TextView>(android.R.id.message).text
+            .contains(c.get().getString(R.string.update_history_install_failed)))
+        assertEquals(listOf(published.checksumsUrl, published.apkUrl), requests)
+
+        var launches = 0
+        c.get().updateInstallerLauncher = { launches++ }
+        retry.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        idle()
+        assertEquals(1, launches)
+        assertEquals(listOf(published.checksumsUrl, published.apkUrl), requests)
+    }
+
     @Test fun delayedHistoryPickerCannotAppearAfterReturningHome() {
         val c = screen()
         ReflectionHelpers.setField(c.get(), "page", "home")

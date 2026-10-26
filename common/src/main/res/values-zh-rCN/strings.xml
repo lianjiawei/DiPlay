@@ -828,7 +828,7 @@
     <string name="update_failed">更新失败</string>
     <string name="update_available_home">有可用更新</string>
     <string name="update_saved_to">已保存到 %1$s</string>
-    <string name="update_history_download">下载历史版本</string>
+    <string name="update_history_download">历史版本</string>
     <string name="update_history_checking">正在读取历史版本…</string>
     <string name="update_history_empty">没有找到可下载的历史版本。</string>
     <string name="update_history_failed">读取历史版本失败。</string>
@@ -840,6 +840,10 @@
     <string name="update_history_downloading">正在下载历史版本 · %1$d%%</string>
     <string name="update_history_verifying">正在校验历史版本…</string>
     <string name="update_history_saved_title">下载完成</string>
+    <string name="update_history_keep_file">仅保存</string>
+    <string name="update_history_open_installer">打开安装</string>
+    <string name="update_history_downgrade_warning">Android 可能阻止安装旧版本；先卸载当前版本可能会清除应用数据。</string>
+    <string name="update_history_install_failed">无法打开系统安装界面，APK 仍保存在下载目录。</string>
     <string name="update_history_permission_denied">没有存储权限，无法保存到系统下载目录。</string>
     <string name="backup_title">备份设置</string>
     <string name="backup_open">在手机上备份或恢复</string>
