@@ -4,7 +4,34 @@ Instructions for coding agents that work on DiPlay.
 
 ## Checks
 
-Run the CI command from `.github/workflows/android.yml` before you report a change as done:
+Choose checks by the affected behavior and regression risk, not by the number of changed lines.
+**Small, localized fixes default to targeted tests and an adversarial review; do not run the
+whole repository test suite for every edit.**
+
+1. Identify the changed behavior, its callers and the nearby behavior that must remain intact.
+   Run the existing tests that cover those paths; add a focused regression test when needed.
+   Gradle's `--tests` filter can select individual test classes, for example:
+   `./gradlew :common:testDebugUnitTest --tests 'com.shilapi.xcertplay.CarPlayMediaInterruptionTest'`.
+2. Review the final diff adversarially before calling the fix done. Check the relevant failure
+   paths, boundary values, stale callbacks, lifecycle/cleanup, concurrency, user overrides and
+   compatibility. Confirm that removing an unsuccessful workaround preserves independent fixes.
+   Expand testing if this review exposes an uncovered risk; passing tests alone is not proof
+   that there can be no regressions.
+3. Run lint/build checks for the affected module or deliverable when relevant. A requested test
+   APK must compile and pass signature/package verification. Unrelated sample apps do not need
+   rebuilding for a localized main-app fix.
+4. Reuse completed checks when their inputs have not changed. After another edit or a remote
+   sync, rerun only the checks affected by that diff. A remote sync alone does not require a full
+   suite. Documentation-only changes need a diff/content review, not Android builds or tests.
+5. Use broader module tests or the full CI command below for changes with broad impact, such as
+   shared API/architecture changes, build/dependency/toolchain changes, large cross-module merges,
+   or failures whose impact cannot be bounded. The user may explicitly request a full run.
+6. Report which checks actually passed and any remaining verification limits. Do not describe
+   a cancelled or targeted run as a successful full-suite run. Non-UI changes do not require
+   screenshot regression checks; the Settings layout requirements below still apply to layout edits.
+
+The full check command from `.github/workflows/android.yml` remains available when warranted;
+these local verification rules do not disable the checks configured in CI:
 
 ```sh
 ./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :home:testDebugUnitTest \
