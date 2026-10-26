@@ -23,7 +23,9 @@ internal class GlassDialogActions(context: Context) : LinearLayout(context) {
         orientation = if (widest * actions.size + gap * (actions.size - 1).coerceAtLeast(0) <= available) HORIZONTAL else VERTICAL
         actions.forEachIndexed { index, action ->
             val params = action.layoutParams as LayoutParams
-            params.width = widest
+            // On narrow portrait windows the actions stack below the message. Give each one
+            // the whole row; a narrow END-aligned column looks like an OEM side-button panel.
+            params.width = if (orientation == VERTICAL) available else widest
             params.height = LayoutParams.WRAP_CONTENT
             params.weight = 0f
             params.setMargins(0, if (orientation == VERTICAL && index > 0) gap else 0, 0, 0)

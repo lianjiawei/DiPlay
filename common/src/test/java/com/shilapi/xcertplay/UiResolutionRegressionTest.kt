@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.ConnectivityManager
@@ -10,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
+import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.setup.SetupGuide
 import com.shilapi.xcertplay.update.UpdateAvailability
 import com.shilapi.xcertplay.update.UpdateRelease
@@ -81,6 +83,9 @@ class UiResolutionRegressionTest {
 
     private fun matrix(name: String) {
         findings.clear()
+        // The production manifest supports RTL. Robolectric's library test application does not
+        // inherit that flag automatically, so set it before constructing the activity.
+        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
         packageInfo.versionName = "precision.8"
         shadowOf(app.packageManager).installPackage(packageInfo)
@@ -102,10 +107,12 @@ class UiResolutionRegressionTest {
                 capture(screen, directory, "01-home")
                 navigate(screen, "connection")
                 capture(screen, directory, "02-connection")
+                assertSubpageHeader(screen, "02-connection")
                 for (step in SetupGuide.STEP_CAR..SetupGuide.STEP_DONE) {
                     ReflectionHelpers.setField(screen, "setupStep", step)
                     navigate(screen, "setup")
                     capture(screen, directory, "03-setup-$step")
+                    assertSubpageHeader(screen, "03-setup-$step")
                 }
                 for (rail in listOf(false, true)) {
                     SettingsLayoutPreferences.saveForceFull(app, rail)
@@ -123,6 +130,7 @@ class UiResolutionRegressionTest {
                 SettingsLayoutPreferences.saveForceFull(app, false)
                 navigate(screen, "backup")
                 capture(screen, directory, "05-phone-backup")
+                assertSubpageHeader(screen, "05-phone-backup")
                 val release = UpdateRelease("precision.99", "CorsairPlay.apk", "https://example.com/app.apk",
                     "https://example.com/SHA256SUMS.txt", "USB recovery\n更新提示和屏幕适配")
                 val prompt = UpdatePromptDialog(screen, {}, {}, {})
@@ -152,6 +160,26 @@ class UiResolutionRegressionTest {
         assertTrue("Layout findings for $name:\n${findings.take(30).joinToString("\n")}", findings.isEmpty())
     }
 
+    private fun assertSubpageHeader(screen: DiPlayActivity, state: String) {
+        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val back = descendants(root).filterIsInstance<TextView>().singleOrNull {
+            it.contentDescription == screen.getString(R.string.back)
+        }
+        assertNotNull("$state must expose one Back action", back)
+        val header = back!!.parent as ViewGroup
+        assertSame("$state Back must be the first logical header control", back, header.getChildAt(0))
+        val brandNames = HomeVehicleBrand.entries.map { it.displayName(screen) }.toSet()
+        assertFalse("$state must not show home branding", descendants(header).any {
+            it.contentDescription?.toString() in brandNames ||
+                it is TextView && it.text.toString() in brandNames
+        })
+        if (screen.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            assertEquals("$state Back must stay on the RTL start edge", header.width, back.right)
+        } else {
+            assertEquals("$state Back must stay on the LTR start edge", 0, back.left)
+        }
+    }
+
     private fun navigate(screen: DiPlayActivity, page: String) {
         ReflectionHelpers.setField(screen, "page", page)
         call(screen, "render")
@@ -163,6 +191,7 @@ class UiResolutionRegressionTest {
         val config = screen.resources.configuration
         val width = (config.screenWidthDp * metrics.density).toInt()
         val height = (config.screenHeightDp * metrics.density).toInt()
+        root.layoutDirection = config.layoutDirection
         root.measure(exact(width), exact(height))
         root.layout(0, 0, width, height)
         shadowOf(Looper.getMainLooper()).idle()

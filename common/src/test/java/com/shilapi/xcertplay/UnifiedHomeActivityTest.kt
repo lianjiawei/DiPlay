@@ -223,6 +223,80 @@ class UnifiedHomeActivityTest {
         assertEquals("settings", field<String>("page"))
     }
 
+    @Test fun connectFromConnectionSetupShowsHomeProgressThenOpensCarPlay() {
+        set("page", "connection")
+        call<Unit>("render")
+        activity.getSharedPreferences("diplay", Activity.MODE_PRIVATE).edit()
+            .putBoolean("notification_asked", true).commit()
+        var starts = 0
+        activity.projectionStarter = {
+            starts++
+            set("unifiedConnectionRequested", true)
+            true
+        }
+
+        call<Unit>("connect",
+            ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+            ClassParameter.from(Boolean::class.javaPrimitiveType, true))
+
+        assertEquals(1, starts)
+        assertEquals("home", field<String>("page"))
+        assertTrue(field<Boolean>("openProjectionWhenReady"))
+        assertEquals(activity.getString(R.string.ui_glass_connecting_title),
+            field<TextView>("homeHeadline").text.toString())
+        assertFalse(field<View>("connectButton").isEnabled)
+        assertFalse(field<Boolean>("unifiedProjectionVisible"))
+
+        store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java))
+        CarPlayBackgroundSession.active = true
+        CarPlayBackgroundSession.mainPictureReady = true
+        c.windowFocusChanged(true)
+        call<Unit>("onProjectionStateChanged")
+
+        assertTrue(field<Boolean>("unifiedProjectionVisible"))
+        assertEquals(View.GONE, field<View>("unifiedHomeContent").visibility)
+        assertFalse(field<Boolean>("openProjectionWhenReady"))
+        assertNull(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test fun failedManualConnectStaysOnSetupInsteadOfShowingFalseProgress() {
+        set("page", "connection")
+        set("setupError", "test authentication failure")
+        call<Unit>("render")
+        var starts = 0
+        activity.projectionStarter = { starts++; true }
+
+        call<Unit>("connect",
+            ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+            ClassParameter.from(Boolean::class.javaPrimitiveType, true))
+
+        assertEquals(0, starts)
+        assertEquals("connection", field<String>("page"))
+        assertFalse(field<Boolean>("openProjectionWhenReady"))
+    }
+
+    @Test fun settingTriggeredReconnectKeepsTheSettingsPage() {
+        set("page", "settings")
+        call<Unit>("render")
+        activity.getSharedPreferences("diplay", Activity.MODE_PRIVATE).edit()
+            .putBoolean("notification_asked", true).commit()
+        var starts = 0
+        activity.projectionStarter = {
+            starts++
+            set("unifiedConnectionRequested", true)
+            true
+        }
+
+        call<Unit>("connect",
+            ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+            ClassParameter.from(Boolean::class.javaPrimitiveType, false))
+
+        assertEquals(1, starts)
+        assertEquals("settings", field<String>("page"))
+        assertTrue(field<Boolean>("openProjectionWhenReady"))
+        assertFalse(field<Boolean>("unifiedProjectionVisible"))
+    }
+
     @Test fun repeatedDisconnectsKeepTheActivityHomeAndExecutorsReusable() {
         repeat(2) {
             val controller = mock(CarPlayController::class.java)

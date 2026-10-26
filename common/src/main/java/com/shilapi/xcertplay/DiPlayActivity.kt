@@ -237,10 +237,12 @@ class DiPlayActivity : CarPlayHostActivity() {
     private var disconnectButton: Button? = null
     private var lastRunning: Boolean? = null
     private var pendingWireless = false
+    private var pendingWirelessReturnHome = false
     private var bluetoothSettingsVisited = false
     private var initialLaunch = true
     private var launchAutoConnectPending = false
     private var notificationTransport = true
+    private var notificationReturnHome = false
     private var exportInProgress = false
     private var usbPermissionOperation: UsbPermissionSetup.Operation? = null
     private var usbPermissionDialog: AlertDialog? = null
@@ -365,7 +367,9 @@ class DiPlayActivity : CarPlayHostActivity() {
     )
     private val systemWifiPicker = SystemWifiPicker(this, { appDialogBuilder() }, ::openCarClientWifiSettings)
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        connect(notificationTransport)
+        val returnHome = notificationReturnHome
+        notificationReturnHome = false
+        connect(notificationTransport, returnHome)
     }
     private val tick = object : Runnable {
         override fun run() {
@@ -515,6 +519,10 @@ class DiPlayActivity : CarPlayHostActivity() {
             ?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
         setupStep = savedInstanceState?.getInt("setup_step") ?: SetupGuide.STEP_CAR
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
+        pendingWireless = savedInstanceState?.getBoolean("pending_wireless") ?: false
+        pendingWirelessReturnHome = savedInstanceState?.getBoolean("pending_wireless_return_home") ?: false
+        notificationTransport = savedInstanceState?.getBoolean("notification_transport") ?: true
+        notificationReturnHome = savedInstanceState?.getBoolean("notification_return_home") ?: false
         page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page")
             ?: "home"
         returnToCarPlay = savedInstanceState?.getBoolean(EXTRA_RETURN_TO_CARPLAY)
@@ -599,6 +607,10 @@ class DiPlayActivity : CarPlayHostActivity() {
         outState.putBoolean("byd_vehicle_advanced", bydVehicleAdvancedExpanded)
         outState.putInt("setup_step", setupStep)
         outState.putBoolean("setup_from_settings", setupFromSettings)
+        outState.putBoolean("pending_wireless", pendingWireless)
+        outState.putBoolean("pending_wireless_return_home", pendingWirelessReturnHome)
+        outState.putBoolean("notification_transport", notificationTransport)
+        outState.putBoolean("notification_return_home", notificationReturnHome)
         super.onSaveInstanceState(outState)
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -973,39 +985,28 @@ class DiPlayActivity : CarPlayHostActivity() {
         gravity = Gravity.CENTER_VERTICAL
         val home = page == "home"
         val control = if (home) ReferenceHomeMetrics.HEADER_DP else if (compact) 44 else 52
-        val logoSize=dp(if (home) {
-            if (AirPlayPersistence.loadHomeVehicleBrand(this@DiPlayActivity) == HomeVehicleBrand.FORD)
-                ReferenceHomeMetrics.FORD_MARK_WIDTH_DP else ReferenceHomeMetrics.LINCOLN_MARK_WIDTH_DP
-        } else if (compact) 30 else 36)
-        addView(if (home) BrandMarkView(this@DiPlayActivity,appNight, homeBrand = true) else ImageView(this@DiPlayActivity).apply {
-            VehicleBranding.setLogo(this);contentDescription=VehicleBranding.displayName(context)
-        },LinearLayout.LayoutParams(logoSize,if(home) dp(ReferenceHomeMetrics.BRAND_MARK_HEIGHT_DP) else logoSize))
-        val brandTextSize = if (compact) 20 else 26
-        val brandLabel = if (home) null else label(VehicleBranding.displayName(this@DiPlayActivity), brandTextSize, TEXT, true,
-            centreGlyphs = resources.configuration.locales[0].language != "zh").apply {
-            setPaddingRelative(if (compact) dp(8) else dp(12), 0, 0, 0)
-            gravity = (if (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) Gravity.RIGHT else Gravity.LEFT) or Gravity.CENTER_VERTICAL
-            textAlignment = View.TEXT_ALIGNMENT_GRAVITY
-            maxLines = 1
-            TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 12,
-                if (compact) 20 else 26, 1, TypedValue.COMPLEX_UNIT_SP)
+        if (!home) {
+            // Settings-derived pages use a conventional leading Back action. Branding belongs to
+            // the home screen only; keeping it here pushed Back to the opposite edge and made
+            // Connection setup, Setup guide and report/backup pages feel like different flows.
+            addView(headerButton(brandString(R.string.back), R.drawable.ic_dp_back, compact, ::navigateBack).apply {
+                contentDescription = brandString(R.string.back)
+            }, LinearLayout.LayoutParams(-2, dp(control)))
+            addView(Space(this@DiPlayActivity), LinearLayout.LayoutParams(0, dp(control), 1f))
+            return@apply
         }
-        addView(brandLabel ?: Space(this@DiPlayActivity), LinearLayout.LayoutParams(0, dp(control), 1f))
-        addView(headerButton(if (page == "home") brandString(R.string.car_home) else brandString(R.string.back),
-            if (page == "home") R.drawable.ic_dp_car else R.drawable.ic_dp_back, compact || home) {
-            if (page == "home") showCarLauncher()
-            else navigateBack()
+
+        val logoSize=dp(if (AirPlayPersistence.loadHomeVehicleBrand(this@DiPlayActivity) == HomeVehicleBrand.FORD)
+            ReferenceHomeMetrics.FORD_MARK_WIDTH_DP else ReferenceHomeMetrics.LINCOLN_MARK_WIDTH_DP)
+        addView(BrandMarkView(this@DiPlayActivity,appNight, homeBrand = true),LinearLayout.LayoutParams(
+            logoSize, dp(ReferenceHomeMetrics.BRAND_MARK_HEIGHT_DP)))
+        addView(Space(this@DiPlayActivity), LinearLayout.LayoutParams(0, dp(control), 1f))
+        addView(headerButton(brandString(R.string.car_home), R.drawable.ic_dp_car, true) {
+            showCarLauncher()
         }.apply {
             // Keep the home logo and the car-home action at the same fixed edges.
             val available=dp(resources.configuration.screenWidthDp-ReferenceHomeMetrics.SIDE_DP*2)
-            val brandWidth=brandLabel?.let { label ->
-                val brandPaint=android.text.TextPaint(label.paint).apply {
-                    textSize=TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,brandTextSize.toFloat(),resources.displayMetrics)
-                }
-                kotlin.math.ceil(brandPaint.measureText(label.text.toString())).toInt()+
-                    label.compoundPaddingLeft+label.compoundPaddingRight+dp(2)
-            } ?: 0
-            maxWidth=minOf(available/2,available-logoSize-brandWidth)
+            maxWidth=minOf(available/2,available-logoSize)
                 .coerceAtLeast(dp(control))
             val label=text.toString()
             contentDescription=label
@@ -3745,7 +3746,11 @@ class DiPlayActivity : CarPlayHostActivity() {
     private fun startupHotspotEligible(): Boolean =
         CarHotspotSetup.shouldStartOnLaunch(applicationContext, CarPlayBackgroundSession.hasSession())
 
-    private fun carHotspotOffDialog() {
+    // Keep the no-argument entry for the existing dialog regression test and any reflective
+    // diagnostics; manual Settings connects use the overload to carry their navigation intent.
+    private fun carHotspotOffDialog() = carHotspotOffDialog(returnHomeOnStart = false)
+
+    private fun carHotspotOffDialog(returnHomeOnStart: Boolean) {
         appDialogBuilder().setTitle(brandString(R.string.car_hotspot_is_off))
             .setMessage(brandString(R.string.msg_car_hotspot_connect, AirPlayPersistence.loadManualHotspotSsid(this)))
             .setPositiveButton(brandString(R.string.open_car_settings)) { _, _ -> openCarWifiSettings() }
@@ -3753,7 +3758,7 @@ class DiPlayActivity : CarPlayHostActivity() {
                 // The driver sees the hotspot on: trust that over Android's report, or this dialog would
                 // come back on every tap (#604).
                 CarHotspotSettings.setOffReportIgnored(this, true)
-                connect(true)
+                connect(true, returnHomeOnStart)
             }
             .setNegativeButton(brandString(R.string.cancel), null).show()
     }
@@ -3820,7 +3825,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         setupFromSettings = false
         setupStep = SetupGuide.STEP_CAR
         render()
-        if (connectNow) connect(AirPlayPersistence.loadWirelessEnabled(this))
+        if (connectNow) connect(AirPlayPersistence.loadWirelessEnabled(this), returnHomeOnStart = true)
     }
 
     private fun dilinkLabel(generation: DiLinkGeneration) = brandString(when (generation) {
@@ -4030,11 +4035,15 @@ class DiPlayActivity : CarPlayHostActivity() {
         }
         section(content, brandString(R.string.s_3_connect)) { card ->
             card.addView(label(brandString(R.string.return_from_car_settings_to_diplay_then_connect_accept_the), 16, MUTED))
-            card.addView(button(brandString(R.string.connect_phone), true) { connect(true) }, matchButton(12, 60))
+            card.addView(button(brandString(R.string.connect_phone), true) {
+                connect(true, returnHomeOnStart = true)
+            }, matchButton(12, 60))
         }
         section(content, brandString(R.string.prefer_a_cable)) { card ->
             card.addView(label(brandString(R.string.use_a_usb_data_cable_and_the_car_s_usb_data_port_unlock_yo), 16, MUTED))
-            card.addView(button(brandString(R.string.connect_with_usb), false) { connect(false) }, matchButton(12, 60))
+            card.addView(button(brandString(R.string.connect_with_usb), false) {
+                connect(false, returnHomeOnStart = true)
+            }, matchButton(12, 60))
         }
     }
 
@@ -6260,7 +6269,9 @@ class DiPlayActivity : CarPlayHostActivity() {
         parent.addView(space(12))
     }
 
-    private fun connect(wireless: Boolean) {
+    private fun connect(wireless: Boolean) = connect(wireless, returnHomeOnStart = false)
+
+    private fun connect(wireless: Boolean, returnHomeOnStart: Boolean) {
         startupHotspotCancelled = true
         if (wireless && pendingCarHotspotSetup) { toast(brandString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
         if (setupError != null) { toast(setupError!!); return }
@@ -6278,19 +6289,34 @@ class DiPlayActivity : CarPlayHostActivity() {
             askExistingWifiNetwork()
             return
         }
-        if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
+        if (wireless && carHotspotOff()) { carHotspotOffDialog(returnHomeOnStart); return }
         if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
-            pendingWireless = true; choosePhone(); return
+            pendingWireless = true
+            pendingWirelessReturnHome = returnHomeOnStart
+            choosePhone()
+            return
         }
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !preferences.getBoolean("notification_asked", false)) {
             preferences.edit().putBoolean("notification_asked", true).apply()
             notificationTransport = wireless
+            notificationReturnHome = returnHomeOnStart
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         val open = {
             AirPlayPersistence.saveWirelessEnabled(this, wireless)
+            if (returnHomeOnStart && page != "home") {
+                // A deliberate Connect action leaves configuration behind immediately so the
+                // driver sees connection progress. The first main-screen frame then replaces this
+                // same home with CarPlay; background/setting-triggered reconnects keep their page.
+                returnToCarPlay = false
+                connectionSettingsReturnCategory = null
+                setupFromSettings = false
+                setupStep = SetupGuide.STEP_CAR
+                page = "home"
+                render()
+            }
             openProjection()
         }
         if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop { runOnUiThread { open() } }
@@ -6309,6 +6335,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         if (adapter == null) {
             // Android here has no Bluetooth for apps at all, so there is no switch to send the driver to.
             pendingWireless = false
+            pendingWirelessReturnHome = false
             appDialogBuilder().setTitle(brandString(R.string.wireless_carplay_2))
                 .setMessage(brandString(R.string.bluetooth_cannot_open_connections))
                 .setPositiveButton(brandString(R.string.got_it), null).show(); return
@@ -6339,11 +6366,17 @@ class DiPlayActivity : CarPlayHostActivity() {
             }.toTypedArray()) { _, index ->
                 val device = devices[index]
                 DiPlayPreferences.savePhone(this, device.address, device.name ?: "iPhone")
-                val start = pendingWireless; pendingWireless = false
+                val start = pendingWireless
+                val returnHome = pendingWirelessReturnHome
+                pendingWireless = false
+                pendingWirelessReturnHome = false
                 render()
-                if (start) connect(true)
+                if (start) connect(true, returnHome)
             }.setNeutralButton(brandString(R.string.pair_another)) { _, _ -> openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
-            .setNegativeButton(brandString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
+            .setNegativeButton(brandString(R.string.cancel)) { _, _ ->
+                pendingWireless = false
+                pendingWirelessReturnHome = false
+            }.show()
     }
 
     private fun wirelessHelp() {

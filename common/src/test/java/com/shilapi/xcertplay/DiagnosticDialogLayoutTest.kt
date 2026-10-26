@@ -124,6 +124,47 @@ class DiagnosticDialogLayoutTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun narrowPortraitSavedReportStacksFullWidthActionsBelowItsMessage() {
+        val app = RuntimeEnvironment.getApplication()
+        try {
+            RuntimeEnvironment.setQualifiers("zh-rCN-w320dp-h640dp-port-xhdpi")
+            RuntimeEnvironment.setFontScale(1.3f)
+            DiPlayPreferences.saveAutoConnect(app, false)
+            UpdateAvailability.saveBackgroundChecksEnabled(app, false)
+            val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
+                Intent(app, DiPlayActivity::class.java).putExtra("page", "diagnostics")).setup().visible()
+            try {
+                val dialog = savedDialog(controller.get())
+                measure(dialog)
+                val decor = dialog.window!!.decorView as ViewGroup
+                val actions = listOf(AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE,
+                    AlertDialog.BUTTON_POSITIVE).map(dialog::getButton)
+                val row = actions.first().parent as GlassDialogActions
+                assertEquals(LinearLayout.VERTICAL, row.orientation)
+                val available = row.width - row.paddingLeft - row.paddingRight
+                assertTrue("Stacked actions should fill the available width", actions.all { it.width == available })
+                val message = decor.findViewById<TextView>(android.R.id.message)
+                val messageRect = Rect(0, 0, message.width, message.height).also {
+                    decor.offsetDescendantRectToMyCoords(message, it)
+                }
+                val actionRects = actions.map { button ->
+                    Rect(0, 0, button.width, button.height).also {
+                        decor.offsetDescendantRectToMyCoords(button, it)
+                    }
+                }
+                assertTrue("Actions should follow the report path", actionRects.all { it.top >= messageRect.bottom })
+                assertTrue("Actions remain inside the dialog", actionRects.all {
+                    it.left >= 0 && it.right <= decor.width && it.bottom <= decor.height
+                })
+                capture(decor, "narrow-portrait-stacked-actions")
+                dialog.dismiss()
+            } finally { controller.pause().stop().destroy() }
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+            RuntimeEnvironment.setQualifiers("en")
+        }
+    }
+
     @Test fun savedReportOverridesOemSideActionsInPortraitAndLandscape() {
         val app = RuntimeEnvironment.getApplication()
         try {
