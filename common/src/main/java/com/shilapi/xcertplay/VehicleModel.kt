@@ -1,22 +1,18 @@
 package com.shilapi.xcertplay
 
-import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.shilapi.xcertplay.host.R
 
-/** Decorative vehicle artwork; independent of pairing, OEM identity and hardware settings. */
+/** Decorative home background; independent of the Lincoln/Ford home-logo choice. */
 internal enum class VehicleModel(
     val key: String,
     @StringRes val label: Int,
-    @DrawableRes val scene: Int,
-    @DrawableRes val softScene: Int,
 ) {
-    CORSAIR("corsair", R.string.settings_vehicle_corsair, R.drawable.corsair_scene, R.drawable.corsair_scene_soft),
-    NAUTILUS("nautilus", R.string.settings_vehicle_nautilus, R.drawable.nautilus_scene, R.drawable.nautilus_scene_soft),
-    AVIATOR("aviator", R.string.settings_vehicle_aviator, R.drawable.aviator_scene, R.drawable.aviator_scene_soft),
-    CUSTOM("custom", R.string.settings_vehicle_custom, R.drawable.corsair_scene, R.drawable.corsair_scene_soft);
+    CORSAIR("corsair", R.string.settings_vehicle_corsair),
+    CUSTOM("custom", R.string.settings_vehicle_custom);
 
     companion object {
-        fun fromKey(key: String?): VehicleModel = entries.firstOrNull { it.key == key } ?: CORSAIR
+        /** Old Nautilus/Aviator preferences safely migrate to the single packaged default. */
+        fun fromKey(key: String?): VehicleModel = if (key == CUSTOM.key) CUSTOM else CORSAIR
     }
 }

@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="settings_vehicle_appearance">车辆外观</string>
-    <string name="settings_vehicle_model">车型背景</string>
-    <string name="settings_vehicle_corsair">冒险家</string>
-    <string name="settings_vehicle_nautilus">航海家</string>
-    <string name="settings_vehicle_aviator">飞行家</string>
-    <string name="settings_vehicle_custom">自定义</string>
+    <string name="settings_vehicle_model">自定义背景</string>
+    <string name="settings_vehicle_corsair">默认</string>
+    <string name="settings_vehicle_custom">已自定义</string>
     <string name="settings_wallpaper_choose">选择图片</string>
     <string name="settings_wallpaper_replace">更换图片</string>
+    <string name="settings_wallpaper_use_default">使用默认背景</string>
     <string name="settings_wallpaper_import_failed">无法使用这张图片，请选择其他图片。</string>
-    <string name="settings_home_brand">首页品牌</string>
+    <string name="settings_home_brand">车型选择</string>
     <string name="settings_home_brand_lincoln">林肯</string>
     <string name="settings_home_brand_ford">福特</string>
 </resources>

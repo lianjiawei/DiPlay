@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="settings_vehicle_appearance">Vehicle appearance</string>
-    <string name="settings_vehicle_model">Vehicle wallpaper</string>
-    <string name="settings_vehicle_corsair">Corsair</string>
-    <string name="settings_vehicle_nautilus">Nautilus</string>
-    <string name="settings_vehicle_aviator">Aviator</string>
-    <string name="settings_vehicle_custom">Custom</string>
+    <string name="settings_vehicle_model">Custom wallpaper</string>
+    <string name="settings_vehicle_corsair">Default</string>
+    <string name="settings_vehicle_custom">Custom image</string>
     <string name="settings_wallpaper_choose">Choose image</string>
     <string name="settings_wallpaper_replace">Change image</string>
+    <string name="settings_wallpaper_use_default">Use default background</string>
     <string name="settings_wallpaper_import_failed">Could not use this image. Please choose another image.</string>
-    <string name="settings_home_brand">Home brand</string>
+    <string name="settings_home_brand">Vehicle selection</string>
     <string name="settings_home_brand_lincoln">Lincoln</string>
     <string name="settings_home_brand_ford">Ford</string>
 </resources>

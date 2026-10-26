@@ -7123,34 +7123,17 @@ class DiPlayActivity : CarPlayHostActivity() {
         val title = brandString(R.string.settings_vehicle_model)
         val model = AirPlayPersistence.loadVehicleModel(this)
         val control = button("$title · ${brandString(model.label)}", false) {
-            var pending = AirPlayPersistence.loadVehicleModel(this)
-            val models = VehicleModel.entries
-            lateinit var dialog: AlertDialog
-            fun refreshActions() {
-                val custom = pending == VehicleModel.CUSTOM
-                val savedImage = CustomWallpaper.available(this)
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText(
-                    if (custom && !savedImage) R.string.settings_wallpaper_choose else R.string.save)
-                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).visibility =
-                    if (custom && savedImage) View.VISIBLE else View.GONE
-            }
-            dialog = appDialogBuilder().setTitle(title)
-                .setSingleChoiceItems(models.map { brandString(it.label) }.toTypedArray(), models.indexOf(pending)) { _, index ->
-                    pending = models[index]
-                    refreshActions()
+            val custom = AirPlayPersistence.loadVehicleModel(this) == VehicleModel.CUSTOM
+            appDialogBuilder().setTitle(title)
+                .setPositiveButton(
+                    if (custom) R.string.settings_wallpaper_replace else R.string.settings_wallpaper_choose,
+                ) { _, _ -> chooseWallpaperImage() }
+                .setNeutralButton(R.string.settings_wallpaper_use_default) { _, _ ->
+                    wallpaperImport.cancel()
+                    AirPlayPersistence.saveVehicleModel(this, VehicleModel.CORSAIR)
+                    render()
                 }
-                .setPositiveButton(R.string.save) { _, _ ->
-                    if (pending == VehicleModel.CUSTOM && !CustomWallpaper.available(this)) chooseWallpaperImage()
-                    else {
-                        wallpaperImport.cancel()
-                        AirPlayPersistence.saveVehicleModel(this, pending)
-                        render()
-                    }
-                }
-                .setNeutralButton(R.string.settings_wallpaper_replace) { _, _ -> chooseWallpaperImage() }
-                .setNegativeButton(R.string.cancel, null).create()
-            dialog.show()
-            refreshActions()
+                .setNegativeButton(R.string.cancel, null).show()
         }
         parent.addView(control, matchButton(0, FidelitySettingsMetrics.SETTING_ROW_DP))
     }

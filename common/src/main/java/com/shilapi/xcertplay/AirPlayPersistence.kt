@@ -710,9 +710,6 @@ object AirPlayPersistence {
             .putString(KEY_HOME_VEHICLE_BRAND, brand.key).apply()
     }
 
-    internal fun hasVehicleModelSelection(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(KEY_VEHICLE_MODEL)
-
     internal fun loadVehicleModel(context: Context): VehicleModel = VehicleModel.fromKey(
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_VEHICLE_MODEL, null),
     ).let { if (it == VehicleModel.CUSTOM && !CustomWallpaper.available(context)) VehicleModel.CORSAIR else it }

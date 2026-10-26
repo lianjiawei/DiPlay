@@ -64,31 +64,31 @@ class VehicleModelUiTest {
     }
 
     @Test @Config(sdk = [25, 27, 29])
-    fun defaultIsTheExistingCorsairAndThePickerAddsCustomAsTheFourthChoice() {
+    fun defaultIsCorsairAndRemovedOrUnknownModelsMigrateToIt() {
         assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
-        prefs.edit().putString("vehicle_scene_model", "unknown-future-model").commit()
-        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
+        for (legacy in listOf("nautilus", "aviator", "unknown-future-model")) {
+            prefs.edit().putString("vehicle_scene_model", legacy).commit()
+            assertEquals("$legacy must use the packaged default", VehicleModel.CORSAIR,
+                AirPlayPersistence.loadVehicleModel(app))
+        }
         val screen = open()
         assertFalse("A single model choice should not have a separate vehicle-appearance heading",
             descendants(screen.window.decorView).filterIsInstance<TextView>()
                 .any { it.isShown && it.text.toString() == screen.getString(R.string.settings_vehicle_appearance) })
-        val dialog = picker(screen)
-        assertEquals(4, dialog.listView.count)
-        assertEquals(listOf("冒险家", "航海家", "飞行家", "自定义"),
-            (0 until dialog.listView.count).map { dialog.listView.adapter.getItem(it).toString() })
-        assertEquals(0, dialog.listView.checkedItemPosition)
-        select(dialog, 1)
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
-        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals("车型选择 · 林肯", brandChoiceButton(screen).text.toString())
+        assertEquals("自定义背景 · 默认", wallpaperButton(screen).text.toString())
     }
 
     @Test @Config(sdk = [25, 27, 29])
-    fun selectingCustomWithoutAnImageOpensThePickerAndCancellationKeepsThePreset() {
+    fun defaultBackgroundMenuOffersImageSelectionAndAnExplicitDefaultChoice() {
         val screen = open()
         val dialog = picker(screen)
-        select(dialog, 3)
-        assertEquals(screen.getString(R.string.settings_wallpaper_choose), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
-        assertEquals(View.GONE, dialog.getButton(AlertDialog.BUTTON_NEUTRAL).visibility)
+        assertEquals(screen.getString(R.string.settings_wallpaper_choose),
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertEquals(screen.getString(R.string.settings_wallpaper_use_default),
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).text)
+        assertNull("Opening the setting must not launch the external picker",
+            shadowOf(screen).nextStartedActivityForResult)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
         val picker = shadowOf(screen).nextStartedActivityForResult
@@ -99,13 +99,18 @@ class VehicleModelUiTest {
         screen.activityResultRegistry.dispatchResult(picker.requestCode, android.app.Activity.RESULT_CANCELED, null)
         assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
         assertFalse(CustomWallpaper.available(app))
+
+        val reset = picker(screen)
+        reset.getButton(AlertDialog.BUTTON_NEUTRAL).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals("自定义背景 · 默认", wallpaperButton(screen).text.toString())
     }
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun savedCustomImageCanBeReselectedOrReplacedWithoutChangingTheRunningSession() {
+    fun savedCustomImageCanBeReplacedOrResetWithoutChangingTheRunningSession() {
         installCustomFixture()
         val id = AirPlayPersistence.loadCustomWallpaperId(app)
-        AirPlayPersistence.saveVehicleModel(app, VehicleModel.CORSAIR)
         val screen = open()
         val session = mock(CarPlayController::class.java)
         var stopped = false
@@ -113,67 +118,43 @@ class VehicleModelUiTest {
             CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { stopped = true }
         CarPlayBackgroundSession.active = true
         val dialog = picker(screen)
-        select(dialog, 3)
-        assertEquals(View.VISIBLE, dialog.getButton(AlertDialog.BUTTON_NEUTRAL).visibility)
-        assertEquals(screen.getString(R.string.save), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertEquals(screen.getString(R.string.settings_wallpaper_replace),
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertEquals(screen.getString(R.string.settings_wallpaper_use_default),
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).text)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
-        assertEquals(id, AirPlayPersistence.loadCustomWallpaperId(app))
-        assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
-        assertFalse(stopped)
-        assertFalse(PendingReconnect.isPending(session))
-        val replacement = picker(screen)
-        replacement.getButton(AlertDialog.BUTTON_NEUTRAL).performClick()
         shadowOf(Looper.getMainLooper()).idle()
         val launched = shadowOf(screen).nextStartedActivityForResult
         screen.activityResultRegistry.dispatchResult(launched.requestCode, android.app.Activity.RESULT_CANCELED, null)
         assertEquals(id, AirPlayPersistence.loadCustomWallpaperId(app))
         assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
-    }
-
-    @Test @Config(sdk = [25, 27, 29])
-    fun savingRemembersTheModelWithoutChangingPairingOrRestartingCarPlay() {
-        val screen = open()
-        prefs.edit().putString("pairing.keep", "paired-phone")
-            .putString("manual_hotspot_ssid", "existing-network").commit()
-        AirPlayPersistence.saveOemLabel(app, "Lincoln")
-        val session = mock(CarPlayController::class.java)
-        var stopped = false
-        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
-            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { stopped = true }
-        CarPlayBackgroundSession.active = true
-        val dialog = picker(screen)
-        select(dialog, 2)
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        val reset = picker(screen)
+        reset.getButton(AlertDialog.BUTTON_NEUTRAL).performClick()
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(VehicleModel.AVIATOR, AirPlayPersistence.loadVehicleModel(app))
-        assertEquals("paired-phone", prefs.getString("pairing.keep", null))
-        assertEquals("existing-network", prefs.getString("manual_hotspot_ssid", null))
-        assertEquals("Lincoln", AirPlayPersistence.loadOemLabel(app))
+        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals("自定义背景 · 默认", wallpaperButton(screen).text.toString())
+        assertEquals("Resetting the choice need not destructively delete the driver's image", id,
+            AirPlayPersistence.loadCustomWallpaperId(app))
         assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
         assertFalse(stopped)
         assertFalse(PendingReconnect.isPending(session))
-        assertNull(shadowOf(screen).nextStartedActivity)
-        val reopened = open()
-        assertEquals(2, picker(reopened).listView.checkedItemPosition)
     }
 
-    @Test fun modelChoiceTravelsWithSettingsBackup() {
-        AirPlayPersistence.saveVehicleModel(app, VehicleModel.NAUTILUS)
+    @Test fun removedModelInAnOldSettingsBackupFallsBackToCorsair() {
+        prefs.edit().putString("vehicle_scene_model", "nautilus").commit()
         val document = SettingsBackupCodec.export(app, "1.1.0")
         prefs.edit().clear().commit()
         assertFalse(SettingsBackupCodec.import(app, document).invalid)
-        assertEquals(VehicleModel.NAUTILUS, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
     }
 
     @Test @Config(sdk = [25, 29, 33])
-    fun backgroundEntrySurvivesBrandChangesOldCustomIdentityAndReopeningSettings() {
+    fun customBackgroundEntrySurvivesBrandChangesOldCustomIdentityAndReopeningSettings() {
         // An old custom name (or a cropped CarPlay icon) migrates the brand to CUSTOM.
         AirPlayPersistence.saveOemLabel(app, "My car")
         assertEquals(VehicleBrandPreset.CUSTOM, VehicleBranding.preset(app))
         val screen = open()
-        assertTrue(modelChoiceButton(screen).isShown)
+        assertTrue(wallpaperButton(screen).isShown)
         for (brand in VehicleBrandPreset.entries) {
             VehicleBranding.setPreset(app, brand)
             ReflectionHelpers.setField(screen, "page", "home")
@@ -181,38 +162,31 @@ class VehicleModelUiTest {
             ReflectionHelpers.setField(screen, "page", "settings")
             ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.VEHICLE)
             render(screen)
-            assertTrue("Background entry missing for $brand", modelChoiceButton(screen).isShown)
-            val dialog = picker(screen)
-            select(dialog, 1)
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-            shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(VehicleModel.NAUTILUS, AirPlayPersistence.loadVehicleModel(app))
-            assertTrue(modelChoiceButton(open()).isShown)
+            assertTrue("Background entry missing for $brand", wallpaperButton(screen).isShown)
+            assertTrue(wallpaperButton(open()).isShown)
         }
     }
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun chosenModelAndCustomImageAreIndependentOfCarPlayBrandOrIcon() {
+    fun defaultAndCustomImagesAreIndependentOfCarPlayBrandOrIcon() {
         fun photo(): Bitmap? = ReflectionHelpers.getField(SceneBackdrop(app, true, false), "photo")
-        // Preserve the neutral default for other brands until the driver chooses an image.
+        // Both supported home brands share the packaged default until the driver chooses an image.
         VehicleBranding.setPreset(app, VehicleBrandPreset.FORD)
-        assertNull(photo())
-        AirPlayPersistence.saveVehicleModel(app, VehicleModel.NAUTILUS)
-        val modelImage = requireNotNull(photo())
+        val defaultImage = requireNotNull(photo())
         for (brand in VehicleBrandPreset.entries) {
             VehicleBranding.setPreset(app, brand)
-            assertSame("The saved model must stay visible for $brand", modelImage, photo())
+            assertSame("The default image must stay visible for $brand", defaultImage, photo())
         }
         installCustomFixture()
         val customImage = requireNotNull(photo())
-        assertNotSame(modelImage, customImage)
+        assertNotSame(defaultImage, customImage)
         val customId = AirPlayPersistence.loadCustomWallpaperId(app)
         for (brand in VehicleBrandPreset.entries) {
             VehicleBranding.setPreset(app, brand)
             assertSame("The custom image must stay visible for $brand", customImage, photo())
             assertEquals(customId, AirPlayPersistence.loadCustomWallpaperId(app))
             assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
-            assertTrue(modelChoiceButton(open()).isShown)
+            assertTrue(wallpaperButton(open()).isShown)
         }
     }
 
@@ -266,16 +240,20 @@ class VehicleModelUiTest {
             ReflectionHelpers.setField(screen, "page", "settings")
             ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.VEHICLE)
             render(screen)
-            val row = modelChoiceButton(screen)
+            val row = wallpaperButton(screen)
             val rowImage = Bitmap.createBitmap(row.width, row.height, Bitmap.Config.ARGB_8888)
             try {
                 row.draw(Canvas(rowImage))
-                assertEquals("A one-row card must not draw an extra internal divider", 0,
+                assertEquals("The last appearance row must not draw an extra divider", 0,
                     Color.alpha(rowImage.getPixel(row.width / 2, row.height - 1)))
             } finally { rowImage.recycle() }
             writeScreenshot(root(screen), "$name-${model.key}-settings")
         }
-        assertEquals("Each choice must show its own image, including after a cached image", 4, homeImages.size)
+        assertEquals("Default and custom choices must show different images after caching", 2, homeImages.size)
+        AirPlayPersistence.saveVehicleModel(app, VehicleModel.CUSTOM)
+        ReflectionHelpers.setField(screen, "page", "settings")
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.VEHICLE)
+        render(screen)
         val dialog = picker(screen)
         val decor = dialog.window!!.decorView
         val metrics = screen.resources.displayMetrics
@@ -291,9 +269,18 @@ class VehicleModelUiTest {
 
     private fun installCustomFixture() {
         // Simulate a user selecting a local image; do not change any packaged artwork.
-        val source = File(app.cacheDir, "chosen-wallpaper")
-        app.resources.openRawResource(R.drawable.aviator_scene).use { input ->
-            source.outputStream().use { input.copyTo(it) }
+        val source = File(app.cacheDir, "chosen-wallpaper.png")
+        val bitmap = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888)
+        try {
+            Canvas(bitmap).apply {
+                drawColor(Color.rgb(96, 24, 120))
+                drawRect(320f, 0f, 640f, 360f, android.graphics.Paint().apply {
+                    color = Color.rgb(0, 160, 210)
+                })
+            }
+            source.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally {
+            bitmap.recycle()
         }
         CustomWallpaper.activate(app, CustomWallpaper.prepare(app, Uri.fromFile(source)))
         source.delete()
@@ -310,21 +297,24 @@ class VehicleModelUiTest {
     }
 
     private fun picker(screen: DiPlayActivity): AlertDialog {
-        modelChoiceButton(screen).performClick()
+        wallpaperButton(screen).performClick()
         // Let WindowManager attach the dialog before native scroll indicators are drawn.
         shadowOf(Looper.getMainLooper()).idle()
         return requireNotNull(ShadowAlertDialog.getLatestAlertDialog())
     }
 
-    private fun modelChoiceButton(screen: DiPlayActivity): TextView {
+    private fun wallpaperButton(screen: DiPlayActivity): TextView {
         val title = screen.getString(R.string.settings_vehicle_model)
         return descendants(screen.window.decorView).filterIsInstance<TextView>()
-            .single { it.text.toString().startsWith("$title · ") || it.contentDescription?.toString()?.startsWith(title) == true }
+            .single { it.isShown && it.javaClass.simpleName == "SettingButton" &&
+                it.text.toString().startsWith("$title · ") }
     }
 
-    private fun select(dialog: AlertDialog, index: Int) {
-        dialog.listView.performItemClick(dialog.listView.adapter.getView(index, null, dialog.listView), index,
-            dialog.listView.adapter.getItemId(index))
+    private fun brandChoiceButton(screen: DiPlayActivity): TextView {
+        val title = screen.getString(R.string.settings_home_brand)
+        return descendants(screen.window.decorView).filterIsInstance<TextView>()
+            .single { it.isShown && it.javaClass.simpleName == "SettingButton" &&
+                it.text.toString().startsWith("$title · ") }
     }
 
     private fun render(screen: DiPlayActivity) {

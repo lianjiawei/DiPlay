@@ -48,7 +48,7 @@ class CustomWallpaperTest {
         assertTrue(CustomWallpaper.file(app)!!.length() > 0)
         assertTrue(CustomWallpaper.file(app, quiet = true)!!.length() > 0)
         assertFalse(File(prepared.directory, "source").exists())
-        AirPlayPersistence.saveVehicleModel(app, VehicleModel.NAUTILUS)
+        AirPlayPersistence.saveVehicleModel(app, VehicleModel.CORSAIR)
         assertTrue(CustomWallpaper.available(app))
         AirPlayPersistence.saveVehicleModel(app, VehicleModel.CUSTOM)
         assertEquals(VehicleModel.CUSTOM, AirPlayPersistence.loadVehicleModel(app))
@@ -160,10 +160,10 @@ class CustomWallpaperTest {
         model.import(app, Uri.EMPTY)
         assertTrue(entered.await(5, TimeUnit.SECONDS))
         model.cancel()
-        AirPlayPersistence.saveVehicleModel(app, VehicleModel.AVIATOR)
+        AirPlayPersistence.saveVehicleModel(app, VehicleModel.CORSAIR)
         resume.countDown()
         await { !prepared.directory.exists() }
-        assertEquals(VehicleModel.AVIATOR, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals(VehicleModel.CORSAIR, AirPlayPersistence.loadVehicleModel(app))
         assertEquals(WallpaperImportModel.State.IDLE, model.state)
     }
 

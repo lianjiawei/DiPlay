@@ -10,6 +10,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.ColorDrawable
+import com.shilapi.xcertplay.host.R
 
 /** Decorative app chrome only; never placed on a media surface or an instrument output. */
 internal class SceneBackdrop(context: Context, private val night: Boolean, private val quiet: Boolean,
@@ -17,14 +18,13 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
     private val strongReadingVeil: Boolean = false) :
     ColorDrawable(DiPlayPalette.of(night).background) {
     init { FidelityMaterials.install(context) }
-    // CarPlay icon/brand customization must not discard the driver's chosen background.
-    private val photo = if (VehicleBranding.preset(context) == VehicleBrandPreset.LINCOLN ||
-        AirPlayPersistence.hasVehicleModelSelection(context)) {
-        val model = AirPlayPersistence.loadVehicleModel(context)
+    // The home-logo brand is independent. A custom image wins; otherwise every installation
+    // uses the one packaged Corsair scene, including migrated Nautilus/Aviator preferences.
+    private val photo = AirPlayPersistence.loadVehicleModel(context).let { model ->
         val custom = if (model == VehicleModel.CUSTOM) CustomWallpaper.file(context, quiet) else null
         custom?.let { cachedImage("custom:${it.path}") { BitmapFactory.decodeFile(it.path) } }
-            ?: image(context, if (quiet) model.softScene else model.scene)
-    } else null
+            ?: image(context, R.drawable.corsair_scene)
+    }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val destination = RectF()
 
@@ -55,8 +55,8 @@ internal class SceneBackdrop(context: Context, private val night: Boolean, priva
     }
 
     companion object {
-        // Do not retain six full-size photos on old head units. Eviction leaves bitmaps held
-        // by an existing drawable valid until that screen is released.
+        // Keep decoded artwork bounded on old head units. Eviction leaves bitmaps held by an
+        // existing drawable valid until that screen is released.
         private val images = object : android.util.LruCache<String, Bitmap>(16 * 1024 * 1024) {
             override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
         }
