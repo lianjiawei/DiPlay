@@ -70,9 +70,13 @@ class LauncherIntentTest {
         assertNull(ReflectionHelpers.getField<SettingsCategory?>(activity, "connectionSettingsReturnCategory"))
         assertNull("Projection is entered inside the existing Activity", shadowOf(activity).nextStartedActivity)
         assertEquals(0, stops)
+        ReflectionHelpers.setField(activity, "settingsCategory", SettingsCategory.DISPLAY)
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "onNewIntent",
-            ReflectionHelpers.ClassParameter(Intent::class.java, launcher().putExtra("page", "settings")))
+            ReflectionHelpers.ClassParameter(Intent::class.java, launcher().putExtra("page", "settings")
+                .putExtra(DiPlayActivity.EXTRA_RETURN_TO_CARPLAY, true)))
         assertEquals("settings", ReflectionHelpers.getField<String>(activity, "page"))
+        assertEquals(SettingsCategory.OVERVIEW,
+            ReflectionHelpers.getField<SettingsCategory>(activity, "settingsCategory"))
         assertNull(shadowOf(activity).nextStartedActivity)
     }
 

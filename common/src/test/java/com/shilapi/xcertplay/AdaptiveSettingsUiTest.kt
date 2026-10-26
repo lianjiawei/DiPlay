@@ -120,6 +120,8 @@ class AdaptiveSettingsUiTest {
 
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_overview) })
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_quick_settings) })
+        assertFalse("The BYD setup guide must not appear in the Lincoln/Ford settings overview",
+            texts(screen).any { it.text == screen.getString(R.string.setup_guide) })
     }
 
     @Test fun legacyLightPreferenceStillUsesDarkCanvasAndSystemBars() {

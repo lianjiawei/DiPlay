@@ -205,6 +205,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     override fun showDiPlayHome(page: String) {
         openProjectionWhenReady = false
         returnToCarPlay = projectionIsVisible && page == "settings"
+        if (returnToCarPlay) prepareSettingsOverview()
         this.page = if (page == "wireless-recovery") "home" else page
         render()
         if (page == "wireless-recovery") confirmWirelessReset()
@@ -576,6 +577,7 @@ class DiPlayActivity : CarPlayHostActivity() {
             return
         }
         val destination = intent.getStringExtra("page") ?: "home"
+        if (destination == "settings" && returnToCarPlay) prepareSettingsOverview()
         if (page != destination || destination != "home") {
             page = destination
             render()
@@ -591,6 +593,16 @@ class DiPlayActivity : CarPlayHostActivity() {
             handler.post { connect(true) }
         }
     }
+
+    /** Explicit Settings entry points always land predictably; recreation keeps its saved category. */
+    private fun prepareSettingsOverview() {
+        setSearchKeyboard(settingsSearchBox, false)
+        clearSettingsSearchState()
+        settingsSectionFilter = null
+        connectionSettingsReturnCategory = null
+        settingsCategory = SettingsCategory.OVERVIEW
+    }
+
     private fun consumeBluetoothAutoConnectIntent(intent: Intent): Boolean {
         val requested = intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_AUTO_CONNECT, false)
         intent.removeExtra(PhoneBluetoothReceiver.EXTRA_AUTO_CONNECT)
@@ -1361,7 +1373,6 @@ class DiPlayActivity : CarPlayHostActivity() {
         destinations.forEach { item ->
             content.addView(settingsSummaryCard(item.first,brandString(item.second)),LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(SETTINGS_BLOCK_GAP_DP) })
         }
-        content.addView(button(brandString(R.string.setup_guide),false) { openSetupGuide(fromSettings=true) },matchButton())
 
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.OVERVIEW))
     }
