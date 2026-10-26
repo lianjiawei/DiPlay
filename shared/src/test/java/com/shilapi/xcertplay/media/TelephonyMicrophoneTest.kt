@@ -174,6 +174,31 @@ class TelephonyMicrophoneTest {
         assertTrue(ShadowAudioEffect.getAudioEffects().isEmpty())
     }
 
+    @Test fun voiceLifecycleIsDiagnosticOnlyAndDeduplicatesStoppedInputs() {
+        sink.close()
+        val diagnostics = CopyOnWriteArrayList<String>()
+        sink = AndroidMediaSink(context = context, onAudioDiagnostic = diagnostics::add)
+        sink.onMicrophoneStarted(speechRecognition, config("speechrecognition"))
+        awaitCapture()
+        sink.onMicrophoneStopped(speechRecognition)
+        sink.onMicrophoneStopped(speechRecognition)
+        assertEquals(listOf(
+            "Audio: voice input active=true audioType=speechrecognition type=100",
+            "Audio: voice input active=false audioType=speechrecognition type=100",
+        ), diagnostics.filter { it.startsWith("Audio: voice input ") })
+        assertEquals(AudioManager.MODE_NORMAL, manager.mode)
+    }
+
+    @Test fun failedVoiceStartLeavesAnInactiveDiagnosticState() {
+        sink.close()
+        val diagnostics = CopyOnWriteArrayList<String>()
+        sink = AndroidMediaSink(context = context, onAudioDiagnostic = diagnostics::add)
+        sink.onMicrophoneStarted(speechRecognition, config("speechrecognition").copy(sampleRate = 1))
+        assertEquals(2, diagnostics.count { it.startsWith("Audio: voice input ") })
+        assertTrue(diagnostics.any { it.startsWith("Audio: voice input active=false") })
+        assertEquals(AudioManager.MODE_NORMAL, manager.mode)
+    }
+
     @Test fun microphoneMetadataAndFinalCountersReachTheAudioDiagnosticCallback() {
         sink.close()
         val diagnostics = CopyOnWriteArrayList<String>()

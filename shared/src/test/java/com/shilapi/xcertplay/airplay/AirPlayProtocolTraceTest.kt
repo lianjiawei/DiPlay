@@ -76,6 +76,48 @@ class AirPlayProtocolTraceTest {
         } finally { session.close() }
     }
 
+    @Test fun gestureDiagnosticsRecordStartsWithoutMovementCoordinatesOrUiGuesses() {
+        val messages = mutableListOf<String>()
+        val output = ByteArrayOutputStream()
+        val session = session(object : AirPlaySessionListener {
+            override val protocolTraceEnabled = false
+            override fun onDebugLog(message: String) { messages += message }
+        })
+        try {
+            eventChannel(session, output)
+            session.sendTouch(listOf(AirPlayContact(0, .2, .3, true)))
+            repeat(20) { session.sendTouch(listOf(AirPlayContact(0, .5, .6, true))) }
+            session.sendTouch(emptyList())
+            session.sendTouch(listOf(AirPlayContact(0, .1, .1, true)))
+            assertEquals(listOf("airplay input touch-start written=true", "airplay input touch-start written=true"),
+                messages.filter { it.startsWith("airplay input ") })
+            assertFalse(messages.any { it.contains("TRACE ") })
+        } finally { session.close() }
+    }
+
+    @Test fun mediaDiagnosticsDoNotChangePressReleasePayloads() {
+        val messages = mutableListOf<String>()
+        val output = ByteArrayOutputStream()
+        val session = session(object : AirPlaySessionListener {
+            override val protocolTraceEnabled = false
+            override fun onDebugLog(message: String) { messages += message }
+        })
+        try {
+            eventChannel(session, output)
+            session.sendMedia(CarPlayMediaButton.PLAY)
+            val plain = ControlCipher(ByteArray(32), ByteArray(32)).decrypt(output.toByteArray()).data
+            val requests = RtspMessage.parseMessages(plain).messages
+            assertEquals(2, requests.size)
+            val reports = requests.map { BplistCodec.decode(it.body) as Map<*, *> }
+            assertTrue(reports.all { it["type"] == "hidSendReport" &&
+                it["uuid"] == AirPlayHid.MEDIA_HID_UID.toString(16) })
+            assertArrayEquals(byteArrayOf(1), reports[0]["hidReport"] as ByteArray)
+            assertArrayEquals(byteArrayOf(0), reports[1]["hidReport"] as ByteArray)
+            assertTrue(messages.any { it.contains("cseq=1 index=1 awaitingResponse=true") })
+            assertTrue(messages.any { it.contains("cseq=2 index=0 awaitingResponse=true") })
+        } finally { session.close() }
+    }
+
     private fun touchWire(trace: Boolean): Pair<ByteArray, List<String>> {
         val output = ByteArrayOutputStream()
         val traces = mutableListOf<String>()

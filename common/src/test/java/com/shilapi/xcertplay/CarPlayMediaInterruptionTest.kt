@@ -138,6 +138,30 @@ class CarPlayMediaInterruptionTest {
         verify(controller, times(1)).sendMediaButton(CarPlayMediaButton.PLAY)
     }
 
+    @Test fun recordingAndNowPlayingSourceChangesAreObservedWithoutSendingAutomaticPlay() {
+        fun metadata(source: String, playing: Boolean) {
+            `when`(controller.nowPlayingSnapshot()).thenReturn(
+                CarPlayNowPlaying(title = "Item", sourceApp = source, playing = playing),
+            )
+            CarPlayMediaKeys.attach(app, controller)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        metadata("QQ音乐", true)
+        CarPlayMediaKeys.onMediaAudioChanged(false)
+        shadowOf(Looper.getMainLooper()).idle()
+        metadata("微信", true)
+        shadowOf(Looper.getMainLooper()).idleFor(6, TimeUnit.SECONDS)
+        metadata("微信", false)
+        shadowOf(Looper.getMainLooper()).idleFor(8, TimeUnit.SECONDS)
+        metadata("QQ音乐", false)
+        shadowOf(Looper.getMainLooper()).idleFor(95, TimeUnit.SECONDS)
+        // All former speech-recovery delays and expiry windows have passed.
+        verify(controller, never()).sendMediaButton(anyInt())
+        org.junit.Assert.assertTrue(WheelKeyLog.report(false).any {
+            it.contains("source=微信 mediaActive=false")
+        })
+    }
+
     @Test fun gainWhilePauseIsBeingAcceptedStillRestoresTheMusic() {
         doAnswer {
             listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)

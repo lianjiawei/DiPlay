@@ -33,6 +33,7 @@ class AudioFocusAutoYieldTest {
     }
     @After fun cleanup() {
         coordinators.forEach { coordinator -> tracks.forEach(coordinator::release) }
+        coordinators.forEach(AudioFocusCoordinator::close)
         tracks.forEach(AudioTrack::release)
         VolumeTrackingAudioTrack.volumes.clear()
     }
@@ -213,6 +214,131 @@ class AudioFocusAutoYieldTest {
         oldListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
         assertEquals(listOf(0f), volumes(first))
         assertTrue(volumes(second).isEmpty())
+    }
+
+    @Test fun lateNavigationFocusLossIsIgnoredAfterTrackClosesButNotAfterSessionCloses() {
+        val coordinator = coordinator()
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        val navigation = NavigationPlayback.open(coordinator.playbackOwner)
+        NavigationPlayback.played(navigation, 14, bufferedMillis = 10_000)
+        NavigationPlayback.close(navigation, retainFocusTail = true)
+        var now = 1_000_000_000L
+        coordinator.nanoTime = { now }
+        coordinator.onExternalFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        now += 200_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(1f, coordinator.musicPcmGain, 0.0001f)
+        assertTrue(volumes(media).isEmpty())
+        coordinator.close()
+
+        val replacement = coordinator(enabled = false)
+        replacement.nanoTime = { now }
+        replacement.onExternalFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        now += 200_000_000L
+        replacement.tickNavigationDucking()
+        assertEquals(0.125f, replacement.musicPcmGain, 0.0001f)
+    }
+
+    @Test fun missingGainRestoresBothPcmAndDuckedTrackAndRecordsTheDecision() {
+        val diagnostics = mutableListOf<String>()
+        val coordinator = AudioFocusCoordinator(context, true, true, diagnostics::add).also(coordinators::add)
+        var now = 1_000_000_000L
+        coordinator.nanoTime = { now }
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        now += 200_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(0.125f, coordinator.musicPcmGain, 0.0001f)
+        now += 25_000_000_000L
+        coordinator.tickNavigationDucking()
+        now += 2_600_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(1f, coordinator.musicPcmGain, 0.0001f)
+        assertEquals(listOf(0.2f, 1f), volumes(media))
+        assertTrue(diagnostics.any { it.contains("source=sink change=-3 ignored=false") && it.contains("navEnabled=false") })
+        assertTrue(diagnostics.any { it.contains("media track gain requested=1.0 applied=true") })
+    }
+
+    @Test fun knownCarAssistantOverridesNavigationTailAndKeepsTimeoutProtection() {
+        val coordinator = coordinator()
+        var now = 1_000_000_000L
+        coordinator.nanoTime = { now }
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        val nav = NavigationPlayback.open(coordinator.playbackOwner)
+        NavigationPlayback.played(nav, 14, 10_000)
+        NavigationPlayback.close(nav, retainFocusTail = true)
+        coordinator.setAssistantSpeaking(true)
+        coordinator.onExternalFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        now += 26_000_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(0f, coordinator.musicPcmGain, 0.0001f)
+        assertEquals(listOf(0.2f), volumes(media))
+        coordinator.setAssistantSpeaking(false)
+        coordinator.onExternalFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        now += 800_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(1f, coordinator.musicPcmGain, 0.0001f)
+        assertEquals(listOf(0.2f, 1f), volumes(media))
+    }
+
+    @Test fun exclusiveMuteIsNotLiftedByTheDuckingWatchdog() {
+        val coordinator = coordinator()
+        var now = 1_000_000_000L
+        coordinator.nanoTime = { now }
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+        now += 26_000_000_000L
+        coordinator.tickNavigationDucking()
+        now += 3_000_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(listOf(0f), volumes(media))
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        assertEquals(listOf(0f, 1f), volumes(media))
+    }
+
+    @Test fun failingDiagnosticCallbackDoesNotBreakDuckingOrRecovery() {
+        val coordinator = AudioFocusCoordinator(context, true, true) { error("report unavailable") }
+            .also(coordinators::add)
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        assertEquals(listOf(0.2f, 1f), volumes(media))
+    }
+
+    @Test fun aSilentCallKeepsTheTimeoutFromRestoringDuckedMedia() {
+        val coordinator = coordinator()
+        val media = track()
+        coordinator.acquire(media, AudioChannel.MEDIA, attributes)
+        coordinator.acquire(track(), AudioChannel.PHONE, attributes)
+        var now = 1_000_000_000L
+        coordinator.nanoTime = { now }
+        coordinator.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        now += 200_000_000L
+        coordinator.tickNavigationDucking()
+        now += 30_000_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(0.125f, coordinator.musicPcmGain, 0.0001f)
+        assertEquals(listOf(0.2f), volumes(media))
+    }
+
+    @Test fun idleAssistantTrackWithoutPlaybackDoesNotTurnGuidanceIntoAnInterruption() {
+        val coordinator = coordinator()
+        coordinator.acquire(track(), AudioChannel.ASSISTANT, attributes)
+        val nav = NavigationPlayback.open(coordinator.playbackOwner)
+        NavigationPlayback.played(nav, 14, 10_000)
+        NavigationPlayback.close(nav, retainFocusTail = true)
+        var now = 1_000_000_000L
+        coordinator.nanoTime = { now }
+        coordinator.onExternalFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        now += 200_000_000L
+        coordinator.tickNavigationDucking()
+        assertEquals(1f, coordinator.musicPcmGain, 0.0001f)
     }
 
     @Test fun droppedQueuedFocusCallbackReportsWhyWithoutChangingNewMedia() {

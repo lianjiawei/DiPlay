@@ -102,7 +102,7 @@ internal object CarPlayMediaKeys {
     private var appContext: Context? = null
     private var mediaAudioActive = false
     /** Injectable only so focus-policy tests do not need to open a real AudioTrack. */
-    internal var navigationPlaybackSnapshot: () -> NavigationPlaybackSnapshot = NavigationPlayback::snapshot
+    internal var navigationPlaybackSnapshot: () -> NavigationPlaybackSnapshot = NavigationPlayback::focusSnapshot
     private var nowPlaying = CarPlayNowPlaying()
     private var elapsedUpdatedAt = 0L
     private var artwork: Bitmap? = null
@@ -164,6 +164,7 @@ internal object CarPlayMediaKeys {
                 if (controller !== expected) return@synchronized
                 // Resolve retained state at delivery: a queued callback cannot roll a replay back.
                 val update = expected.nowPlayingSnapshot()
+                val previous = nowPlaying
                 val previousArtwork = artwork
                 if (albumTrackChanged(nowPlaying, update)) {
                     val previousId = nowPlaying.artworkTransferId
@@ -182,6 +183,10 @@ internal object CarPlayMediaKeys {
                 if (nowPlaying.elapsedMillis != update.elapsedMillis) elapsedUpdatedAt = SystemClock.elapsedRealtime()
                 val metadataChanged = metadataChanged(nowPlaying, update) || artwork !== previousArtwork
                 nowPlaying = update
+                if (previous.playing != update.playing || previous.sourceApp != update.sourceApp) {
+                    WheelKeyLog.note("CarPlay playback playing=${update.playing} " +
+                        "source=${diagnosticSource(update.sourceApp)} mediaActive=$mediaAudioActive")
+                }
                 if (metadataChanged) ClusterMusicState.publish(update, update.artworkTransferId?.let { artworkCache[it] })
                 updateInitialAlbumRecovery(expected)
                 // The iPhone repeats NowPlayingUpdate about twice a second for the position alone.
@@ -308,9 +313,17 @@ internal object CarPlayMediaKeys {
         val context = appContext ?: return
         if (controller == null) return
         mediaAudioActive = active
+        WheelKeyLog.note("CarPlay media stream active=$active playing=${nowPlaying.playing} " +
+            "source=${diagnosticSource(nowPlaying.sourceApp)}")
         if (active && session == null) start(context) else if (active) regainFocusLocked()
         publishPlaybackStateLocked()
     }
+
+    private fun diagnosticSource(source: String?): String = source
+        ?.filter { it in ' '..'~' || it.code > 0x9f }
+        ?.take(64)
+        ?.ifBlank { null }
+        ?: "unknown"
 
     private fun start(context: Context) {
         val expectedController = controller ?: return
@@ -381,9 +394,21 @@ internal object CarPlayMediaKeys {
         if (!current) return
         Log.i(TAG, "audio focus change=$change")
         WheelKeyLog.note("media keys audio focus change=$change")
+        // Take the routing decision before diagnostic system-volume reads. A slow vendor
+        // getter must not let the short navigation tail expire between logging and handling.
+        val navigation = navigationPlaybackSnapshot()
+        val priorityVoice = change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK &&
+            CarPlayBackgroundSession.snapshot()?.takeIf { it.controller === expectedController }
+                ?.sink?.hasPriorityVoicePlayback() == true
+        runCatching {
+            val audio = appContext?.getSystemService(AudioManager::class.java)
+            WheelKeyLog.note("media keys focus observation change=$change monoMs=${System.nanoTime() / 1_000_000L} " +
+                "navFocus=${navigation.active} priorityVoice=${navigation.priorityVoiceActive || priorityVoice} " +
+                "musicIndex=${audio?.getStreamVolume(AudioManager.STREAM_MUSIC)} " +
+                "automaticDuckingAllowed=${android.os.Build.VERSION.SDK_INT >= 26}")
+        }
         if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
-            val navigation = navigationPlaybackSnapshot()
-            if (navigation.active && !navigation.priorityVoiceActive) {
+            if (navigation.active && !navigation.priorityVoiceActive && !priorityVoice) {
                 // Some automotive policies briefly take focus while DiPlay's own guidance track
                 // moves onto or off the navigation bus. It is not an external assistant turn:
                 // pausing the iPhone and forwarding an interruption here defeats the separate
@@ -444,6 +469,7 @@ internal object CarPlayMediaKeys {
                     if (musicVolumeBeforeTransientLoss != null) musicVolumeDuringInterruption = now
                 }
                 Log.i(TAG, "car assistant rewrote media volume to $now")
+                WheelKeyLog.note("media volume interruption sample before=$current during=$now")
             }
             captureInterruptionVolume?.let(mainHandler::removeCallbacks)
             captureInterruptionVolume = capture

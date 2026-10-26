@@ -96,11 +96,13 @@ class AirPlaySession(
     private var eventSocket: Socket? = null
     private var eventCipher: ControlCipher? = null
     private var eventCseq = 0
+    private val mediaCommandDiagnostics = MediaCommandDiagnostics(log = ::debugLog)
     private var pendingNightMode: Boolean? = null
     private val firstTouchSendLogged = AtomicBoolean(false)
     private val touchSendFailureLogged = AtomicBoolean(false)
     // Only the controller's single touch thread calls sendTouch.
     private val touchSlots = AirPlayTouchSlots(AirPlayHid.TOUCH_CONTACTS)
+    private var touchGestureDown = false
     private val ntp = NtpClock()
     private var keepAliveSocket: DatagramSocket? = null
     private var keepAliveThread: Thread? = null
@@ -322,6 +324,12 @@ class AirPlaySession(
             "Content-Length: ${body.size}\r\n" +
             "CSeq: $eventCseq\r\n\r\n"
         trace { "airplay event tx headers=$head bodyHex=${body.toHex()}" }
+        val mediaIndex = if (command["type"] == "hidSendReport" &&
+            command["uuid"] == AirPlayHid.MEDIA_HID_UID.toString(16)) {
+            (command["hidReport"] as? ByteArray)?.firstOrNull()?.toInt()?.and(0xff)
+        } else null
+        // Register before writing: the event reader may receive an immediate reply.
+        if (mediaIndex != null) mediaCommandDiagnostics.sent(eventCseq, mediaIndex)
         return try {
             val bytes = cipher.encrypt(head.toByteArray(Charsets.US_ASCII) + body)
             val output = socket.getOutputStream()
@@ -329,6 +337,7 @@ class AirPlaySession(
             output.flush()
             true
         } catch (error: Exception) {
+            if (mediaIndex != null) mediaCommandDiagnostics.writeFailed(eventCseq)
             Log.w(TAG, "airplay event command failed type=${command["type"]}", error)
             close()
             false
@@ -343,6 +352,12 @@ class AirPlaySession(
         val report = AirPlayHid.touchReport(scaled)
         val sendStartNs = System.nanoTime()
         val sent = sendHidReport(AirPlayHid.TOUCH_HID_UID, report)
+        val down = scaled.any { it.down }
+        if (down && !touchGestureDown) {
+            // One marker per gesture, without coordinates or an inferred button/app identity.
+            debugLog("airplay input touch-start written=$sent")
+        }
+        touchGestureDown = down
         if (sent) com.shilapi.xcertplay.media.TouchLatencyProbe.onTouchSent(sendStartNs, System.nanoTime() - sendStartNs)
         if (sent && firstTouchSendLogged.compareAndSet(false, true)) {
             val first = scaled.firstOrNull()
@@ -366,8 +381,10 @@ class AirPlaySession(
         sendHidReport(AirPlayHid.KNOB_HID_UID, AirPlayHid.knobReport(AirPlayKnobState(select = down)))
 
     fun sendMedia(index: Int) {
-        sendHidReport(AirPlayHid.MEDIA_HID_UID, AirPlayHid.mediaReport(index))
-        sendHidReport(AirPlayHid.MEDIA_HID_UID, AirPlayHid.mediaReport(0))
+        val pressed = sendHidReport(AirPlayHid.MEDIA_HID_UID, AirPlayHid.mediaReport(index))
+        // Always attempt release, including after a failed press. Do not leave a key held down.
+        val released = sendHidReport(AirPlayHid.MEDIA_HID_UID, AirPlayHid.mediaReport(0))
+        debugLog("airplay media HID index=$index pressWritten=$pressed releaseWritten=$released")
     }
 
     fun sendTelephony(index: Int) {
@@ -744,6 +761,7 @@ class AirPlaySession(
         val type = string(body["type"])
         val params = asMap(body["params"]) ?: emptyMap()
         debugLog("airplay command type=$type keys=${params.keys.sorted()}")
+        if (type == "modesChanged") debugLog(audioModeDiagnostic(params))
         val streamId = request.headers["x-apple-streamid"]?.toLongOrNull()
         val data = params["data"] as? ByteArray
         if (streamId != null && data != null) {
@@ -907,7 +925,10 @@ class AirPlaySession(
                 val parsed = RtspMessage.parseMessages(plaintext)
                 plaintext = parsed.rest
                 for (message in parsed.messages) {
-                    if (message.method.startsWith("RTSP/") || message.method.startsWith("HTTP/")) continue
+                    if (message.method.startsWith("RTSP/") || message.method.startsWith("HTTP/")) {
+                        mediaCommandDiagnostics.response(message)
+                        continue
+                    }
                     debugLog(
                         "airplay event rx ${message.method} ${message.path} cseq=${message.headers["cseq"] ?: "-"} body=${message.body.size}",
                     )
@@ -927,6 +948,7 @@ class AirPlaySession(
             if (!closed.get()) Log.e(TAG, "airplay event read failed", error)
         } finally {
             debugLog("airplay event connection closed")
+            mediaCommandDiagnostics.clear()
             videoPlaybackAvailability.setEventReady(false)
             if (eventSocket === socket) eventSocket = null
             eventCipher = null

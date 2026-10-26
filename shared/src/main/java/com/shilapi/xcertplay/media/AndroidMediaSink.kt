@@ -57,6 +57,7 @@ internal class AudioFocusCoordinator(
     )
 
     private val manager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    internal val playbackOwner = NavigationPlaybackTracker.Owner()
     private val active = LinkedHashMap<AudioTrack, Entry>()
     private var request: AudioFocusRequestCompat? = null
     private var requestedChannel: AudioChannel? = null
@@ -119,7 +120,18 @@ internal class AudioFocusCoordinator(
 
     @Synchronized
     fun duckingDiagnostic(): String = "navEnabled=$navigationDuckingEnabled navGain=$navigationDuckGain " +
-        "interruptionGain=$interruptionGain assistantSpeaking=$assistantSpeaking"
+        "interruptionGain=$interruptionGain assistantSpeaking=$assistantSpeaking mediaTrackGain=$mediaVolume"
+
+    @Synchronized
+    fun hasPriorityVoicePlayback(): Boolean = assistantSpeaking || NavigationPlayback.snapshot().priorityVoiceActive
+
+    /** Read-only, low-frequency samples; a vendor API failure must never interrupt playback. */
+    internal fun systemVolumeDiagnostic(): String {
+        val volume = runCatching { manager?.getStreamVolume(AudioManager.STREAM_MUSIC) }.getOrNull()
+        val muted = runCatching { manager?.isStreamMute(AudioManager.STREAM_MUSIC) }.getOrNull()
+        val mode = runCatching { manager?.mode }.getOrNull()
+        return "musicIndex=${volume ?: "unknown"} streamMuted=${muted ?: "unknown"} mode=${mode ?: "unknown"}"
+    }
 
     private fun listenerFor(generation: Long) = AudioManager.OnAudioFocusChangeListener { change ->
         synchronized(this) {
@@ -136,7 +148,7 @@ internal class AudioFocusCoordinator(
                 return@synchronized
             }
             runCatching { report("Audio: focus change=$change activeTracks=${active.size}") }
-            if (isSelfNavigationFocusLoss(change)) {
+            if (isSelfNavigationFocusLoss(change, "sink")) {
                 runCatching { report("Audio: focus change=$change ignored during CarPlay navigation") }
                 return@synchronized
             }
@@ -187,7 +199,7 @@ internal class AudioFocusCoordinator(
         // exactly why the assistant's route switch went unnoticed.
         synchronized(this) {
             if (closed) return
-            if (isSelfNavigationFocusLoss(change)) {
+            if (isSelfNavigationFocusLoss(change, "media-keys")) {
                 runCatching { report("Audio: external focus change=$change ignored during CarPlay navigation") }
                 return
             }
@@ -205,13 +217,18 @@ internal class AudioFocusCoordinator(
         }
     }
 
-    private fun isSelfNavigationFocusLoss(change: Int): Boolean {
+    private fun isSelfNavigationFocusLoss(change: Int, source: String): Boolean {
         // Automotive navigation policies conventionally surface the MAY_DUCK form. A full
         // transient loss is reserved for calls and other exclusive interruptions and must retain
         // the existing protection even when a guidance tail happens to be active at the same time.
-        if (change != AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) return false
-        val navigation = NavigationPlayback.snapshot()
-        return navigation.active && !navigation.priorityVoiceActive
+        val navigation = NavigationPlayback.focusSnapshot()
+        val ignored = change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK &&
+            navigation.active && !hasPriorityVoicePlayback()
+        runCatching { report("Audio: focus observation source=$source change=$change ignored=$ignored " +
+            "monoMs=${System.nanoTime() / 1_000_000L} navFocus=${navigation.active} " +
+            "navPlaying=${NavigationPlayback.snapshot().active} priorityVoice=${navigation.priorityVoiceActive} " +
+            "ownFocus=$enabled autoYield=$muteMediaOnTransientLoss " + duckingDiagnostic() + " " + systemVolumeDiagnostic()) }
+        return ignored
     }
 
     /**
@@ -253,6 +270,12 @@ internal class AudioFocusCoordinator(
     /** Advances the assistant fade independently of packet arrival. */
     private fun tickInterruptionDucking(nowNs: Long) {
         if (interruptionSafetyNs != 0L && nowNs >= interruptionSafetyNs) {
+            // Do not let the missing-callback watchdog lift protection over confirmed speech.
+            if (hasPriorityVoicePlayback() || active.values.any { it.channel == AudioChannel.PHONE || it.speech }) {
+                interruptionSafetyNs = nowNs + INTERRUPTION_SAFETY_NS
+                runCatching { report("Audio: voice route timeout deferred; priority voice still active") }
+                return
+            }
             // A head unit that never sends GAIN must not leave music permanently quiet.
             interruptionSafetyNs = 0L
             if (interruptionTarget != FULL_VOLUME) {
@@ -260,6 +283,10 @@ internal class AudioFocusCoordinator(
                 interruptionRampStartNs = nowNs
                 interruptionRampMs = INTERRUPTION_TIMEOUT_UP_MS
                 interruptionTarget = FULL_VOLUME
+                // CAN_DUCK changed both PCM gain and the track level when we owned focus.
+                // Restoring PCM alone left that track at 20% forever. A full transient mute
+                // remains owned by GAIN (e.g. a real call whose downlink is currently silent).
+                if (mediaVolume == DUCKED_VOLUME) setMediaVolume(FULL_VOLUME)
                 runCatching { report("Audio: voice route restore timed out; music restored") }
             }
         }
@@ -276,6 +303,7 @@ internal class AudioFocusCoordinator(
     fun close() {
         if (closed) return
         closed = true
+        NavigationPlayback.closeOwner(playbackOwner)
         active.clear()
         if (enabled) refreshRequest()
     }
@@ -288,6 +316,7 @@ internal class AudioFocusCoordinator(
     fun setNavigationDuckingEnabled(enabled: Boolean) {
         if (navigationDuckingEnabled == enabled) return
         navigationDuckingEnabled = enabled
+        runCatching { report("Audio: navigation ducking setting enabled=$enabled") }
         if (!enabled) {
             lastNavigationAudioNs = 0L
             navigationDuckGain = FULL_VOLUME
@@ -414,6 +443,7 @@ internal class AudioFocusCoordinator(
         if (entry.appliedVolume == volume) return
         val applied = runCatching { track.setStereoVolume(volume, volume) == AudioTrack.SUCCESS }.getOrDefault(false)
         if (applied) entry.appliedVolume = volume
+        runCatching { report("Audio: media track gain requested=$volume applied=$applied") }
     }
 
     private fun AudioChannel.focusPriority(): Int = when (this) {
@@ -547,6 +577,8 @@ class AndroidMediaSink(
         audioFocusCoordinator.onExternalFocusChange(change)
     }
 
+    fun hasPriorityVoicePlayback(): Boolean = audioFocusCoordinator.hasPriorityVoicePlayback()
+
     /**
      * Rebuild the media tracks so audio policy re-resolves their route. Called after the car's
      * assistant releases the output, and when focus returns if its playback callback was missed.
@@ -574,6 +606,8 @@ class AndroidMediaSink(
     internal var detachTimeoutNanos = 2_000_000_000L
     internal var detachGraceNanos = 500_000_000L
     private val mediaAudioTypes = mutableSetOf<AudioStreamId>()
+    private val activeVoiceInputs = LinkedHashSet<AudioStreamId>()
+    private val voiceLifecycleClosed = AtomicBoolean(false)
     private val audioRenderers = ConcurrentHashMap<AudioStreamId, AudioRenderer>()
     @Volatile private var navigationAttenuationDb = NavigationAudioGain.clamp(navigationAttenuationDb)
     private val navigationDuckingEnabled = AtomicBoolean(navigationDuckingEnabled)
@@ -899,6 +933,7 @@ class AndroidMediaSink(
 
     override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) {
         // This callback runs on the downlink thread; microphone failures must not stop playback.
+        updateVoiceInput(id, true)
         try {
             val speakerphoneCall = config.audioType == "telephony" &&
                 appContext != null && BydBluetoothSuspend.isSuspendedByUs(appContext)
@@ -912,6 +947,7 @@ class AndroidMediaSink(
             if (!uplink.start()) {
                 microphoneUplinks.remove(id, uplink)
                 restoreAudioMode(id)
+                updateVoiceInput(id, false)
             }
         } catch (error: Exception) {
             Log.e("xcertplay-usb", "microphone start failed stream=$id", error)
@@ -925,6 +961,18 @@ class AndroidMediaSink(
             microphoneUplinks.remove(id)?.close()
         } finally {
             restoreAudioMode(id)
+            updateVoiceInput(id, false)
+        }
+    }
+
+    private fun updateVoiceInput(id: AudioStreamId, active: Boolean) {
+        if (active && voiceLifecycleClosed.get()) return
+        val changed = synchronized(activeVoiceInputs) {
+            if (active) activeVoiceInputs.add(id) else activeVoiceInputs.remove(id)
+        }
+        if (!changed) return
+        runCatching {
+            onAudioDiagnostic("Audio: voice input active=$active audioType=${id.audioType} type=${id.type}")
         }
     }
 
@@ -997,6 +1045,7 @@ class AndroidMediaSink(
     }
 
     fun close() {
+        voiceLifecycleClosed.set(true)
         AmbientMusicController.closeSink(ambientSinkToken)
         synchronized(videoOwnershipLock) {
             videoClosed = true
@@ -1029,6 +1078,15 @@ class AndroidMediaSink(
         } finally {
             microphoneUplinks.clear()
             restoreAudioMode(null)
+            val activeInputs = synchronized(activeVoiceInputs) {
+                activeVoiceInputs.toList().also { activeVoiceInputs.clear() }
+            }
+            activeInputs.forEach { id ->
+                runCatching {
+                    onAudioDiagnostic("Audio: voice input active=false audioType=${id.audioType} " +
+                        "type=${id.type} reason=sink-close")
+                }
+            }
         }
     }
 
@@ -2128,7 +2186,8 @@ private class AudioRenderer(
 
     private var trackAttributes: AudioAttributes? = null
     private var mappedChannel: AudioChannel? = null
-    private val navigationPlaybackToken = NavigationPlayback.open()
+    private val navigationPlaybackToken = NavigationPlayback.open(audioFocusCoordinator.playbackOwner)
+    private val diagnosticId = nextDiagnosticId.incrementAndGet()
     private var actualLegacyStreamType: Int? = null
     private val queue = LinkedBlockingQueue<AudioPacket>(MAX_QUEUED_PACKETS)
     @Volatile private var running = true
@@ -2250,7 +2309,8 @@ private class AudioRenderer(
     override fun close() {
         AmbientMusicController.closeRenderer(ambientRendererToken)
         running = false
-        NavigationPlayback.close(navigationPlaybackToken)
+        NavigationPlayback.close(navigationPlaybackToken, retainFocusTail = true)
+        reportPlaybackEvent("close-request")
         thread.interrupt()
     }
 
@@ -2970,9 +3030,19 @@ private class AudioRenderer(
     private fun startPlayback(track: AudioTrack) {
         diagnosticStage = "track-play"
         underrunsAtPlaybackStart = track.underrunCount
-        track.play()
+        // A vendor focus callback can run on the main thread before play() returns.
+        // Publish guidance first; a failed play must withdraw that claim without a tail.
+        reportNavigationPlayback(track)
+        reportPlaybackEvent("play-request")
+        try {
+            track.play()
+        } catch (error: Throwable) {
+            NavigationPlayback.close(navigationPlaybackToken)
+            throw error
+        }
         playbackStarted = true
         reportNavigationPlayback(track)
+        reportPlaybackEvent("play-started")
         if (rebufferCount > 0 && rebufferRecoverReportCount < MAX_REBUFFER_REPORTS) {
             rebufferRecoverReportCount++
             report("Audio: rebuffer recovered audioType=${format.audioType} rebufferCount=$rebufferCount")
@@ -2988,6 +3058,17 @@ private class AudioRenderer(
             val pendingFrames = bufferProgress.queuedBytes(track.playbackHeadPosition) / frameBytes
             val bufferedMillis = (pendingFrames * 1000L + format.sampleRate - 1L) / format.sampleRate
             NavigationPlayback.played(navigationPlaybackToken, actualLegacyStreamType, bufferedMillis, priorityVoice)
+        }
+    }
+
+    private fun reportPlaybackEvent(event: String) {
+        runCatching {
+            val playback = NavigationPlayback.snapshot()
+            val focus = NavigationPlayback.focusSnapshot()
+            val channel = if (mappedChannel == AudioChannel.PHONE) "CALL" else mappedChannel?.name
+            report("Audio: playback event=$event renderer=$diagnosticId audioType=${format.audioType} " +
+                "channel=$channel monoMs=${System.nanoTime() / 1_000_000L} " +
+                "navPlaying=${playback.active} navFocus=${focus.active} priorityVoice=${focus.priorityVoiceActive}")
         }
     }
 
@@ -3129,7 +3210,8 @@ private class AudioRenderer(
 
     @Synchronized
     private fun release() {
-        NavigationPlayback.close(navigationPlaybackToken)
+        NavigationPlayback.close(navigationPlaybackToken, retainFocusTail = true)
+        reportPlaybackEvent("release")
         AmbientMusicController.closeRenderer(ambientRendererToken)
         abandonAudioFocus()
         val codec = codec
@@ -3171,6 +3253,7 @@ private class AudioRenderer(
 
     private companion object {
         const val TAG = "xcertplay-usb"
+        val nextDiagnosticId = AtomicLong()
         const val AAC_OBJECT_TYPE_LC = 2
         const val MIN_OPUS_PACKET_BYTES = 4
         const val OPUS_CODEC_DELAY_NANOS = 6_500_000L

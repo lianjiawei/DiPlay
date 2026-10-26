@@ -1,6 +1,8 @@
 package com.shilapi.xcertplay.media
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NavigationPlaybackTest {
@@ -69,5 +71,67 @@ class NavigationPlaybackTest {
         tracker.played(voice, null, 100, priorityVoice = true)
         tracker.close(voice)
         assertEquals(NavigationPlaybackSnapshot(true, 14, false), tracker.snapshot())
+    }
+
+    @Test fun closedGuidanceKeepsOnlyABoundedFocusTailNotVolumeKeyRouting() {
+        val token = tracker.open()
+        tracker.played(token, 14, 10_000)
+        tracker.close(token, retainFocusTail = true)
+        assertFalse(tracker.snapshot().active)
+        assertTrue(tracker.snapshot(includeFocusTail = true).active)
+        now = 899
+        tracker.close(token, retainFocusTail = true)
+        tracker.played(token, 14, 10_000)
+        assertTrue(tracker.snapshot(includeFocusTail = true).active)
+        now = 900
+        assertFalse(tracker.snapshot(includeFocusTail = true).active)
+    }
+
+    @Test fun expiredOrNeverPlayedGuidanceDoesNotCreateAFocusTail() {
+        val quiet = tracker.open()
+        tracker.played(quiet, 14, 0)
+        now = 900
+        tracker.close(quiet, retainFocusTail = true)
+        tracker.close(tracker.open(), retainFocusTail = true)
+        assertFalse(tracker.snapshot(includeFocusTail = true).active)
+    }
+
+    @Test fun focusTailCannotOutliveExistingQuietTail() {
+        val token = tracker.open()
+        tracker.played(token, 14, 0)
+        now = 850
+        tracker.close(token, retainFocusTail = true)
+        now = 900
+        assertFalse(tracker.snapshot(includeFocusTail = true).active)
+    }
+
+    @Test fun ownerTeardownDropsLiveAndClosedGuidanceAndRejectsLateWorkers() {
+        val owner = NavigationPlaybackTracker.Owner()
+        val closed = tracker.open(owner)
+        val playing = tracker.open(owner)
+        val late = tracker.open(owner)
+        tracker.played(closed, 14, 10_000)
+        tracker.played(playing, 14, 10_000)
+        tracker.close(closed, retainFocusTail = true)
+        tracker.closeOwner(owner)
+        tracker.played(late, 14, 10_000)
+        tracker.played(tracker.open(owner), 14, 10_000)
+        tracker.close(playing, retainFocusTail = true)
+        assertFalse(tracker.snapshot(includeFocusTail = true).active)
+        val next = tracker.open(NavigationPlaybackTracker.Owner())
+        tracker.played(next, 14, 0)
+        tracker.closeOwner(owner)
+        assertTrue(tracker.snapshot().active)
+    }
+
+    @Test fun priorityVoiceRemainsVisibleDuringClosedGuidanceTail() {
+        val nav = tracker.open()
+        val voice = tracker.open()
+        tracker.played(nav, 14, 10_000)
+        tracker.close(nav, retainFocusTail = true)
+        tracker.played(voice, null, 0, priorityVoice = true)
+        assertTrue(tracker.snapshot(includeFocusTail = true).priorityVoiceActive)
+        tracker.close(voice, retainFocusTail = true)
+        assertFalse(tracker.snapshot(includeFocusTail = true).priorityVoiceActive)
     }
 }

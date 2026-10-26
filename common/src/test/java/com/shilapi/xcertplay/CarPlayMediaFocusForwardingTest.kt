@@ -43,7 +43,7 @@ class CarPlayMediaFocusForwardingTest {
         controllers.forEach(CarPlayMediaKeys::detach)
         sinks.forEach(AndroidMediaSink::close)
         CarPlayBackgroundSession.clear()
-        CarPlayMediaKeys.navigationPlaybackSnapshot = NavigationPlayback::snapshot
+        CarPlayMediaKeys.navigationPlaybackSnapshot = NavigationPlayback::focusSnapshot
         AirPlayPersistence.saveDisableMediaKeyAudioFocus(app, false)
         shadowOf(Looper.getMainLooper()).idle()
     }
@@ -102,6 +102,46 @@ class CarPlayMediaFocusForwardingTest {
         listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
 
         verify(sink).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
+    }
+
+    @Test fun confirmedCarAssistantOverridesNavigationFocusTail() {
+        val controller = mock(CarPlayController::class.java).also(controllers::add)
+        val sink = spy(AndroidMediaSink()).also(sinks::add)
+        val listener = start(controller, sink)
+        CarPlayMediaKeys.navigationPlaybackSnapshot = { NavigationPlaybackSnapshot(true, 14) }
+        doReturn(true).`when`(sink).hasPriorityVoicePlayback()
+
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+
+        verify(sink).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+    }
+
+    @Test fun diagnosticSamplingCannotExpireTheNavigationDecisionForTheSameCallback() {
+        val controller = mock(CarPlayController::class.java).also(controllers::add)
+        val sink = spy(AndroidMediaSink()).also(sinks::add)
+        val listener = start(controller, sink)
+        var observations = 0
+        CarPlayMediaKeys.navigationPlaybackSnapshot = { NavigationPlaybackSnapshot(++observations == 1, 14) }
+
+        listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+
+        verify(sink, never()).onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+    }
+
+    @Test fun focusObservationsSurviveDiagnosticReportRedaction() {
+        val lines = mutableListOf<String>()
+        val sink = AndroidMediaSink(context = app, onAudioDiagnostic = lines::add).also(sinks::add)
+        sink.onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        sink.onMediaAudioFocusChanged(AudioManager.AUDIOFOCUS_GAIN)
+
+        val observations = lines.filter { it.startsWith("Audio: focus observation") }
+        assertEquals(2, observations.size)
+        observations.forEach { line ->
+            assertEquals(line, DiagnosticRedactor.redact(line))
+            assertTrue(line.contains("navEnabled=false"))
+            assertTrue(line.contains("mediaTrackGain="))
+            assertTrue(line.contains("musicIndex="))
+        }
     }
 
     @Test fun oldControllerAndOldRequestCallbacksCannotAffectReplacementSink() {
