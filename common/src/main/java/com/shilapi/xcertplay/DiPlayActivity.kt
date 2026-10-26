@@ -5943,14 +5943,34 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun reconnectBar(): View = row().apply {
+        val wide = resources.configuration.screenWidthDp >= SETTINGS_RECONNECT_HORIZONTAL_MIN_WIDTH_DP
+        orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
         gravity = Gravity.CENTER_VERTICAL
         background = rounded(RAIL_SELECTED, RAIL_SELECTED_BORDER)
-        setPadding(dp(20), dp(10), dp(12), dp(10))
-        addView(label(brandString(R.string.settings_reconnect_pending), 16, TEXT), LinearLayout.LayoutParams(0, -2, 1f))
-        addView(button(brandString(R.string.settings_reconnect_now), true) {
+        setPadding(dp(SETTINGS_RECONNECT_SIDE_PADDING_DP), dp(SETTINGS_RECONNECT_VERTICAL_PADDING_DP),
+            dp(SETTINGS_RECONNECT_END_PADDING_DP), dp(SETTINGS_RECONNECT_VERTICAL_PADDING_DP))
+        val message = label(brandString(R.string.settings_reconnect_pending), UiTypography.BODY_SP, TEXT).apply {
+            maxLines = SETTINGS_RECONNECT_MESSAGE_MAX_LINES
+            setLineSpacing(dp(1).toFloat(), 1f)
+        }
+        addView(message, LinearLayout.LayoutParams(if (wide) 0 else -1, -2, if (wide) 1f else 0f))
+        val action = button(brandString(R.string.settings_reconnect_now), true) {
             // No clear(): if connect() stops early (hotspot off, a permission prompt), the change is still pending.
             reconnectIfRunning()
-        }, LinearLayout.LayoutParams(-2, dp(52)).apply { marginStart = dp(12) })
+        }.apply {
+            textSize = UiTypography.BODY_SP.toFloat()
+            minHeight = dp(SETTINGS_RECONNECT_ACTION_HEIGHT_DP)
+            setPadding(dp(SETTINGS_RECONNECT_ACTION_SIDE_PADDING_DP), 0,
+                dp(SETTINGS_RECONNECT_ACTION_SIDE_PADDING_DP), 0)
+            setSingleLine(true)
+        }
+        addView(action, LinearLayout.LayoutParams(-2, dp(SETTINGS_RECONNECT_ACTION_HEIGHT_DP)).apply {
+            if (wide) marginStart = dp(SETTINGS_RECONNECT_CONTENT_GAP_DP)
+            else {
+                topMargin = dp(SETTINGS_RECONNECT_STACK_GAP_DP)
+                gravity = Gravity.END
+            }
+        })
         reconnectBar = this
         refreshReconnectBar()
     }
@@ -7823,6 +7843,15 @@ class DiPlayActivity : CarPlayHostActivity() {
         private const val SETTINGS_SEARCH_BUTTON_TAG = "settings_search_button"
         private const val SETTINGS_HEADER_COMPACT_GAP_DP = 8
         private const val SETTINGS_HEADER_GAP_DP = 12
+        private const val SETTINGS_RECONNECT_HORIZONTAL_MIN_WIDTH_DP = 550
+        private const val SETTINGS_RECONNECT_SIDE_PADDING_DP = 16
+        private const val SETTINGS_RECONNECT_END_PADDING_DP = 8
+        private const val SETTINGS_RECONNECT_VERTICAL_PADDING_DP = 6
+        private const val SETTINGS_RECONNECT_CONTENT_GAP_DP = 12
+        private const val SETTINGS_RECONNECT_STACK_GAP_DP = 6
+        private const val SETTINGS_RECONNECT_ACTION_HEIGHT_DP = 48
+        private const val SETTINGS_RECONNECT_ACTION_SIDE_PADDING_DP = 16
+        private const val SETTINGS_RECONNECT_MESSAGE_MAX_LINES = 2
         private const val SETTINGS_SEARCH_RESULTS_GAP_DP = 6
         private const val SETTINGS_SEARCH_RESULTS_SHORT_HEIGHT_DP = 200
         private const val SETTINGS_SEARCH_RESULTS_HEIGHT_DP = 380

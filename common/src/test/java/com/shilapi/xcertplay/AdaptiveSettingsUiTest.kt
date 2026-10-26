@@ -798,6 +798,51 @@ class AdaptiveSettingsUiTest {
         }
     }
 
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun reconnectBannerScreenshotCompactChineseLargeFont() =
+        captureReconnectBanner("compact-zh", AppLocale.SIMPLIFIED_CHINESE, 100)
+
+    @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun reconnectBannerScreenshotExpandedEnglishLargeFont() =
+        captureReconnectBanner("expanded-en", AppLocale.ENGLISH, 64)
+
+    private fun captureReconnectBanner(name: String, language: String, maximumHeightDp: Int) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val screen = openSettings(language)
+        val session = mock(CarPlayController::class.java)
+        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) {}
+        CarPlayBackgroundSession.active = true
+        try {
+            PendingReconnect.mark(session)
+            ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.DISPLAY)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            layoutRoot(screen)
+            val bar = ReflectionHelpers.getField<LinearLayout>(screen, "reconnectBar")
+            val action = descendants(bar).filterIsInstance<Button>().single()
+            val message = descendants(bar).filterIsInstance<TextView>().single { it !is Button }
+            assertEquals(screen.getString(R.string.settings_reconnect_pending), message.text.toString())
+            assertEquals(screen.getString(R.string.settings_reconnect_now), action.text.toString())
+            assertEquals(1, action.layout.lineCount)
+            assertTrue("Reconnect banner is too tall: ${bar.height}",
+                bar.height <= maximumHeightDp * screen.resources.displayMetrics.density)
+            val bitmap = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
+            try {
+                bar.draw(Canvas(bitmap))
+                val output = Paths.get("build/reports/reconnect-banner-ui/$name.png")
+                Files.createDirectories(output.parent)
+                Files.newOutputStream(output).use { stream ->
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+                }
+            } finally { bitmap.recycle() }
+        } finally {
+            CarPlayBackgroundSession.clear()
+            PendingReconnect.clear()
+        }
+    }
+
     @Test fun usbChargingIsSavedForTheNextWiredConnectionWithoutDroppingTheSession() {
         AirPlayPersistence.saveWirelessEnabled(context, false)
         val screen = openSettings()
