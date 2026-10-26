@@ -146,10 +146,6 @@ class UpdateCheckUiTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun expandedEnglishLargeFontScreenshot() = capture("expanded-en")
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun compactArabicLargeFontScreenshot() = capture("compact-ar-rtl")
-
     private fun capture(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)
         val screen = screen(online = false)

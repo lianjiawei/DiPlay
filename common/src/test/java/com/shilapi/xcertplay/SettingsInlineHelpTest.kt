@@ -53,7 +53,6 @@ class SettingsInlineHelpTest {
     @Before fun prepare() {
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         DiPlayPreferences.saveAutoConnect(app, false)
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)
         AirPlayPersistence.saveAppAppearance(app, AppAppearance.DARK)
@@ -72,9 +71,6 @@ class SettingsInlineHelpTest {
 
     @Test @Config(sdk = [25, 27, 29])
     fun formerHelpAreaOpensTheSettingAndCancelDoesNotClick() = verifyFormerChoiceArea()
-
-    @Test @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
-    fun rtlFormerHelpAreaOpensTheSetting() = verifyFormerChoiceArea()
 
     private fun verifyFormerChoiceArea() {
         val screen = open()
@@ -127,10 +123,6 @@ class SettingsInlineHelpTest {
     @Config(qualifiers = "zh-rCN-w1280dp-h720dp-land-mdpi")
     fun fullLargeTextAllCategories() = capture("full-large", 1.3f)
 
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
-    fun arabicLargeTextAllCategories() = capture("rtl-large", 1.3f)
-
     @Test fun longValuesUseTheSpaceFreedByRemovedHelpTargets() {
         val screen = open()
         render(screen, SettingsCategory.VEHICLE)
@@ -147,9 +139,6 @@ class SettingsInlineHelpTest {
     @Test @Config(sdk = [25, 27, 29])
     fun formerSwitchHelpAreaTogglesAndSavesTheSetting() = verifyFormerSwitchArea()
 
-    @Test @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
-    fun rtlFormerSwitchHelpAreaTogglesAndSaves() = verifyFormerSwitchArea()
-
     private fun verifyFormerSwitchArea() {
         val screen = open()
         render(screen, SettingsCategory.VEHICLE)
@@ -164,7 +153,7 @@ class SettingsInlineHelpTest {
         val initial = toggle.isChecked
         assertFalse(descendants(row).any { it is ImageButton })
         val halfTarget = GlassChrome.MIN_TARGET_DP * row.resources.displayMetrics.density / 2f
-        val x = if (row.layoutDirection == View.LAYOUT_DIRECTION_RTL) toggle.right + halfTarget else toggle.left - halfTarget
+        val x = toggle.left - halfTarget
         tap(row, x, row.height / 2f)
         assertEquals(!initial, toggle.isChecked)
         assertEquals(!initial, AirPlayPersistence.loadRightHandDrive(screen))
@@ -368,7 +357,7 @@ class SettingsInlineHelpTest {
 
     private fun formerHelpX(row: View): Float {
         val inset = (FidelitySettingsMetrics.ROW_END_DP + GlassChrome.MIN_TARGET_DP / 2f) * row.resources.displayMetrics.density
-        return if (row.layoutDirection == View.LAYOUT_DIRECTION_RTL) inset else row.width - inset
+        return row.width - inset
     }
 
     private fun open(): DiPlayActivity {

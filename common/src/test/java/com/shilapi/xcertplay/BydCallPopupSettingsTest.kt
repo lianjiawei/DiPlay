@@ -9,10 +9,12 @@ import android.graphics.Canvas
 import com.shilapi.xcertplay.host.R
 import java.io.File
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
@@ -20,6 +22,10 @@ import org.robolectric.util.ReflectionHelpers
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [32], qualifiers = "en", manifest = Config.NONE)
 class BydCallPopupSettingsTest {
+    @Before fun setUp() {
+        AppLocale.save(RuntimeEnvironment.getApplication(), AppLocale.ENGLISH)
+    }
+
     @Test fun popupOptInDefaultsOffAndChangesOnlyItsPreferenceWithoutReconnect() {
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)
@@ -45,14 +51,8 @@ class BydCallPopupSettingsTest {
     @Config(qualifiers = "en-w320dp-h800dp-xhdpi")
     fun compactLargeFontPopupRowRendersWithoutClipping() = renderPopupRow("compact", 320)
 
-    @Test
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "ar-ldrtl-w600dp-h800dp-xhdpi")
-    fun fullWidthArabicLargeFontPopupRowRendersWithoutClipping() = renderPopupRow("full-ar", 600)
-
     private fun renderPopupRow(name: String, widthDp: Int) {
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
-        activity.applicationInfo.flags = activity.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)
         val configuration = android.content.res.Configuration(activity.resources.configuration).apply { fontScale = 1.6f }
         @Suppress("DEPRECATION")

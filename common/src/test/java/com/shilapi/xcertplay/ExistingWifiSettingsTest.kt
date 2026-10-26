@@ -33,6 +33,7 @@ class ExistingWifiSettingsTest {
     private lateinit var activity: DiPlayActivity
 
     @Before fun setup() {
+        AppLocale.save(app, AppLocale.ENGLISH)
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
         AirPlayPersistence.saveWirelessHotspotMode(app, WirelessHotspotMode.EXISTING_WIFI)
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()

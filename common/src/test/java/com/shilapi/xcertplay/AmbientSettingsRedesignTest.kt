@@ -31,6 +31,7 @@ class AmbientSettingsRedesignTest {
     private lateinit var activity: DiPlayActivity
 
     @Before fun setUp() {
+        AppLocale.save(RuntimeEnvironment.getApplication(), AppLocale.ENGLISH)
         RuntimeEnvironment.getApplication().getSharedPreferences("ambient_music", 0).edit().clear().commit()
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)

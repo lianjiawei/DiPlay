@@ -43,7 +43,6 @@ class HomeVehicleBrandUiTest {
     private val screens = mutableListOf<ActivityController<DiPlayActivity>>()
 
     @Before fun prepare() {
-        app.applicationInfo.flags = app.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL
         prefs.edit().clear().commit()
         app.getSharedPreferences("diplay", 0).edit().clear().commit()
         DiPlayPreferences.saveAutoConnect(app, false)
@@ -80,7 +79,7 @@ class HomeVehicleBrandUiTest {
 
     @Test @Config(sdk = [25, 29, 33])
     fun changingHomeBrandUpdatesTheHeaderWithoutChangingWallpaperPairingOrLiveCarPlay() {
-        AirPlayPersistence.saveVehicleModel(app, VehicleModel.NAUTILUS)
+        prefs.edit().putString("vehicle_scene_model", "nautilus").commit()
         AirPlayPersistence.saveOemLabel(app, "My car")
         VehicleBranding.setPreset(app, VehicleBrandPreset.CUSTOM)
         prefs.edit().putString("pairing.keep", "paired-phone").commit()
@@ -98,7 +97,8 @@ class HomeVehicleBrandUiTest {
         assertEquals(VehicleBrandPreset.CUSTOM, VehicleBranding.preset(app))
         assertEquals("My car", AirPlayPersistence.loadOemLabel(app))
         assertEquals("paired-phone", prefs.getString("pairing.keep", null))
-        assertEquals(VehicleModel.NAUTILUS, AirPlayPersistence.loadVehicleModel(app))
+        assertEquals("Removed built-in choices migrate to the Corsair default", VehicleModel.CORSAIR,
+            AirPlayPersistence.loadVehicleModel(app))
         assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
         assertEquals(0, stops)
         assertFalse(PendingReconnect.isPending(session))
@@ -150,10 +150,6 @@ class HomeVehicleBrandUiTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-xhdpi")
     fun compactHighDensityBrandsWithLargeText() = capture("compact")
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "ar-ldrtl-w960dp-h540dp-land-mdpi")
-    fun rtlBrandsWithLargeText() = capture("rtl")
-
     private fun capture(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)
         val screen = open()
@@ -205,7 +201,8 @@ class HomeVehicleBrandUiTest {
     }
     private fun picker(screen: DiPlayActivity): AlertDialog {
         descendants(root(screen)).filterIsInstance<TextView>().single {
-            it.text.startsWith(screen.getString(R.string.settings_home_brand) + " · ")
+            it.isShown && it.javaClass.simpleName == "SettingButton" &&
+                it.text.startsWith(screen.getString(R.string.settings_home_brand) + " · ")
         }.performClick()
         shadowOf(Looper.getMainLooper()).idle()
         return requireNotNull(ShadowAlertDialog.getLatestAlertDialog())

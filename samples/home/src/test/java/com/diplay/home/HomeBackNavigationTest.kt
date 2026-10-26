@@ -20,12 +20,6 @@ class HomeBackNavigationTest {
         verifyBackNavigation()
     }
 
-    @Test @Config(qualifiers = "zh-rTW")
-    fun traditionalChineseHomeKeepsEditingAndBackNavigationWorking() {
-        assertEquals("編輯", RuntimeEnvironment.getApplication().getString(R.string.home_edit))
-        verifyBackNavigation()
-    }
-
     private fun verifyBackNavigation() {
         val controller = Robolectric.buildActivity(HomeActivity::class.java).setup().visible()
         val activity = controller.get()

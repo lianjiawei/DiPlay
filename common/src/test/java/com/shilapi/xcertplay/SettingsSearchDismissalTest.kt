@@ -134,13 +134,8 @@ class SettingsSearchDismissalTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun fullLargeFontSearchRestoresItsHeader() = captureDismissal("full-large")
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w640dp-h480dp-land-xhdpi")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun rtlLargeFontSearchRestoresItsHeader() = captureDismissal("rtl-large")
-
     private fun captureDismissal(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         val box = openSearch()
         screenshot(name, "expanded")
         box.dispatchKeyEventPreIme(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK))

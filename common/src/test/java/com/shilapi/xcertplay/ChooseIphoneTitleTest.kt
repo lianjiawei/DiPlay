@@ -91,11 +91,10 @@ class ChooseIphoneTitleTest {
         }
     }
 
-    // The placeholder was English in every language: Traditional Chinese read "選擇 iPhone · Your iPhone".
-    @Config(qualifiers = "zh-rTW-w1000dp-h700dp-land")
-    @Test fun inTraditionalChineseTheButtonIsAllChinese() {
+    @Config(qualifiers = "zh-rCN-w1000dp-h700dp-land")
+    @Test fun inSimplifiedChineseTheButtonIsAllChinese() {
         for ((name, screen) in pages()) {
-            assertEquals(name, listOf("選擇 iPhone"), chooseButtons(screen))
+            assertEquals(name, listOf("选择 iPhone"), chooseButtons(screen))
         }
     }
 }

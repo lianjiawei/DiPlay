@@ -36,14 +36,12 @@ class DiagnosticDialogLayoutTest {
 
     @Test fun savedReportFitsContentInBothOrientationsLargeTextAndRtl() {
         val app = RuntimeEnvironment.getApplication()
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         try {
             for ((name, qualifiers) in listOf(
                 "compact" to "zh-rCN-w800dp-h480dp-land-mdpi",
                 "short-large" to "zh-rCN-w600dp-h360dp-land-mdpi",
                 "full-large" to "zh-rCN-w1280dp-h720dp-land-mdpi",
-                "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi",
-                "rtl-large" to "ar-ldrtl-w640dp-h360dp-land-mdpi")) {
+                "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi")) {
                 RuntimeEnvironment.setQualifiers(qualifiers)
                 RuntimeEnvironment.setFontScale(if (name == "compact") 1f else 1.3f)
                 DiPlayPreferences.saveAutoConnect(app, false)

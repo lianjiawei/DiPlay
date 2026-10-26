@@ -39,8 +39,7 @@ class ExistingWifiScreenshotsTest {
         try {
             for ((name, qualifiers, width, height) in listOf(
                 Scenario("compact", "zh-rCN-w600dp-h360dp-land-mdpi", 600, 360),
-                Scenario("full", "zh-rCN-w1280dp-h720dp-land-mdpi", 1280, 720),
-                Scenario("arabic", "ar-ldrtl-w640dp-h360dp-land-mdpi", 640, 360))) {
+                Scenario("full", "zh-rCN-w1280dp-h720dp-land-mdpi", 1280, 720))) {
                 RuntimeEnvironment.setQualifiers(qualifiers)
                 RuntimeEnvironment.setFontScale(1.3f)
                 shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -84,13 +83,11 @@ class ExistingWifiScreenshotsTest {
 
     @Test @Config(sdk = [29]) fun credentialFormKeepsSaveReachableAcrossOrientationsAndLargeText() {
         val app = RuntimeEnvironment.getApplication()
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         try {
             for ((name, qualifiers, width, height) in listOf(
                 Scenario("compact", "zh-rCN-w600dp-h360dp-land-mdpi", 600, 360),
                 Scenario("portrait", "zh-rCN-w400dp-h840dp-port-mdpi", 400, 840),
-                Scenario("full", "zh-rCN-w1280dp-h720dp-land-mdpi", 1280, 720),
-                Scenario("arabic", "ar-ldrtl-w640dp-h360dp-land-mdpi", 640, 360))) {
+                Scenario("full", "zh-rCN-w1280dp-h720dp-land-mdpi", 1280, 720))) {
                 RuntimeEnvironment.setQualifiers(qualifiers)
                 RuntimeEnvironment.setFontScale(1.3f)
                 DiPlayPreferences.saveAutoConnect(app, false)

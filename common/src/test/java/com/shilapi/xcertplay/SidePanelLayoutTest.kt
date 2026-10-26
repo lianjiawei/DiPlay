@@ -33,7 +33,6 @@ class SidePanelLayoutTest {
 
     @Before fun setup() {
         activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
-        activity.applicationInfo.flags = activity.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         activity.applicationInfo.targetSdkVersion = 29
         root = FrameLayout(activity)
         panel = LinearLayout(activity).also { root.addView(it) }
@@ -51,9 +50,9 @@ class SidePanelLayoutTest {
         sink.close()
     }
 
-    @Test fun letterboxedPanelKeepsItsPhysicalPassengerSideInEitherLayoutDirection() {
-        for (rtl in listOf(false, true)) for (rightHandDrive in listOf(false, true)) {
-            root.layoutDirection = if (rtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+    @Test fun letterboxedPanelKeepsItsPhysicalPassengerSide() {
+        for (rightHandDrive in listOf(false, true)) {
+            root.layoutDirection = View.LAYOUT_DIRECTION_LTR
             val areas = CarPlayViewAreas.build(2560, 1440, CarPlayDock.AUTOMATIC, null,
                 sidePanel = true, rightHandDrive = rightHandDrive)!!
             areas.use(areas.sidePanel()!!)
@@ -62,8 +61,8 @@ class SidePanelLayoutTest {
             place(1200, 1200)
             root.measure(exact(1200), exact(1200))
             root.layout(0, 0, 1200, 1200)
-            assertEquals(if (rtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR, root.layoutDirection)
-            assertEquals("rtl=$rtl rightHandDrive=$rightHandDrive", if (rightHandDrive) 0 else 800, panel.left)
+            assertEquals(View.LAYOUT_DIRECTION_LTR, root.layoutDirection)
+            assertEquals("rightHandDrive=$rightHandDrive", if (rightHandDrive) 0 else 800, panel.left)
             assertEquals(263, panel.top)
             assertEquals(400, panel.width)
             assertEquals(675, panel.height)

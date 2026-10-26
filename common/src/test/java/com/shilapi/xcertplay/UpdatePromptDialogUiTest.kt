@@ -93,10 +93,6 @@ class UpdatePromptDialogUiTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun expandedEnglishLargeFontScreenshots() = capture("expanded-en")
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun compactArabicRtlLargeFontScreenshots() = capture("compact-ar-rtl")
-
     private fun open(stage: UpdatePromptStage, percent: Int?): UpdatePromptDialog {
         val app = RuntimeEnvironment.getApplication()
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)

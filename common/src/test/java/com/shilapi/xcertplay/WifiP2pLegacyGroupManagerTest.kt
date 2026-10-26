@@ -328,7 +328,7 @@ class WifiP2pLegacyGroupManagerTest {
             shadowOf(this).setIsGroupOwner(true)
             shadowOf(this).setNetworkName(name)
             shadowOf(this).setPassphrase("legacy-passphrase")
-            shadowOf(this).setInterface(if (missingInterface) "" else "p2p0")
+            shadowOf(this).setInterface(if (missingInterface) "" else testNetworkInterfaceName())
         }
     }
 }

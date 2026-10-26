@@ -62,29 +62,32 @@ class AdaptiveSettingsUiTest {
     private var activity: DiPlayActivity? = null
 
     @Test
-    @Config(sdk = [29], qualifiers = "ja-w320dp-h600dp")
-    fun japaneseSettingsDoNotEllipsizeVisibleTextOnNarrowScreens() {
-        verifySettingsDoNotEllipsizeVisibleText("アプリの言語")
+    @Config(sdk = [29], qualifiers = "en-w320dp-h600dp")
+    fun englishSettingsDoNotEllipsizeVisibleTextOnNarrowScreens() {
+        verifySettingsDoNotEllipsizeVisibleText("App language")
     }
 
     @Test
-    @Config(sdk = [29], qualifiers = "zh-rTW-w320dp-h600dp-xhdpi")
-    fun traditionalChineseSettingsFitNarrowScreensWithLargeFonts() {
+    @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp-xhdpi")
+    fun simplifiedChineseSettingsFitNarrowScreensWithLargeFonts() {
         RuntimeEnvironment.setFontScale(1.3f)
         AirPlayPersistence.saveAudioFocusEnabled(context, true)
-        verifySettingsDoNotEllipsizeVisibleText("應用程式語言")
+        verifySettingsDoNotEllipsizeVisibleText("应用语言", AppLocale.SIMPLIFIED_CHINESE)
     }
 
     @Test
-    @Config(sdk = [29], qualifiers = "zh-rTW-w1000dp-h700dp-xhdpi")
-    fun traditionalChineseSettingsFitExpandedScreensWithLargeFonts() {
+    @Config(sdk = [29], qualifiers = "zh-rCN-w1000dp-h700dp-xhdpi")
+    fun simplifiedChineseSettingsFitExpandedScreensWithLargeFonts() {
         RuntimeEnvironment.setFontScale(1.3f)
         AirPlayPersistence.saveAudioFocusEnabled(context, true)
-        verifySettingsDoNotEllipsizeVisibleText("應用程式語言")
+        verifySettingsDoNotEllipsizeVisibleText("应用语言", AppLocale.SIMPLIFIED_CHINESE)
     }
 
-    private fun verifySettingsDoNotEllipsizeVisibleText(languageLabel: String) {
-        val screen = openSettings()
+    private fun verifySettingsDoNotEllipsizeVisibleText(
+        languageLabel: String,
+        language: String = AppLocale.ENGLISH,
+    ) {
+        val screen = openSettings(language)
         assertEquals(languageLabel, screen.getString(R.string.language_app_language))
 
         fun verifyVisibleText() {
@@ -734,30 +737,25 @@ class AdaptiveSettingsUiTest {
         }
     }
 
-    @Test @Config(sdk = [29], qualifiers = "ja-w320dp-h600dp")
-    fun navigationSliderScreenshotCompactJapaneseLargeFont() = captureNavigationSlider("compact-ja", 1.3f)
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
+    fun navigationSliderScreenshotCompactChineseLargeFont() =
+        captureNavigationSlider("compact-zh", 1.3f, AppLocale.SIMPLIFIED_CHINESE)
 
     @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
     fun navigationSliderScreenshotExpandedLargeFont() = captureNavigationSlider("expanded-en", 1.3f)
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
-    fun navigationSliderScreenshotCompactArabicRtlLargeFont() = captureNavigationSlider("compact-ar-rtl", 1.3f)
-
     @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun cornerRadiusScreenshotCompactLargeFont() = captureCornerRadius("compact-zh")
+    fun cornerRadiusScreenshotCompactLargeFont() =
+        captureCornerRadius("compact-zh", AppLocale.SIMPLIFIED_CHINESE)
 
     @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun cornerRadiusScreenshotExpandedLargeFont() = captureCornerRadius("expanded-en")
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun cornerRadiusScreenshotArabicRtlLargeFont() = captureCornerRadius("compact-ar-rtl")
-
-    private fun captureCornerRadius(name: String) {
+    private fun captureCornerRadius(name: String, language: String = AppLocale.ENGLISH) {
         RuntimeEnvironment.setFontScale(1.3f)
-        val screen = openSettings()
+        val screen = openSettings(language)
         for ((category, titleId, prefix) in listOf(
             Triple(SettingsCategory.DISPLAY, R.string.settings_carplay_corner_radius, "corner"),
             Triple(SettingsCategory.ADVANCED, R.string.settings_home_card_media, "home-card"),
@@ -795,9 +793,13 @@ class AdaptiveSettingsUiTest {
         return descendants(ShadowAlertDialog.getLatestAlertDialog().window!!.decorView).filterIsInstance<SeekBar>().single()
     }
 
-    private fun captureNavigationSlider(name: String, fontScale: Float) {
+    private fun captureNavigationSlider(
+        name: String,
+        fontScale: Float,
+        language: String = AppLocale.ENGLISH,
+    ) {
         RuntimeEnvironment.setFontScale(fontScale)
-        val screen = openSettings()
+        val screen = openSettings(language)
         ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
         layoutRoot(screen)
@@ -1226,10 +1228,13 @@ class AdaptiveSettingsUiTest {
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.save_diagnostic_report) })
     }
 
-    private fun openSettings(): DiPlayActivity = Robolectric.buildActivity(
-        DiPlayActivity::class.java,
-        Intent(context, DiPlayActivity::class.java).putExtra("page", "settings"),
-    ).setup().get().also { activity = it }
+    private fun openSettings(language: String = AppLocale.ENGLISH): DiPlayActivity {
+        AppLocale.save(context, language)
+        return Robolectric.buildActivity(
+            DiPlayActivity::class.java,
+            Intent(context, DiPlayActivity::class.java).putExtra("page", "settings"),
+        ).setup().get().also { activity = it }
+    }
 
     private fun openConnectionSetupFromSettings(): DiPlayActivity = openSettings().also { screen ->
         descendants(screen.window.decorView)

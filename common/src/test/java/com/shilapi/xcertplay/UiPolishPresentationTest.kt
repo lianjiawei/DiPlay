@@ -54,85 +54,89 @@ class UiPolishPresentationTest {
     @Test @Config(qualifiers = "zh-rCN-w400dp-h840dp-port-xhdpi")
     fun portraitLargeFont() = capture("portrait-large", 1.3f)
 
-    @Test @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
-    fun arabicLargeFont() = capture("arabic-large", 1.3f)
-
     private fun capture(name: String, fontScale: Float) {
         RuntimeEnvironment.setFontScale(fontScale)
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         DiPlayPreferences.saveAutoConnect(app, false)
         DiPlayPreferences.savePhone(app, "00:11:22:33:44:55", "我的 iPhone")
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)
-        for (night in listOf(true, false)) {
-            AirPlayPersistence.saveAppAppearance(app, if (night) AppAppearance.DARK else AppAppearance.LIGHT)
-            val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
-                Intent(app, DiPlayActivity::class.java).putExtra("page", "settings")).setup().visible()
-            val screen = controller.get()
-            try {
-                // Presentation state only: source-only test APKs intentionally lack an MFi identity.
-                ReflectionHelpers.setField(screen, "setupError", null)
-                CarPlayBackgroundSession.active = true
-                for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.ADVANCED, SettingsCategory.DISPLAY)) {
-                    ReflectionHelpers.setField(screen, "settingsCategory", category)
-                    ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
-                    val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
-                    root.layoutDirection = screen.resources.configuration.layoutDirection
-                    val density = screen.resources.displayMetrics.density
-                    val width = (screen.resources.configuration.screenWidthDp * density).toInt()
-                    val height = (screen.resources.configuration.screenHeightDp * density).toInt()
-                    repeat(3) {
-                        descendants(root).forEach { it.forceLayout() }
-                        root.measure(exact(width), exact(height))
-                        root.layout(0, 0, width, height)
-                        shadowOf(Looper.getMainLooper()).idle()
+        // The app shell is intentionally always dark. AdaptiveSettingsUiTest separately verifies
+        // that legacy LIGHT/AUTO preferences still resolve to it, so the old pair was byte-identical.
+        AirPlayPersistence.saveAppAppearance(app, AppAppearance.DARK)
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
+            Intent(app, DiPlayActivity::class.java).putExtra("page", "settings")).setup().visible()
+        val screen = controller.get()
+        try {
+            // Presentation state only: source-only test APKs intentionally lack an MFi identity.
+            ReflectionHelpers.setField(screen, "setupError", null)
+            CarPlayBackgroundSession.active = true
+            for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.ADVANCED, SettingsCategory.DISPLAY)) {
+                ReflectionHelpers.setField(screen, "settingsCategory", category)
+                ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+                val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+                root.layoutDirection = screen.resources.configuration.layoutDirection
+                val density = screen.resources.displayMetrics.density
+                val width = (screen.resources.configuration.screenWidthDp * density).toInt()
+                val height = (screen.resources.configuration.screenHeightDp * density).toInt()
+                repeat(3) {
+                    descendants(root).forEach { it.forceLayout() }
+                    root.measure(exact(width), exact(height))
+                    root.layout(0, 0, width, height)
+                    shadowOf(Looper.getMainLooper()).idle()
+                }
+                for (text in descendants(root).filterIsInstance<TextView>()) {
+                    if (!visible(text, root) || text is EditText || text.text.isNullOrBlank()) continue
+                    val layout = text.layout ?: continue
+                    for (line in 0 until layout.lineCount) {
+                        assertEquals("Ellipsized ${text.text}", 0, layout.getEllipsisCount(line))
+                        assertTrue("Wide text: ${text.text}", layout.getLineMax(line) <= layout.width + 2)
                     }
-                    for (text in descendants(root).filterIsInstance<TextView>()) {
-                        if (!visible(text, root) || text is EditText || text.text.isNullOrBlank()) continue
-                        val layout = text.layout ?: continue
-                        for (line in 0 until layout.lineCount) {
-                            assertEquals("Ellipsized ${text.text}", 0, layout.getEllipsisCount(line))
-                            assertTrue("Wide text: ${text.text}", layout.getLineMax(line) <= layout.width + 2)
-                        }
-                        assertTrue("Clipped ${text.text}", layout.lineCount == 0 ||
-                            layout.getLineBottom(layout.lineCount - 1) <= text.height - text.compoundPaddingTop - text.compoundPaddingBottom + 2)
-                        if (text is Button) assertTrue("Small action: ${text.text}", text.height >= 48 * density - 1)
-                    }
-                    val dir = File("build/reports/ui-polish/$name-${if (night) "night" else "day"}")
-                    screenshot(root, File(dir, "${category.name.lowercase()}.png"))
-                    val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
-                    val content = scroll.getChildAt(0)
-                    assertTrue(content.height > 0)
-                    screenshot(content, File(dir, "${category.name.lowercase()}-content.png"))
-                    if (content.height > scroll.height) {
-                        scroll.scrollTo(0, content.height)
-                        assertTrue("Settings must remain scrollable", scroll.scrollY > 0)
-                        scroll.scrollTo(0, 0)
-                    }
-                    if (category == SettingsCategory.ADVANCED) {
-                        val page = descendants(root).filterIsInstance<TextView>().first { it.text == screen.getString(R.string.settings_advanced) && it.textSize > 20 * screen.resources.displayMetrics.scaledDensity }
-                        val body = descendants(root).filterIsInstance<TextView>().first { it.text == screen.getString(R.string.settings_advanced_caution_description) }
-                        assertTrue("Page title and description have distinct hierarchy", page.textSize > body.textSize * 1.5f)
-                    }
-                    if (category == SettingsCategory.DISPLAY) {
-                        val choice = descendants(root).filterIsInstance<Button>().first {
-                            it.text.startsWith(screen.getString(R.string.carplay_night_mode) + " · ")
-                        }
-                        choice.performClick()
-                        shadowOf(Looper.getMainLooper()).idle()
-                        val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
-                        try {
-                            val decor = dialog.window!!.decorView
-                            decor.measure(exact(minOf(width, (560 * density).toInt())),
-                                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
-                            decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
-                            screenshot(decor, File(dir, "display-choice.png"))
-                        } finally { dialog.dismiss() }
+                    assertTrue("Clipped ${text.text}", layout.lineCount == 0 ||
+                        layout.getLineBottom(layout.lineCount - 1) <= text.height -
+                        text.compoundPaddingTop - text.compoundPaddingBottom + 2)
+                    if (text is Button) {
+                        assertTrue("Small action: ${text.text}", text.height >= 48 * density - 1)
                     }
                 }
-            } finally {
-                CarPlayBackgroundSession.clear()
-                controller.pause().stop().destroy()
+                val dir = File("build/reports/ui-polish/$name-dark")
+                screenshot(root, File(dir, "${category.name.lowercase()}.png"))
+                val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+                val content = scroll.getChildAt(0)
+                assertTrue(content.height > 0)
+                screenshot(content, File(dir, "${category.name.lowercase()}-content.png"))
+                if (content.height > scroll.height) {
+                    scroll.scrollTo(0, content.height)
+                    assertTrue("Settings must remain scrollable", scroll.scrollY > 0)
+                    scroll.scrollTo(0, 0)
+                }
+                if (category == SettingsCategory.ADVANCED) {
+                    val page = descendants(root).filterIsInstance<TextView>().first {
+                        it.text == screen.getString(R.string.settings_advanced) &&
+                            it.textSize > 20 * screen.resources.displayMetrics.scaledDensity
+                    }
+                    val body = descendants(root).filterIsInstance<TextView>().first {
+                        it.text == screen.getString(R.string.settings_advanced_caution_description)
+                    }
+                    assertTrue("Page title and description have distinct hierarchy", page.textSize > body.textSize * 1.5f)
+                }
+                if (category == SettingsCategory.DISPLAY) {
+                    val choice = descendants(root).filterIsInstance<Button>().first {
+                        it.text.startsWith(screen.getString(R.string.carplay_night_mode) + " · ")
+                    }
+                    choice.performClick()
+                    shadowOf(Looper.getMainLooper()).idle()
+                    val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+                    try {
+                        val decor = dialog.window!!.decorView
+                        decor.measure(exact(minOf(width, (560 * density).toInt())),
+                            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
+                        decor.layout(0, 0, decor.measuredWidth, decor.measuredHeight)
+                        screenshot(decor, File(dir, "display-choice.png"))
+                    } finally { dialog.dismiss() }
+                }
             }
+        } finally {
+            CarPlayBackgroundSession.clear()
+            controller.pause().stop().destroy()
         }
     }
 

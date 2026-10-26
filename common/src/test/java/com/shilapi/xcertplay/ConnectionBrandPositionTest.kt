@@ -57,13 +57,8 @@ class ConnectionBrandPositionTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun compactHeaderPixelsStayFixedWithLargeText() = capture("compact-zh")
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w800dp-h480dp-land-mdpi")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun rtlHeaderPixelsStayFixedWithLargeText() = capture("rtl-ar")
-
     private fun capture(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)
-        RuntimeEnvironment.getApplication().applicationInfo.apply { flags = flags or ApplicationInfo.FLAG_SUPPORTS_RTL }
         withHost { root, title ->
             val config = root.resources.configuration
             val density = root.resources.displayMetrics.density

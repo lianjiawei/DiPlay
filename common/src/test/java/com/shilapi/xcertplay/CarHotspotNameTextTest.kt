@@ -86,9 +86,8 @@ class CarHotspotNameTextTest {
         assertFalse(shown.toString(), setup.getString(R.string.hotspot_details_saved) in shown)
     }
 
-    // A plain space at the end of a string resource is dropped; Traditional Chinese read "… ·Car 5G".
-    @Test fun theNameIsSetApartFromTheButtonTitleInEveryLanguage() {
-        for (tag in listOf("en", "ar", "es", "ja", "ru", "uk", "zh-CN", "zh-TW")) {
+    @Test fun theNameIsSetApartFromTheButtonTitleInBothLanguages() {
+        for (tag in listOf("en", "zh-CN")) {
             val localized = context.createConfigurationContext(
                 Configuration(context.resources.configuration).apply { setLocale(Locale.forLanguageTag(tag)) })
             assertTrue(tag, localized.getString(R.string.edit_saved_hotspot_prefix).endsWith(" · "))

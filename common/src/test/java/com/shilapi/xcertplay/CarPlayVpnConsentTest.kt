@@ -21,6 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
@@ -35,6 +36,7 @@ class CarPlayVpnConsentTest {
     private var launches = 0
 
     @Before fun setUp() {
+        AppLocale.save(RuntimeEnvironment.getApplication(), AppLocale.ENGLISH)
         VpnConsentTestShadow.failure = null
         VpnConsentTestShadow.consent = Intent().setClassName(
             "com.android.vpndialogs", "com.android.vpndialogs.ConfirmDialog",

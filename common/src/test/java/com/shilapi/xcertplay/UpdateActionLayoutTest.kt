@@ -54,14 +54,9 @@ class UpdateActionLayoutTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun compactChineseLargeFont() = exercise("compact-zh")
 
-    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w1280dp-h480dp-land-mdpi")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun arabicLargeFont() = exercise("full-ar-rtl")
-
     private fun exercise(screenshot: String?) {
         if (screenshot != null) RuntimeEnvironment.setFontScale(1.3f)
         val app = RuntimeEnvironment.getApplication()
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)
         val connectivity = shadowOf(app.getSystemService(ConnectivityManager::class.java))
         connectivity.clearAllNetworks()

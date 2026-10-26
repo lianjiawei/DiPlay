@@ -36,8 +36,6 @@ class UnifiedHomeScreenshotsTest {
     fun fullHomeStatesWithLargeText() = capture("full")
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-xhdpi")
     fun compactHighDensityHomeStatesWithLargeText() = capture("compact")
-    @Test @Config(qualifiers = "ar-ldrtl-w960dp-h540dp-land-mdpi")
-    fun rtlHomeStatesWithLargeText() = capture("rtl")
     @Test @Config(qualifiers = "zh-rCN-w1920dp-h720dp-land-mdpi")
     fun ultraWideHomeStatesWithLargeText() = capture("1920x720-mdpi")
     @Test @Config(qualifiers = "zh-rCN-w1280dp-h480dp-land-hdpi")
@@ -55,7 +53,6 @@ class UnifiedHomeScreenshotsTest {
             Intent(app, DiPlayActivity::class.java).putExtra("page", "home")).setup().visible()
         val a = c.get()
         try {
-            a.applicationInfo.flags = a.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL
             ReflectionHelpers.setField(a, "setupError", null)
             val root = a.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as ViewGroup
             root.layoutDirection = a.resources.configuration.layoutDirection

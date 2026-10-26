@@ -467,7 +467,9 @@ class WifiP2pGroupManagerTest {
             shadowOf(this).setIsGroupOwner(true)
             shadowOf(this).setNetworkName(config?.networkName ?: "DIRECT-system-test")
             shadowOf(this).setPassphrase(if (missingCredentials) null else config?.passphrase ?: "test-generated-key")
-            shadowOf(this).setInterface("p2p-test-missing")
+            // Address-wait behavior has its own focused test. Ordinary state-machine tests should
+            // not each spend two seconds waiting for an intentionally nonexistent interface.
+            shadowOf(this).setInterface(testNetworkInterfaceName())
             ReflectionHelpers.setField(this, "mFrequency", reportedFrequency ?: config?.groupOwnerBand ?: 2437)
         }
     }

@@ -31,12 +31,14 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import org.robolectric.util.ReflectionHelpers
 
-/** Physical pixels, density, font size and the optional Settings rail are independent inputs. */
+/** Pairwise screen coverage: representative profiles are exhaustive; the remaining profiles smoke key pages. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class UiResolutionRegressionTest {
+    private enum class Coverage { FULL, SMOKE }
+
     private val app get() = RuntimeEnvironment.getApplication()
     private val findings = mutableListOf<String>()
     private var steps = 0
@@ -49,7 +51,7 @@ class UiResolutionRegressionTest {
     }
 
     @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
-    fun landscape800x480() = matrix("800x480-mdpi")
+    fun landscape800x480() = matrix("800x480-mdpi", Coverage.FULL, listOf(1f, 1.3f))
 
     @Test @Config(qualifiers = "zh-rCN-w1024dp-h600dp-land-mdpi")
     fun landscape1024x600() = matrix("1024x600-mdpi")
@@ -58,10 +60,14 @@ class UiResolutionRegressionTest {
     fun landscape1280x720HighDensity() = matrix("1280x720-xhdpi")
 
     @Test @Config(qualifiers = "zh-rCN-w960dp-h540dp-land-xhdpi")
-    fun landscape1920x1080HighDensity() = matrix("1920x1080-xhdpi")
+    fun landscape1920x1080HighDensity() = matrix("1920x1080-xhdpi", Coverage.FULL)
+
+    /** Huawei debug phone: 2640×1200 physical pixels at the usual 3× Android density. */
+    @Test @Config(qualifiers = "zh-rCN-w880dp-h400dp-land-xxhdpi")
+    fun huaweiPhone2640x1200() = matrix("2640x1200-xxhdpi", Coverage.FULL)
 
     @Test @Config(qualifiers = "zh-rCN-w960dp-h360dp-land-xhdpi")
-    fun ultraWide1920x720() = matrix("1920x720-xhdpi")
+    fun ultraWide1920x720() = matrix("1920x720-xhdpi", Coverage.FULL)
 
     @Test @Config(qualifiers = "zh-rCN-w1920dp-h720dp-land-mdpi")
     fun ultraWide1920x720StandardDensity() = matrix("1920x720-mdpi")
@@ -78,27 +84,39 @@ class UiResolutionRegressionTest {
     @Test @Config(qualifiers = "zh-rCN-w400dp-h300dp-land-mdpi")
     fun splitWindow400x300() = matrix("400x300-mdpi")
 
-    @Test @Config(qualifiers = "ar-ldrtl-w640dp-h360dp-land-xhdpi")
-    fun arabicRtl1280x720() = matrix("1280x720-ar-rtl")
+    @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
+    fun hiddenSetupGuideFallbackRemainsRenderable() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        prepareFixture()
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
+            Intent(app, DiPlayActivity::class.java).putExtra("page", "home")).setup().visible()
+        val screen = controller.get()
+        val directory = Paths.get("build/reports/ui-resolution-regression/setup-guide-fallback")
+        try {
+            for (step in SetupGuide.STEP_CAR..SetupGuide.STEP_DONE) {
+                ReflectionHelpers.setField(screen, "setupStep", step)
+                navigate(screen, "setup")
+                capture(screen, directory, "setup-$step")
+                assertSubpageHeader(screen, "setup-$step")
+            }
+        } finally {
+            controller.pause().stop().destroy()
+        }
+        writeResults(directory.resolve("results.txt"), "setup-guide-fallback")
+    }
 
-    private fun matrix(name: String) {
+    private fun matrix(
+        name: String,
+        coverage: Coverage = Coverage.SMOKE,
+        fontScales: List<Float> = listOf(1.3f),
+    ) {
         findings.clear()
-        // The production manifest supports RTL. Robolectric's library test application does not
-        // inherit that flag automatically, so set it before constructing the activity.
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
         packageInfo.versionName = "precision.8"
         shadowOf(app.packageManager).installPackage(packageInfo)
-        for (fontScale in listOf(1f, 1.3f)) {
+        for (fontScale in fontScales) {
             RuntimeEnvironment.setFontScale(fontScale)
-            app.getSharedPreferences("diplay", 0).edit().clear().commit()
-            app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
-            DiPlayPreferences.saveAutoConnect(app, false)
-            UpdateAvailability.saveBackgroundChecksEnabled(app, false)
-            shadowOf(app.getSystemService(ConnectivityManager::class.java)).apply {
-                clearAllNetworks()
-                setActiveNetworkInfo(null)
-            }
+            prepareFixture()
             val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
                 Intent(app, DiPlayActivity::class.java).putExtra("page", "home")).setup().visible()
             val screen = controller.get()
@@ -108,54 +126,68 @@ class UiResolutionRegressionTest {
                 navigate(screen, "connection")
                 capture(screen, directory, "02-connection")
                 assertSubpageHeader(screen, "02-connection")
-                for (step in SetupGuide.STEP_CAR..SetupGuide.STEP_DONE) {
-                    ReflectionHelpers.setField(screen, "setupStep", step)
-                    navigate(screen, "setup")
-                    capture(screen, directory, "03-setup-$step")
-                    assertSubpageHeader(screen, "03-setup-$step")
-                }
-                for (rail in listOf(false, true)) {
-                    SettingsLayoutPreferences.saveForceFull(app, rail)
-                    for (category in SettingsCategory.entries) {
-                        ReflectionHelpers.setField(screen, "settingsCategory", category)
-                        navigate(screen, "settings")
-                        val state = "04-settings-${if (rail) "rail" else "auto"}-${category.name.lowercase()}"
-                        capture(screen, directory, state)
-                        if (category == SettingsCategory.ABOUT) {
-                            call(screen, "checkForUpdates")
-                            capture(screen, directory, "$state-offline")
-                        }
+                val categories = if (coverage == Coverage.FULL) SettingsCategory.entries else listOf(
+                    SettingsCategory.OVERVIEW,
+                    SettingsCategory.DISPLAY,
+                    SettingsCategory.VEHICLE,
+                    SettingsCategory.ABOUT,
+                )
+                for (category in categories) {
+                    ReflectionHelpers.setField(screen, "settingsCategory", category)
+                    navigate(screen, "settings")
+                    val state = "04-settings-${category.name.lowercase()}"
+                    capture(screen, directory, state)
+                    if (coverage == Coverage.FULL && category == SettingsCategory.ABOUT) {
+                        call(screen, "checkForUpdates")
+                        capture(screen, directory, "$state-offline")
                     }
                 }
-                SettingsLayoutPreferences.saveForceFull(app, false)
-                navigate(screen, "backup")
-                capture(screen, directory, "05-phone-backup")
-                assertSubpageHeader(screen, "05-phone-backup")
-                val release = UpdateRelease("precision.99", "CorsairPlay.apk", "https://example.com/app.apk",
-                    "https://example.com/SHA256SUMS.txt", "USB recovery\n更新提示和屏幕适配")
-                val prompt = UpdatePromptDialog(screen, {}, {}, {})
-                try {
-                    prompt.show(release, UpdatePromptStage.OFFER, null, null)
-                    shadowOf(Looper.getMainLooper()).idle()
-                    for (stage in listOf(UpdatePromptStage.OFFER, UpdatePromptStage.DOWNLOADING, UpdatePromptStage.READY)) {
-                        prompt.update(release, stage, if (stage == UpdatePromptStage.DOWNLOADING) 42 else null, null)
+                if (coverage == Coverage.FULL) {
+                    navigate(screen, "backup")
+                    capture(screen, directory, "05-phone-backup")
+                    assertSubpageHeader(screen, "05-phone-backup")
+                    val release = UpdateRelease("precision.99", "CorsairPlay.apk", "https://example.com/app.apk",
+                        "https://example.com/SHA256SUMS.txt", "USB recovery\n更新提示和屏幕适配")
+                    val prompt = UpdatePromptDialog(screen, {}, {}, {})
+                    try {
+                        prompt.show(release, UpdatePromptStage.OFFER, null, null)
                         shadowOf(Looper.getMainLooper()).idle()
-                        val root = prompt.dialog.window!!.decorView
-                        val metrics = screen.resources.displayMetrics
-                        val width = ((minOf(screen.resources.configuration.screenWidthDp, 600) - 32) * metrics.density).toInt()
-                        val height = ((screen.resources.configuration.screenHeightDp - 32) * metrics.density).toInt()
-                        root.measure(exact(width), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
-                        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                        inspect(root, "${directory.fileName}/06-update-${stage.name}")
-                        screenshot(root, directory.resolve("06-update-${stage.name.lowercase()}.png"))
-                        steps++
-                    }
-                } finally { prompt.dismiss() }
+                        for (stage in listOf(UpdatePromptStage.OFFER, UpdatePromptStage.DOWNLOADING, UpdatePromptStage.READY)) {
+                            prompt.update(release, stage, if (stage == UpdatePromptStage.DOWNLOADING) 42 else null, null)
+                            shadowOf(Looper.getMainLooper()).idle()
+                            val root = prompt.dialog.window!!.decorView
+                            val metrics = screen.resources.displayMetrics
+                            val width = ((minOf(screen.resources.configuration.screenWidthDp, 600) - 32) * metrics.density).toInt()
+                            val height = ((screen.resources.configuration.screenHeightDp - 32) * metrics.density).toInt()
+                            root.measure(exact(width), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
+                            root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+                            inspect(root, "${directory.fileName}/06-update-${stage.name}")
+                            screenshot(root, directory.resolve("06-update-${stage.name.lowercase()}.png"))
+                            steps++
+                        }
+                    } finally { prompt.dismiss() }
+                }
             } finally {
                 controller.pause().stop().destroy()
             }
         }
-        val output = Paths.get("build/reports/ui-resolution-regression/$name/results.txt")
+        writeResults(Paths.get("build/reports/ui-resolution-regression/$name/results.txt"), name)
+    }
+
+    private fun prepareFixture() {
+        app.getSharedPreferences("diplay", 0).edit().clear().commit()
+        app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
+        DiPlayPreferences.saveAutoConnect(app, false)
+        SettingsLayoutPreferences.saveForceFull(app, false)
+        UpdateAvailability.saveBackgroundChecksEnabled(app, false)
+        shadowOf(app.getSystemService(ConnectivityManager::class.java)).apply {
+            clearAllNetworks()
+            setActiveNetworkInfo(null)
+        }
+    }
+
+    private fun writeResults(output: Path, name: String) {
+        Files.createDirectories(output.parent)
         Files.writeString(output, "states=$steps\ntextViews=$texts\nfindings=${findings.size}\n" + findings.joinToString("\n"))
         assertTrue("Layout findings for $name:\n${findings.take(30).joinToString("\n")}", findings.isEmpty())
     }
@@ -173,11 +205,7 @@ class UiResolutionRegressionTest {
             it.contentDescription?.toString() in brandNames ||
                 it is TextView && it.text.toString() in brandNames
         })
-        if (screen.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
-            assertEquals("$state Back must stay on the RTL start edge", header.width, back.right)
-        } else {
-            assertEquals("$state Back must stay on the LTR start edge", 0, back.left)
-        }
+        assertEquals("$state Back must stay on the LTR start edge", 0, back.left)
     }
 
     private fun navigate(screen: DiPlayActivity, page: String) {

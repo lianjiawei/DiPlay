@@ -41,14 +41,8 @@ class ConnectionScreenPresentationTest {
     @Test @Config(qualifiers = "zh-rCN-w400dp-h840dp-port-mdpi")
     fun tallPortraitKeepsActionsNearTheBottom() = capture("portrait-zh")
 
-    @Test @Config(qualifiers = "ar-ldrtl-w320dp-h600dp-port-mdpi")
-    fun compactWaitingScreenWithLargeRtlText() = capture("compact-ar-rtl")
-
     @Test @Config(qualifiers = "zh-rCN-w640dp-h240dp-land-mdpi")
     fun shortLandscapeKeepsAllTextVisible() = capture("short-zh")
-
-    @Test @Config(qualifiers = "ar-ldrtl-w800dp-h360dp-land-xhdpi")
-    fun shortRtlLandscapeWithInsetsAndLongPhoneName() = capture("short-ar-rtl", safeInsets = true)
 
     @Test @Config(qualifiers = "zh-rCN-w800dp-h480dp-land-mdpi")
     fun landscapeReadingAreaKeepsSecondaryTextLegibleInBothThemes() {
@@ -137,10 +131,6 @@ class ConnectionScreenPresentationTest {
         for (night in listOf(true)) {
             val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
             try {
-                // The library test manifest does not inherit mobile's android:supportsRtl="true".
-                host.applicationInfo.apply {
-                    flags = flags or android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL
-                }
                 ReflectionHelpers.setField(host, "appNight", night)
                 ReflectionHelpers.setField(host, "wirelessEnabled", true)
                 ReflectionHelpers.setField(host, "wirelessHotspotMode", WirelessHotspotMode.EXISTING_WIFI)
@@ -153,7 +143,6 @@ class ConnectionScreenPresentationTest {
                     (content.getChildAt(2) as TextView).text = "测试 iPhone — A very long device name for the connection screen"
                 }
                 val config = host.resources.configuration
-                // This presentation-only host is not attached to a decor view, so resolve RTL explicitly.
                 root.layoutDirection = config.layoutDirection
                 val density = host.resources.displayMetrics.density
                 val width = (config.screenWidthDp * density).toInt()
@@ -179,9 +168,6 @@ class ConnectionScreenPresentationTest {
                 val row = descendants(panel).filterIsInstance<GlassActionRow>().single()
                 val buttons = (0 until row.childCount).map { row.getChildAt(it) as Button }
                 assertEquals(config.layoutDirection, row.layoutDirection)
-                if (config.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
-                    assertTrue("Actions must follow RTL order", buttons[0].left > buttons[1].left)
-                }
                 assertEquals(buttons[0].height, buttons[1].height)
                 assertTrue(buttons.all { it.height >= 48 * density })
                 val headline = visibleText.first { it.text.toString() == host.getString(R.string.ui_glass_connecting_title) }

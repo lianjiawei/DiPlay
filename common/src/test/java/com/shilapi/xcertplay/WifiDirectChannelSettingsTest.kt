@@ -30,6 +30,7 @@ class WifiDirectChannelSettingsTest {
         .getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
 
     @Before fun setup() {
+        AppLocale.save(RuntimeEnvironment.getApplication(), AppLocale.ENGLISH)
         prefs.edit().clear().commit()
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)

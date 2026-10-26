@@ -37,8 +37,10 @@ class ChooseIphoneBluetoothDialogTest {
         context.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
     }
 
-    private fun open(): DiPlayActivity =
-        Robolectric.buildActivity(DiPlayActivity::class.java).setup().get().also { activity = it }
+    private fun open(): DiPlayActivity {
+        AppLocale.save(context, AppLocale.ENGLISH)
+        return Robolectric.buildActivity(DiPlayActivity::class.java).setup().get().also { activity = it }
+    }
 
     private fun choosePhone(screen: DiPlayActivity): AlertDialog {
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "choosePhone")

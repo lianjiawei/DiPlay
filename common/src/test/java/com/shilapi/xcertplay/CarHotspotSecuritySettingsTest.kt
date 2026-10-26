@@ -27,6 +27,7 @@ class CarHotspotSecuritySettingsTest {
     private lateinit var activity: DiPlayActivity
 
     @Before fun setup() {
+        AppLocale.save(app, AppLocale.ENGLISH)
         app.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
         activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)

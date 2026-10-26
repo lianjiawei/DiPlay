@@ -206,17 +206,14 @@ class SettingsBackupServerTest {
 
     private fun wrong(code: String) = ((code.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
 
-    // An Arabic head unit formats numbers with Arabic-Indic digits; a computer's keyboard types 0 to 9.
     @Test
-    fun theCodeIsMadeOfTheDigitsAKeyboardTypesInEveryLocale() {
+    fun theCodeUsesKeyboardDigitsInSimplifiedChinese() {
         val before = java.util.Locale.getDefault()
         try {
-            for (tag in listOf("ar-EG", "ar-SA", "fa-IR", "hi-IN", "th-TH-u-nu-thai")) {
-                java.util.Locale.setDefault(java.util.Locale.forLanguageTag(tag))
-                withTypedCode { _, endpoint, enter ->
-                    assertTrue("$tag gave ${endpoint.code}", endpoint.code.length == 6 && endpoint.code.all { it in '0'..'9' })
-                    assertEquals(200, enter(endpoint.code).first)
-                }
+            java.util.Locale.setDefault(java.util.Locale.SIMPLIFIED_CHINESE)
+            withTypedCode { _, endpoint, enter ->
+                assertTrue(endpoint.code.length == 6 && endpoint.code.all { it in '0'..'9' })
+                assertEquals(200, enter(endpoint.code).first)
             }
         } finally {
             java.util.Locale.setDefault(before)

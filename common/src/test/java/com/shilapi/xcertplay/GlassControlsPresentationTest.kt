@@ -27,10 +27,10 @@ class GlassControlsPresentationTest {
     @Test fun glassMaterialsStayContinuousAcrossTheirCapsAtFractionalDisplayScales() {
         FidelityMaterials.install(RuntimeEnvironment.getApplication())
         val output = File("build/reports/glass-materials").apply { mkdirs() }
-        for (night in listOf(false, true)) for (primary in listOf(false, true))
+        for (primary in listOf(false, true))
         for ((width, height) in listOf(96 to 48, 160 to 56, 320 to 64))
         for (scale in listOf(1f, 1.5f, 2.625f)) for (opacity in listOf(112, 255)) {
-            val palette = DiPlayPalette.of(night)
+            val palette = DiPlayPalette.DARK
             val material = GlassChrome.surface(if (primary) palette.accent else palette.button,
                 palette.outline, 1f, height / 2f, primary = primary).apply { alpha = opacity }
             val bitmap = Bitmap.createBitmap(((width + 16) * scale).roundToInt(), ((height + 16) * scale).roundToInt(), Bitmap.Config.ARGB_8888)
@@ -41,7 +41,7 @@ class GlassControlsPresentationTest {
                 material.setBounds(8, 8, width + 8, height + 8)
                 material.draw(canvas)
                 if (opacity == 255 && scale == 2.625f) {
-                    File(output, "${if (night) "night" else "day"}-${if (primary) "primary" else "secondary"}-$width.png").outputStream().use {
+                    File(output, "night-${if (primary) "primary" else "secondary"}-$width.png").outputStream().use {
                         assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
                     }
                 }
@@ -53,7 +53,7 @@ class GlassControlsPresentationTest {
                     fun alphaAt(x: Int) = (y1 until y2).map { Color.alpha(bitmap.getPixel(x, it)) }.average()
                     for (x in center - 1..center + 1) {
                         val surrounding = (alphaAt(x - 2) + alphaAt(x + 2)) / 2
-                        assertTrue("Vertical alpha seam: night=$night primary=$primary width=$width opacity=$opacity scale=$scale x=$x " +
+                        assertTrue("Vertical alpha seam: primary=$primary width=$width opacity=$opacity scale=$scale x=$x " +
                             "difference=${abs(alphaAt(x) - surrounding)}",
                             abs(alphaAt(x) - surrounding) <= 3.0)
                     }

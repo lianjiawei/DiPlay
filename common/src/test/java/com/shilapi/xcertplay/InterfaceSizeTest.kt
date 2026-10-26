@@ -110,11 +110,13 @@ class InterfaceSizeTest {
 
     @Test
     fun theOverrideKeepsTheBaseLanguage() {
-        val base = screen(2666, 1333, 144).apply { setLocales(android.os.LocaleList(java.util.Locale("ar"))) }
+        val base = screen(2666, 1333, 144).apply {
+            setLocales(android.os.LocaleList(java.util.Locale.SIMPLIFIED_CHINESE))
+        }
 
         val override = InterfaceSize.override(base, InterfaceSize.AUTO)!!
 
-        assertEquals("ar", override.locales[0].language)
-        assertEquals(android.view.View.LAYOUT_DIRECTION_RTL, override.layoutDirection)
+        assertEquals("zh", override.locales[0].language)
+        assertEquals(android.view.View.LAYOUT_DIRECTION_LTR, override.layoutDirection)
     }
 }

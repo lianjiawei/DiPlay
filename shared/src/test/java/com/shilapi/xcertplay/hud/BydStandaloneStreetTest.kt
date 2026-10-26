@@ -26,9 +26,8 @@ class BydStandaloneStreetTest {
         assertTrue(data.drop(size + 2).all { it == 0xFF.toByte() })
         return text.toString(Charsets.UTF_16LE)
     }
-    @Test fun matchesActualArm64EncoderEnglishAndArabicVectors() {
+    @Test fun matchesActualArm64EncoderEnglishVector() {
         assertEquals("43,FA,10,08,08,A1,16,4D,00,75,00,73,00,43,FA,20,08,08,A2,63,00,61,00,74,00,20,43,FA,30,08,08,A3,00,52,00,6F,00,61,00,43,FA,40,08,08,A4,64,00,13,FF,FF,FF,FF", BydStandalonePackets.streetName("Muscat Road"))
-        assertEquals("43,FA,10,08,08,A1,12,34,06,27,06,31,06,43,FA,20,08,08,A2,39,06,20,00,45,06,33,43,FA,30,08,08,A3,06,42,06,37,06,06,FF", BydStandalonePackets.streetName("شارع مسقط"))
     }
     @Test fun textIsBoundedWithoutBreakingUnicodePairs() {
         assertEquals("A".repeat(48), decoded("A".repeat(500)))

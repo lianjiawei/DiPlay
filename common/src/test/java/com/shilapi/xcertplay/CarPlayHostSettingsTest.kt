@@ -237,27 +237,12 @@ class CarPlayHostSettingsTest {
     @Test
     @Config(qualifiers = "en-w600dp-h720dp-mdpi")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun lightLargeFontSwipeMenuScreenshot() = checkSwipeMenuScreenshot("upstream-swipe-light-large-font.png", 600, 720)
-
-    @Test
-    @Config(qualifiers = "ar-rSA-w600dp-h720dp-mdpi")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun arabicLargeFontSwipeMenuScreenshot() = checkSwipeMenuScreenshot("upstream-swipe-arabic-large-font.png", 600, 720)
-
-    @Test
-    @Config(qualifiers = "en-w600dp-h720dp-mdpi")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun compactGroupedMenuScreenshot() = checkSwipeMenuScreenshot("grouped-swipe-compact-large-font.png", 600, 720)
 
     @Test
     @Config(qualifiers = "en-w1920dp-h1080dp-mdpi")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun fullGroupedMenuScreenshot() = checkSwipeMenuScreenshot("grouped-swipe-full-large-font.png", 1920, 1080)
-
-    @Test
-    @Config(qualifiers = "ar-rSA-w600dp-h720dp-mdpi")
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun arabicGroupedMenuScreenshot() = checkSwipeMenuScreenshot("grouped-swipe-arabic-large-font.png", 600, 720)
 
     @Test fun closeButtonDiscardsEditsWithoutRestartingCarPlay() {
         val controller = attachController()
@@ -772,15 +757,12 @@ class CarPlayHostSettingsTest {
     private fun checkSwipeMenuScreenshot(name: String, width: Int, height: Int) {
         val config = Configuration(activity.resources.configuration).apply {
             fontScale = 1.5f
-            val locale = Locale.forLanguageTag(if (name.contains("arabic")) "ar-SA" else "en-US")
+            val locale = Locale.forLanguageTag("en-US")
             setLocale(locale)
             setLayoutDirection(locale)
         }
         @Suppress("DEPRECATION")
         activity.resources.updateConfiguration(config, activity.resources.displayMetrics)
-        if (name.contains("light")) {
-            AirPlayPersistence.saveAppAppearance(activity, AppAppearance.LIGHT)
-            }
         if (name.contains("grouped")) setField("settingsMenuCategoryKey", "display")
         invoke("openSettingsMenu")
         val root = menu()

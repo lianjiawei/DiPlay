@@ -108,14 +108,12 @@ class HomeFooterLayoutTest {
 
     @Test fun actionsStayAtSafeBottomAndShareSizeAcrossSessionStates() {
         val app = RuntimeEnvironment.getApplication()
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         try {
             for ((name, qualifiers) in listOf(
                 "compact" to "zh-rCN-w800dp-h480dp-land-mdpi",
                 "phone-landscape" to "zh-rCN-w880dp-h400dp-land-xxhdpi",
                 "full-large" to "zh-rCN-w1280dp-h720dp-land-mdpi",
-                "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi",
-                "rtl-large" to "ar-ldrtl-w960dp-h540dp-land-mdpi")) {
+                "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi")) {
                 RuntimeEnvironment.setQualifiers(qualifiers)
                 RuntimeEnvironment.setFontScale(if (name.endsWith("large")) 1.3f else 1f)
                 app.getSharedPreferences("diplay", 0).edit().clear().commit()

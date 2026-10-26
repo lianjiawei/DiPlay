@@ -207,10 +207,6 @@ class VehicleModelUiTest {
     fun fullSettingsWithLargeText() = capture("full-large", 1.3f)
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "ar-ldrtl-w1280dp-h720dp-land-mdpi")
-    fun rtlSettingsWithLargeText() = capture("rtl-large", 1.3f)
-
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "zh-rCN-w1920dp-h720dp-land-mdpi")
     fun ultraWideModelsAndPickerWithLargeText() = capture("1920x720-mdpi-large", 1.3f)
 

@@ -18,6 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
@@ -33,6 +34,7 @@ class NightModeSettingsTest {
     private lateinit var page: LinearLayout
 
     @Before fun setUp() {
+        AppLocale.save(RuntimeEnvironment.getApplication(), AppLocale.ENGLISH)
         controller = Robolectric.buildActivity(DiPlayActivity::class.java)
         activity = controller.get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)

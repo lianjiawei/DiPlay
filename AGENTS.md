@@ -30,6 +30,32 @@ whole repository test suite for every edit.**
    a cancelled or targeted run as a successful full-suite run. Non-UI changes do not require
    screenshot regression checks; the Settings layout requirements below still apply to layout edits.
 
+### UI test tiers
+
+- A localized behavior or copy change runs its focused test class. Do not run the exhaustive
+  resolution matrix merely because the changed code lives in `DiPlayActivity`.
+- A Settings layout change runs the affected presentation test and retains evidence for a compact
+  window and a full window with large text in the supported Simplified Chinese or English locales.
+- `UiResolutionRegressionTest` is the broad responsive/release gate. It keeps full page coverage on
+  the real Lincoln head-unit's 1920×1080 profile and the Huawei debug phone's 2640×1200 profile,
+  plus representative 800×480 and ultra-wide 1920×720 profiles; the remaining densities, portrait
+  and split-window profiles are smoke coverage. Run it for shared layout primitives,
+  navigation-shell changes or release regression, not for unrelated logic fixes.
+- The application shell is fixed to the dark appearance. Do not duplicate screenshot matrices for
+  legacy LIGHT/AUTO preferences; `AdaptiveSettingsUiTest` verifies that they still resolve to dark.
+- Tests of retry and timeout behavior may use real waits. Ordinary state-machine tests MUST use an
+  immediately available fake/test resource rather than paying the same production timeout per case.
+
+### Languages
+
+- DiPlay supports Simplified Chinese and English only. A fresh install defaults to Simplified
+  Chinese; the app does not offer a system-default language choice.
+- Do not add resources, translations, layout branches or screenshot matrices for Arabic,
+  Traditional Chinese, Japanese, Russian, Spanish, Ukrainian or other unsupported locales.
+- Localized tests MUST select Simplified Chinese or English explicitly instead of depending on the
+  machine or Robolectric system locale.
+- Phone-facing settings pages follow DiPlay's selected language, not the phone browser language.
+
 The full check command from `.github/workflows/android.yml` remains available when warranted;
 these local verification rules do not disable the checks configured in CI:
 
@@ -107,5 +133,5 @@ Spacing, size and shape in the Settings screen MUST come from one place.
    Corner radius MUST follow the control height. A new button MUST NOT set its own radius.
 4. Every `SettingsCategory` except Overview MUST have a link on Overview.
    `AdaptiveSettingsUiTest.overviewLinksToEveryOtherCategory` checks this.
-5. A layout change MUST include compact and full screenshots with a large font scale.
-   Add an Arabic (right-to-left) screenshot when the change touches row alignment.
+5. A layout change MUST include compact and full screenshots with a large font scale, using
+   Simplified Chinese or English. Other locales are not product-supported test targets.

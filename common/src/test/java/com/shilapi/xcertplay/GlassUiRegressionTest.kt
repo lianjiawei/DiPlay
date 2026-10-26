@@ -69,41 +69,34 @@ class GlassUiRegressionTest {
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-mdpi")
     fun compactControlsWithLargeChineseText() = capture("compact-zh", 1.3f)
 
-    @Test @Config(qualifiers = "ar-ldrtl-w320dp-h600dp-port-mdpi")
-    fun compactControlsWithLargeRtlText() = capture("compact-ar-rtl", 1.3f, true)
-
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-mdpi")
-    fun portraitReadingSurfaceKeepsSecondaryTextLegibleInBothThemes() {
-        for (night in listOf(true, false)) {
-            val palette = DiPlayPalette.of(night)
-            val backdrop = SceneBackdrop(app, night, quiet = false)
-            backdrop.setBounds(0, 0, 320, 600)
-            val bitmap = Bitmap.createBitmap(320, 600, Bitmap.Config.ARGB_8888)
-            try {
-                backdrop.draw(Canvas(bitmap))
-                for (y in 0 until bitmap.height step 20) for (x in 0 until bitmap.width step 20) {
-                    assertTrue("Photo must not wash out secondary text (night=$night, x=$x, y=$y)",
-                        androidx.core.graphics.ColorUtils.calculateContrast(palette.secondaryText, bitmap.getPixel(x, y)) >= 4.5)
-                }
-            } finally { bitmap.recycle() }
-        }
+    fun portraitReadingSurfaceKeepsSecondaryTextLegible() {
+        val palette = DiPlayPalette.DARK
+        val backdrop = SceneBackdrop(app, night = true, quiet = false)
+        backdrop.setBounds(0, 0, 320, 600)
+        val bitmap = Bitmap.createBitmap(320, 600, Bitmap.Config.ARGB_8888)
+        try {
+            backdrop.draw(Canvas(bitmap))
+            for (y in 0 until bitmap.height step 20) for (x in 0 until bitmap.width step 20) {
+                assertTrue("Photo must not wash out secondary text (x=$x, y=$y)",
+                    androidx.core.graphics.ColorUtils.calculateContrast(palette.secondaryText, bitmap.getPixel(x, y)) >= 4.5)
+            }
+        } finally { bitmap.recycle() }
     }
 
     @Test @Config(qualifiers="zh-rCN-w324dp-h540dp-port-mdpi")
     fun portraitSettingsGlassKeepsSecondaryTextLegible() {
-        for(night in listOf(true,false)) {
-            val p=DiPlayPalette.of(night)
-            val bitmap=Bitmap.createBitmap(324,540,Bitmap.Config.ARGB_8888)
-            try {
-                val canvas=Canvas(bitmap)
-                SceneBackdrop(app,night,quiet=true).apply { setBounds(0,0,324,540);draw(canvas) }
-                GlassChrome.surface(p.surface,p.outline,1f,24f).apply { setBounds(0,0,324,540);draw(canvas) }
-                for(y in 24 until 516 step 20)for(x in 24 until 300 step 20) {
-                    assertTrue("Portrait settings text contrast (night=$night, x=$x, y=$y)",
-                        androidx.core.graphics.ColorUtils.calculateContrast(p.secondaryText,bitmap.getPixel(x,y))>=4.5)
-                }
-            } finally { bitmap.recycle() }
-        }
+        val p=DiPlayPalette.DARK
+        val bitmap=Bitmap.createBitmap(324,540,Bitmap.Config.ARGB_8888)
+        try {
+            val canvas=Canvas(bitmap)
+            SceneBackdrop(app,night=true,quiet=true).apply { setBounds(0,0,324,540);draw(canvas) }
+            GlassChrome.surface(p.surface,p.outline,1f,24f).apply { setBounds(0,0,324,540);draw(canvas) }
+            for(y in 24 until 516 step 20)for(x in 24 until 300 step 20) {
+                assertTrue("Portrait settings text contrast (x=$x, y=$y)",
+                    androidx.core.graphics.ColorUtils.calculateContrast(p.secondaryText,bitmap.getPixel(x,y))>=4.5)
+            }
+        } finally { bitmap.recycle() }
     }
 
     @Test fun cloningAStatefulButtonKeepsTheRenderedGlassMaterial() {
@@ -181,66 +174,63 @@ class GlassUiRegressionTest {
                     assertFalse("The existing disconnect callback still stops the session",CarPlayBackgroundSession.hasSession())
                 } finally { CarPlayBackgroundSession.clear() }
             }
-            for (night in listOf(true, false)) {
-                AirPlayPersistence.saveAppAppearance(app, if (night) AppAppearance.DARK else AppAppearance.LIGHT)
-                ReflectionHelpers.setField(screen, "page", "home")
+            // DiPlay-owned chrome is fixed dark. Legacy LIGHT/AUTO migration is covered by
+            // AdaptiveSettingsUiTest, so rendering the same page twice adds no coverage.
+            AirPlayPersistence.saveAppAppearance(app, AppAppearance.DARK)
+            capturePhonePicker(screen, "$name-dark-phone-picker")
+            ReflectionHelpers.setField(screen, "page", "settings")
+            for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.DISPLAY, SettingsCategory.ABOUT)) {
+                CarPlayBackgroundSession.active=paired && category==SettingsCategory.OVERVIEW
+                ReflectionHelpers.setField(screen, "settingsCategory", category)
                 call(screen, "render")
-                screenshot(screen, "$name-${if (night) "dark" else "light"}-home")
-                capturePhonePicker(screen, "$name-${if (night) "dark" else "light"}-phone-picker")
-                ReflectionHelpers.setField(screen, "page", "settings")
-                for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.DISPLAY, SettingsCategory.ABOUT)) {
-                    CarPlayBackgroundSession.active=paired && category==SettingsCategory.OVERVIEW
-                    ReflectionHelpers.setField(screen, "settingsCategory", category)
-                    call(screen, "render")
-                    screenshot(screen, "$name-${if (night) "dark" else "light"}-${category.name.lowercase()}")
-                    if(category==SettingsCategory.ABOUT && paired) {
-                        screen.updateStorageWorker={ it.run() }
-                        call(screen,"showUpdateStorage")
-                        shadowOf(Looper.getMainLooper()).idle()
-                        val storage=ShadowAlertDialog.getLatestAlertDialog()
-                        try {
-                            val root=storage.window!!.decorView
-                            val d=screen.resources.displayMetrics.density
-                            root.measure(View.MeasureSpec.makeMeasureSpec(((minOf(screen.resources.configuration.screenWidthDp,600)-32)*d).toInt(),View.MeasureSpec.EXACTLY),
-                                View.MeasureSpec.makeMeasureSpec(((screen.resources.configuration.screenHeightDp-32)*d).toInt(),View.MeasureSpec.AT_MOST))
-                            root.layout(0,0,root.measuredWidth,root.measuredHeight)
-                            writeScreenshot(root,"$name-${if(night)"dark"else"light"}-storage")
-                        } finally { storage.dismiss() }
-                    }
-                    if (category == SettingsCategory.DISPLAY) {
-                        val rate = descendants(screen.window.decorView).filterIsInstance<android.widget.Button>()
-                            .first { it.text.startsWith(screen.getString(R.string.frame_rate) + " · ") }
-                        if(paired)previewSession(screen)
-                        rate.performClick()
-                        val dialog = ShadowAlertDialog.getLatestAlertDialog()
-                        shadowOf(Looper.getMainLooper()).idle()
-                        try {
-                            val root = dialog.window!!.decorView
-                            val density = screen.resources.displayMetrics.density
-                            val config = screen.resources.configuration
-                            val width = ((minOf(config.screenWidthDp, 600) - 32) * density).toInt()
-                            val height = ((config.screenHeightDp - 32) * density).toInt()
-                            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
-                            root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                            writeScreenshot(root, "$name-${if (night) "dark" else "light"}-choice")
-                            val actions=listOf(dialog.getButton(AlertDialog.BUTTON_POSITIVE),dialog.getButton(AlertDialog.BUTTON_NEGATIVE))
-                                .sortedBy { it.left }
-                            if(actions[0].top==actions[1].top) {
-                                assertEquals("Dialog actions must have equal heights",actions[0].height,actions[1].height)
-                                assertTrue("Dialog actions need a clear gap",actions[1].left-actions[0].right>=FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP*density-1)
-                            } else {
-                                val stacked=actions.sortedBy { it.top }
-                                assertTrue("Stacked dialog actions need a clear gap",stacked[1].top-stacked[0].bottom>=FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP*density-1)
-                            }
-                            for (id in listOf(android.app.AlertDialog.BUTTON_POSITIVE, android.app.AlertDialog.BUTTON_NEGATIVE)) {
-                                val button = dialog.getButton(id)
-                                assertTrue("Dialog action must retain its touch target", button.height >= 48 * density)
-                                val layout = button.layout
-                                for (line in 0 until layout.lineCount) assertEquals("Dialog action cannot truncate", 0, layout.getEllipsisCount(line))
-                            }
-                        } finally { dialog.dismiss();CarPlayBackgroundSession.clear() }
-                    }
+                screenshot(screen, "$name-dark-${category.name.lowercase()}")
+                if(category==SettingsCategory.ABOUT && paired) {
+                    screen.updateStorageWorker={ it.run() }
+                    call(screen,"showUpdateStorage")
+                    shadowOf(Looper.getMainLooper()).idle()
+                    val storage=ShadowAlertDialog.getLatestAlertDialog()
+                    try {
+                        val root=storage.window!!.decorView
+                        val d=screen.resources.displayMetrics.density
+                        root.measure(View.MeasureSpec.makeMeasureSpec(((minOf(screen.resources.configuration.screenWidthDp,600)-32)*d).toInt(),View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(((screen.resources.configuration.screenHeightDp-32)*d).toInt(),View.MeasureSpec.AT_MOST))
+                        root.layout(0,0,root.measuredWidth,root.measuredHeight)
+                        writeScreenshot(root,"$name-dark-storage")
+                    } finally { storage.dismiss() }
+                }
+                if (category == SettingsCategory.DISPLAY) {
+                    val rate = descendants(screen.window.decorView).filterIsInstance<android.widget.Button>()
+                        .first { it.text.startsWith(screen.getString(R.string.frame_rate) + " · ") }
+                    if(paired)previewSession(screen)
+                    rate.performClick()
+                    val dialog = ShadowAlertDialog.getLatestAlertDialog()
+                    shadowOf(Looper.getMainLooper()).idle()
+                    try {
+                        val root = dialog.window!!.decorView
+                        val density = screen.resources.displayMetrics.density
+                        val config = screen.resources.configuration
+                        val width = ((minOf(config.screenWidthDp, 600) - 32) * density).toInt()
+                        val height = ((config.screenHeightDp - 32) * density).toInt()
+                        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
+                        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+                        writeScreenshot(root, "$name-dark-choice")
+                        val actions=listOf(dialog.getButton(AlertDialog.BUTTON_POSITIVE),dialog.getButton(AlertDialog.BUTTON_NEGATIVE))
+                            .sortedBy { it.left }
+                        if(actions[0].top==actions[1].top) {
+                            assertEquals("Dialog actions must have equal heights",actions[0].height,actions[1].height)
+                            assertTrue("Dialog actions need a clear gap",actions[1].left-actions[0].right>=FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP*density-1)
+                        } else {
+                            val stacked=actions.sortedBy { it.top }
+                            assertTrue("Stacked dialog actions need a clear gap",stacked[1].top-stacked[0].bottom>=FidelitySettingsMetrics.DIALOG_ACTION_GAP_DP*density-1)
+                        }
+                        for (id in listOf(android.app.AlertDialog.BUTTON_POSITIVE, android.app.AlertDialog.BUTTON_NEGATIVE)) {
+                            val button = dialog.getButton(id)
+                            assertTrue("Dialog action must retain its touch target", button.height >= 48 * density)
+                            val layout = button.layout
+                            for (line in 0 until layout.lineCount) assertEquals("Dialog action cannot truncate", 0, layout.getEllipsisCount(line))
+                        }
+                    } finally { dialog.dismiss();CarPlayBackgroundSession.clear() }
                 }
             }
             captureWaiting(screen, name)
