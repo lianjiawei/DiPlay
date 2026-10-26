@@ -17,6 +17,10 @@ android {
         versionName = "0.1"
     }
 
+    androidResources {
+        localeFilters += listOf("zh-rCN", "en")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

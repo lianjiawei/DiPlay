@@ -1,4 +1,0 @@
-<resources>
-    <string name="settings_force_full_settings">Всегда полный макет настроек</string>
-    <string name="settings_force_full_settings_hint">Боковая панель категорий используется, когда альбомное окно достаточно широкое. Узкие и портретные окна адаптируются автоматически, сохраняя ваш выбор.</string>
-</resources>

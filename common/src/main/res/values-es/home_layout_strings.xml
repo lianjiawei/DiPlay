@@ -1,4 +1,0 @@
-<resources>
-    <string name="settings_force_full_settings">Forzar el diseño completo de Ajustes</string>
-    <string name="settings_force_full_settings_hint">Usa una barra lateral de categorías si la ventana horizontal tiene espacio suficiente. Las ventanas estrechas y verticales se adaptan automáticamente y se conserva tu preferencia.</string>
-</resources>

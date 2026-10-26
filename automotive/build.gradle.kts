@@ -15,7 +15,10 @@ android {
         targetSdk = 37
         versionCode = 1201
         versionName = "1.2.1"
+    }
 
+    androidResources {
+        localeFilters += listOf("zh-rCN", "en")
     }
 
     signingConfigs {

@@ -108,8 +108,7 @@
     <string name="app_name">CarPlay</string>
     <string name="language_section_title">Language</string>
     <string name="language_app_language">App language</string>
-    <string name="language_system_default">System default</string>
-    <string name="language_hint">System default follows the device language.</string>
+    <string name="language_hint">DiPlay supports Simplified Chinese and English.</string>
     <string name="language_apply">Apply</string>
     <string name="common_cancel">Cancel</string>
     <string name="a_familiar_drive">A familiar drive.</string>

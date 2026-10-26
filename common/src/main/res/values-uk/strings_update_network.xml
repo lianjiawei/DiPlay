@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="update_no_network">Немає підключення до мережі</string>
-    <string name="update_server_unreachable">Не вдалося підключитися до сервера оновлень. Перевірте підключення та спробуйте ще раз.</string>
-    <string name="update_connection_timeout">Час очікування підключення до сервера оновлень минув. Спробуйте ще раз.</string>
-</resources>

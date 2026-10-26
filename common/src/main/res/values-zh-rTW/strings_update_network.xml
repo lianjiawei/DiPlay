@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="update_no_network">未連接網路</string>
-    <string name="update_server_unreachable">暫時無法連接更新伺服器，請檢查網路後重試。</string>
-    <string name="update_connection_timeout">連接更新伺服器逾時，請稍後重試。</string>
-</resources>

@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="update_no_network">Sin conexión de red</string>
-    <string name="update_server_unreachable">No se puede acceder al servidor de actualizaciones. Comprueba la conexión e inténtalo de nuevo.</string>
-    <string name="update_connection_timeout">Se agotó el tiempo de conexión al servidor de actualizaciones. Inténtalo de nuevo.</string>
-</resources>

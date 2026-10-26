@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="update_no_network">ネットワーク未接続</string>
-    <string name="update_server_unreachable">更新サーバーに接続できません。ネットワークを確認して再試行してください。</string>
-    <string name="update_connection_timeout">更新サーバーへの接続がタイムアウトしました。もう一度お試しください。</string>
-</resources>

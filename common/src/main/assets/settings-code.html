@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{DIPLAY_LANGUAGE}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,38 +37,12 @@ var L = {
     fail:"Could not reach the head unit. Check the connection and try again."},
   zh: {prompt:"请输入车机上显示的验证码。",open:"打开",wrong:"验证码错误。剩余次数：%1。",
     locked:"错误次数过多。请在车机上离开此页面后重新打开，以取得新的验证码。",
-    fail:"无法连接车机，请检查连接后重试。"},
-  "zh-TW": {prompt:"請輸入車機上顯示的驗證碼。",open:"開啟",wrong:"驗證碼錯誤。剩餘次數：%1。",
-    locked:"錯誤次數過多。請在車機上離開此頁面後重新開啟，以取得新的驗證碼。",
-    fail:"無法連線至車機，請檢查連線後重試。"},
-  es: {prompt:"Introduce el código que muestra la unidad principal.",open:"Abrir",wrong:"Código incorrecto. Intentos restantes: %1.",
-    locked:"Demasiados códigos incorrectos. En la unidad principal, sal de la página y ábrela de nuevo para obtener un código nuevo.",
-    fail:"No se pudo conectar con la unidad. Comprueba la conexión e inténtalo de nuevo."},
-  ru: {prompt:"Введите код, показанный на головном устройстве.",open:"Открыть",wrong:"Неверный код. Осталось попыток: %1.",
-    locked:"Слишком много неверных кодов. На головном устройстве закройте страницу и откройте её снова, чтобы получить новый код.",
-    fail:"Не удалось связаться с устройством. Проверьте соединение и повторите попытку."},
-  uk: {prompt:"Введіть код, показаний на головному пристрої.",open:"Відкрити",wrong:"Неправильний код. Залишилося спроб: %1.",
-    locked:"Забагато неправильних кодів. На головному пристрої закрийте сторінку й відкрийте її знову, щоб отримати новий код.",
-    fail:"Не вдалося зв'язатися з пристроєм. Перевірте з'єднання та спробуйте ще раз."},
-  ar: {prompt:"أدخل الرمز المعروض على وحدة القيادة.",open:"فتح",wrong:"رمز غير صحيح. المحاولات المتبقية: %1.",
-    locked:"أُدخلت رموز غير صحيحة كثيرة. في وحدة القيادة، غادر الصفحة وافتحها مجددًا للحصول على رمز جديد.",
-    fail:"تعذّر الوصول إلى وحدة القيادة. تحقق من الاتصال وأعد المحاولة."},
-  ja: {prompt:"車載端末に表示されているコードを入力してください。",open:"開く",wrong:"コードが違います。残り %1 回です。",
-    locked:"間違ったコードが多すぎます。車載端末でこのページを閉じてもう一度開くと、新しいコードが表示されます。",
-    fail:"車載端末に接続できませんでした。接続を確認してもう一度お試しください。"}
+    fail:"无法连接车机，请检查连接后重试。"}
 };
-var lang = (navigator.language || "en").toLowerCase();
-var key = lang in L ? lang
-  : lang.indexOf("zh") === 0 ? (lang.indexOf("tw") > 0 || lang.indexOf("hk") > 0 || lang.indexOf("hant") > 0 ? "zh-TW" : "zh")
-  : lang.indexOf("es") === 0 ? "es"
-  : lang.indexOf("ru") === 0 ? "ru"
-  : lang.indexOf("uk") === 0 ? "uk"
-  : lang.indexOf("ar") === 0 ? "ar"
-  : lang.indexOf("ja") === 0 ? "ja" : "en";
+var key = "{{DIPLAY_LANGUAGE}}" === "en" ? "en" : "zh";
 var t = L[key];
 var $ = function(id) { return document.getElementById(id); };
 document.documentElement.lang = key;
-document.documentElement.dir = key === "ar" ? "rtl" : "ltr";
 $("prompt").textContent = t.prompt;
 $("open").textContent = t.open;
 function closed() { $("result").textContent = t.locked; $("code").disabled = true; $("open").disabled = true; }

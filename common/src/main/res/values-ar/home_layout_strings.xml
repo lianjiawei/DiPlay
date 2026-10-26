@@ -1,4 +1,0 @@
-<resources>
-    <string name="settings_force_full_settings">فرض تخطيط الإعدادات الكامل</string>
-    <string name="settings_force_full_settings_hint">استخدام شريط الفئات عندما تكون النافذة الأفقية واسعة بما يكفي. تتكيف النوافذ الضيقة والوضع العمودي تلقائيًا مع الاحتفاظ باختيارك.</string>
-</resources>

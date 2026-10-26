@@ -257,9 +257,8 @@
     <string name="keep_your_iphone_nearby_with_bluetooth_and_wi_fi_on_allow">请将 iPhone 放在附近并开启蓝牙和 Wi-Fi。\niPhone 出现提示时允许使用 CarPlay。</string>
     <string name="language_app_language">应用语言</string>
     <string name="language_apply">应用</string>
-    <string name="language_hint">“跟随系统”将使用设备语言。</string>
+    <string name="language_hint">DiPlay 仅支持简体中文与 English。</string>
     <string name="language_section_title">语言</string>
-    <string name="language_system_default">跟随系统</string>
     <string name="later">稍后</string>
     <string name="left_hand_drive">左舵</string>
     <string name="linux_device_path_for_example_dev_i2c_1">Linux 设备路径，例如 /dev/i2c-1。</string>

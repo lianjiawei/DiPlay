@@ -18,7 +18,10 @@ android {
         targetSdk = 37
         versionCode = 85
         versionName = "1.1.9"
+    }
 
+    androidResources {
+        localeFilters += listOf("zh-rCN", "en")
     }
 
 

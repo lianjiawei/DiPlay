@@ -459,7 +459,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         if (action != null) action(granted) else exportDiagnostics()
     }
 
-    private var languagePreferenceAtCreate = AppLocale.SYSTEM
+    private var languagePreferenceAtCreate = AppLocale.SIMPLIFIED_CHINESE
 
     private var interfaceOverride: Configuration? = null
     private var interfaceSystemDensityDpi = 0
@@ -2888,7 +2888,7 @@ class DiPlayActivity : CarPlayHostActivity() {
                 export = { SettingsBackupCodec.export(this, version()) },
                 import = { SettingsBackupCodec.import(this, it) },
                 report = { diagnosticReportText(applicationContext).toByteArray(Charsets.UTF_8) },
-                codePage = assets.open("settings-code.html").use { it.readBytes() },
+                codePage = localizedSettingsPage("settings-code.html"),
             )
             created.onCodeEntryClosed = {
                 runOnUiThread {
@@ -2966,7 +2966,15 @@ class DiPlayActivity : CarPlayHostActivity() {
         backupSummary = null
     }
 
-    private fun backupPageHtml(): ByteArray = assets.open("settings-backup.html").use { it.readBytes() }
+    private fun backupPageHtml(): ByteArray = localizedSettingsPage("settings-backup.html")
+
+    private fun localizedSettingsPage(asset: String): ByteArray {
+        val language = if (AppLocale.preference(this) == AppLocale.ENGLISH) "en" else "zh"
+        return assets.open(asset).use { it.readBytes() }
+            .toString(Charsets.UTF_8)
+            .replace("{{DIPLAY_LANGUAGE}}", language)
+            .toByteArray(Charsets.UTF_8)
+    }
 
     private fun updateRow(): View {
         renderedUpdateStage = updateStage
