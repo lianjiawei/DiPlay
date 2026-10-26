@@ -60,6 +60,15 @@ class ScreenCodecTest {
         assertFalse(ScreenCodec.lengthPrefixedToAnnexBInPlace(byteArrayOf(0, 0, 0, 1), 4))
     }
 
+    @Test fun existingAnnexBPictureIsAcceptedWithoutInspectingThePooledTail() {
+        val picture = byteArrayOf(0, 0, 0, 1, 0x65, 1, 2, 3)
+        val pooled = ByteArray(32) { 0x55 }.also { picture.copyInto(it) }
+
+        assertTrue(ScreenCodec.lengthPrefixedToAnnexBInPlace(pooled, picture.size))
+        assertArrayEquals(picture, pooled.copyOf(picture.size))
+        assertTrue(pooled.copyOfRange(picture.size, pooled.size).all { it == 0x55.toByte() })
+    }
+
     @Test fun readsTheFrameTimeFromTheScreenHeader() {
         val header = ByteArray(128)
         // NTP 32.32 little-endian at byte 8: 3 s + 0x40000000/2^32 s = 3.25 s.

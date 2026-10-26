@@ -935,11 +935,16 @@ class AndroidMediaSink(
 
     /** Standalone-array seam retained for local hosts and focused tests. */
     fun onVideoFrame(type: Int, naluBytes: ByteArray) =
-        onVideoFrame(type, VideoAccessUnit.unpooled(naluBytes), 0L, 0L)
+        onVideoFrame(type, VideoAccessUnit.unpooled(MediaCodecSupport.toAnnexB(naluBytes)), 0L, 0L)
 
     /** Standalone-array seam retained for local hosts and focused tests. */
     fun onVideoFrame(type: Int, naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) =
-        onVideoFrame(type, VideoAccessUnit.unpooled(naluBytes), senderNanos, arrivalNanos)
+        onVideoFrame(
+            type,
+            VideoAccessUnit.unpooled(MediaCodecSupport.toAnnexB(naluBytes)),
+            senderNanos,
+            arrivalNanos,
+        )
 
     override fun onScreenStreamActive(type: Int, active: Boolean) {
         synchronized(videoOwnershipLock) {

@@ -115,39 +115,40 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     ) {
         when (header[OPCODE_OFFSET].toInt() and 0xff) {
             OP_VIDEO_FRAME -> {
-                val payload = if (body.length >= ScreenCodec.TAG_SIZE) {
+                val payload: VideoBufferPool.Lease
+                val payloadLength: Int
+                if (body.length >= ScreenCodec.TAG_SIZE) {
                     val start = System.nanoTime()
-                    val plain = buffers.acquire(body.length - ScreenCodec.TAG_SIZE)
-                    val plainLength = try {
+                    payload = buffers.acquire(body.length - ScreenCodec.TAG_SIZE)
+                    payloadLength = try {
                         decryptor.open(
                             frameCounter.get(),
                             body.bytes,
                             body.length,
                             header,
-                            plain.bytes,
+                            payload.bytes,
                         )
                     } catch (error: Throwable) {
-                        plain.close()
+                        payload.close()
                         throw error
                     }
                     stats.decrypted(System.nanoTime() - start, body.length)
                     frameCounter.incrementAndGet()
-                    plain to plainLength
                 } else {
-                    val plain = buffers.acquire(body.length)
-                    body.bytes.copyInto(plain.bytes, endIndex = body.length)
-                    plain to body.length
+                    payload = buffers.acquire(body.length)
+                    body.bytes.copyInto(payload.bytes, endIndex = body.length)
+                    payloadLength = body.length
                 }
                 if (firstFrameLogged.compareAndSet(false, true)) {
                     Log.i(
                         TAG,
-                        "video first decrypted frame sealed=${body.length} plain=${payload.second} " +
-                            "head=${payload.first.bytes.hexPrefix(16, payload.second)} " +
+                        "video first decrypted frame sealed=${body.length} plain=$payloadLength " +
+                            "head=${payload.bytes.hexPrefix(16, payloadLength)} " +
                             "chacha=${decryptor.implementation}",
                     )
                 }
-                val valid = ScreenCodec.lengthPrefixedToAnnexBInPlace(payload.first.bytes, payload.second)
-                val accessUnit = VideoAccessUnit(payload.first, if (valid) payload.second else 0)
+                val valid = ScreenCodec.lengthPrefixedToAnnexBInPlace(payload.bytes, payloadLength)
+                val accessUnit = VideoAccessUnit(payload, if (valid) payloadLength else 0)
                 try {
                     listener.onFrame(accessUnit, ScreenCodec.senderNanos(header), arrivalNanos)
                 } catch (error: Throwable) {
@@ -246,7 +247,7 @@ object ScreenCodec {
             if (unitLength <= 0 || unitLength > length - offset) return false
             offset += unitLength
         }
-        if (offset != length) return false
+        if (offset != length) return payload.startsWithStartCode(length) && length > 4
 
         offset = 0
         while (offset + 4 <= length) {
