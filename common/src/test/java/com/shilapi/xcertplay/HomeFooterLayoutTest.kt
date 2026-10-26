@@ -112,6 +112,7 @@ class HomeFooterLayoutTest {
             for ((name, qualifiers) in listOf(
                 "compact" to "zh-rCN-w800dp-h480dp-land-mdpi",
                 "phone-landscape" to "zh-rCN-w880dp-h400dp-land-xxhdpi",
+                "lincoln-head-unit-large" to "zh-rCN-w960dp-h540dp-land-xhdpi",
                 "full-large" to "zh-rCN-w1280dp-h720dp-land-mdpi",
                 "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi")) {
                 RuntimeEnvironment.setQualifiers(qualifiers)
@@ -184,6 +185,10 @@ class HomeFooterLayoutTest {
                             assertTrue("$name/$state label fits: ${label.text}; layout=${label.layout.height}, height=${label.height}, " +
                                 "padding=${label.compoundPaddingTop}+${label.compoundPaddingBottom}, lines=${label.layout.lineCount}",
                                 label.layout.height <= label.height-label.compoundPaddingTop-label.compoundPaddingBottom)
+                        }
+                        if (connectionMode.isShown) {
+                            assertEquals("$name/$state connection mode stays on one line", 1, connectionMode.layout.lineCount)
+                            assertEquals("$name/$state connection mode must not retain horizontal text scrolling", 0, connectionMode.scrollX)
                         }
                         when (state) {
                             "connecting" -> assertEquals(activity.getString(R.string.home_cancel_connection), disconnect.text.toString())

@@ -61,7 +61,8 @@ internal class ReferenceHomeScene(
         fun constrainAction(view: View) {
             if (view is TextView) {
                 view.textSize = actionMetrics.textSp.toFloat()
-                if (view.maxLines != ConnectionPageLayout.ACTION_MAX_LINES) view.maxLines = ConnectionPageLayout.ACTION_MAX_LINES
+                if (view.tag == ConnectionPageLayout.CONNECTION_MODE_ACTION_TAG) view.maxLines = 1
+                else if (view.maxLines != ConnectionPageLayout.ACTION_MAX_LINES) view.maxLines = ConnectionPageLayout.ACTION_MAX_LINES
                 view.ellipsize = android.text.TextUtils.TruncateAt.END
             } else if (view is ViewGroup) for (index in 0 until view.childCount) constrainAction(view.getChildAt(index))
         }

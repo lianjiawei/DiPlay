@@ -48,7 +48,7 @@ class HomeCompactLayoutTest {
         fun text(id: Int) = descendants(root).filterIsInstance<TextView>()
             .single { it.visibility == View.VISIBLE && it.text.toString() == activity.getString(id) }
         val connect = text(R.string.ui_glass_connect_carplay)
-        val connectionMode = text(R.string.home_connection_mode_usb)
+        val connectionMode = text(R.string.home_connection_mode_usb_short)
         val connectPosition = IntArray(2).also(connect::getLocationOnScreen)
         val connectionModePosition = IntArray(2).also(connectionMode::getLocationOnScreen)
         assertTrue(connectionModePosition[1] >= connectPosition[1] + connect.height)

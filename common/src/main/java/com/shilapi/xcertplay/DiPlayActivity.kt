@@ -1236,15 +1236,13 @@ class DiPlayActivity : CarPlayHostActivity() {
             addView(connectButton, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
         }
         val hero = ConnectionContentLayout(this, headline, homeConnectionRing!!, phone, status!!, primarySlot)
-        val connectionMode=button(homeConnectionModeLabel(),false,::openHomeConnectionSettings).apply {
-            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false)
-            persistentStartIcon=getDrawable(R.drawable.ic_glass_connection)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
-            text=homeConnectionModeLabel()
-            compoundDrawablePadding=dp(8)
+        val connectionMode=headerButton(homeConnectionModeLabel(compact = true),R.drawable.ic_glass_connection,true,::openHomeConnectionSettings).apply {
+            minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false);maxLines=1;centeredIconGroup=true
+            tag=ConnectionPageLayout.CONNECTION_MODE_ACTION_TAG
+            contentDescription=homeConnectionModeLabel()
         }
         homeConnectionFooter=connectionMode
         val footerStart=android.widget.FrameLayout(this).apply {
-            setMeasureAllChildren(true)
             addView(connectionMode,android.widget.FrameLayout.LayoutParams(-1,-1))
             addView(disconnectButton,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
@@ -6555,6 +6553,7 @@ class DiPlayActivity : CarPlayHostActivity() {
             disconnectButton?.isEnabled = true
             lastRunning = running
         }
+        (if (running) disconnectButton else homeConnectionFooter)?.bringToFront()
         connectButton?.isEnabled = setupError == null && (!running || connected || projectionNeedsRetry || projectionNeedsWifiReset)
         refreshReconnectBar()
     }
@@ -6563,7 +6562,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         val compact = width > 0 && ConnectionPageLayout.compactActions(this, width)
         val running = CarPlayBackgroundSession.hasSession() || projectionIsStarting
         val connected = running && mainProjectionReady
-        setHomeText(homeConnectionFooter, homeConnectionModeLabel(compact))
+        setHomeText(homeConnectionFooter, homeConnectionModeLabel(compact = true))
         homeConnectionFooter?.contentDescription = homeConnectionModeLabel()
         setHomeText(disconnectButton, brandString(if (connected) R.string.home_disconnect_carplay else R.string.home_cancel_connection))
         disconnectButton?.contentDescription = disconnectButton?.text

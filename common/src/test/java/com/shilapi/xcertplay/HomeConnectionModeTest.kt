@@ -39,8 +39,8 @@ class HomeConnectionModeTest {
 
     @Test fun homeUsesTheConfiguredModeAndTheFooterOnlyOpensConnectionSettings() {
         for ((mode, expectedWireless, label) in listOf(
-            Triple(DefaultConnectionMode.USB, false, R.string.home_connection_mode_usb),
-            Triple(DefaultConnectionMode.WIRELESS, true, R.string.home_connection_mode_wireless),
+            Triple(DefaultConnectionMode.USB, false, R.string.home_connection_mode_usb_short),
+            Triple(DefaultConnectionMode.WIRELESS, true, R.string.home_connection_mode_wireless_short),
         )) {
             DiPlayPreferences.saveDefaultConnectionMode(app, mode)
             AirPlayPersistence.saveWirelessEnabled(app, !expectedWireless)
@@ -55,6 +55,9 @@ class HomeConnectionModeTest {
 
                 val connectionMode = ReflectionHelpers.getField<Button>(activity, "homeConnectionFooter")
                 assertEquals(activity.getString(label), connectionMode.text.toString())
+                assertEquals(activity.getString(if (expectedWireless) R.string.home_connection_mode_wireless
+                    else R.string.home_connection_mode_usb), connectionMode.contentDescription.toString())
+                assertEquals(1, connectionMode.maxLines)
                 connectionMode.performClick()
 
                 assertEquals("settings", ReflectionHelpers.getField<String>(activity, "page"))
@@ -83,8 +86,8 @@ class HomeConnectionModeTest {
     @Test fun lastUsedModeDisplaysTheEffectiveTransportInsteadOfAnAmbiguousLabel() {
         DiPlayPreferences.saveDefaultConnectionMode(app, DefaultConnectionMode.LAST_USED)
         for ((wireless, label) in listOf(
-            false to R.string.home_connection_mode_usb,
-            true to R.string.home_connection_mode_wireless,
+            false to R.string.home_connection_mode_usb_short,
+            true to R.string.home_connection_mode_wireless_short,
         )) {
             AirPlayPersistence.saveWirelessEnabled(app, wireless)
             val controller = Robolectric.buildActivity(DiPlayActivity::class.java,

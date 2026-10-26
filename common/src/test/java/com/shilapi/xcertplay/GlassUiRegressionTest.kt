@@ -134,7 +134,7 @@ class GlassUiRegressionTest {
             call(screen, "render")
             screenshot(screen, "$name-home")
             val texts = descendants(screen.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }.toList()
-            for (id in listOf(R.string.ui_glass_connect_carplay, R.string.choose_iphone, R.string.home_connection_mode_usb, R.string.settings)) {
+            for (id in listOf(R.string.ui_glass_connect_carplay, R.string.choose_iphone, R.string.home_connection_mode_usb_short, R.string.settings)) {
                 if(paired && id==R.string.choose_iphone)continue
                 val label = screen.getString(id)
                 val action = descendants(screen.window.decorView).filterIsInstance<TextView>()

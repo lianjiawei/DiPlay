@@ -51,9 +51,10 @@ internal object ConnectionPageLayout {
         val key = "$width/${metrics.densityDpi}/${resources.configuration.fontScale}/${resources.configuration.locales.toLanguageTags()}/${resources.configuration.layoutDirection}"
         cachedActions?.takeIf { actionKey == key }?.let { return it }
         val compact = compactActions(context, width)
-        val fullConnectionModes = setOf(R.string.home_connection_mode_wireless, R.string.home_connection_mode_usb)
         val compactConnectionModes = setOf(R.string.home_connection_mode_wireless_short, R.string.home_connection_mode_usb_short)
-        val connectionModes = if (compact) compactConnectionModes else fullConnectionModes
+        // The footer always uses the concise transport name. The full wording remains its
+        // accessibility description and must never make this fixed-width action wrap.
+        val connectionModes = compactConnectionModes
         val icons = connectionModes + setOf(R.string.home_cancel_connection, R.string.home_disconnect_carplay, R.string.settings)
         val labels = icons + setOf(R.string.ui_glass_connect_carplay, R.string.open_carplay,
             R.string.ui_glass_connecting_action,
@@ -78,7 +79,6 @@ internal object ConnectionPageLayout {
             for (id in labels) {
                 measure.text = context.getString(id)
                 val iconReserve = when {
-                    id in fullConnectionModes -> ACTION_ICON_RESERVE_DP * 2
                     id in icons -> ACTION_ICON_RESERVE_DP
                     else -> 0
                 }
@@ -97,4 +97,6 @@ internal object ConnectionPageLayout {
         }
         error("No home action typography")
     }
+
+    const val CONNECTION_MODE_ACTION_TAG = "home_connection_mode_action"
 }
