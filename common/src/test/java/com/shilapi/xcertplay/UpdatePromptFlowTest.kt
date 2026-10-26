@@ -58,7 +58,7 @@ class UpdatePromptFlowTest {
         val queued = mutableListOf<Runnable>()
         c.get().updateDownloadWorker = queued::add
         val prompt = requireNotNull(prompt(c.get()))
-        assertTrue(prompt.dialog.findViewById<TextView>(android.R.id.message).text.contains("USB recovery"))
+        assertTrue(prompt.messageView.text.contains("USB recovery"))
         assertEquals(c.get().getString(R.string.update_download), prompt.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
         assertTrue(queued.isEmpty())
         assertNull(shadowOf(c.get()).nextStartedActivity)

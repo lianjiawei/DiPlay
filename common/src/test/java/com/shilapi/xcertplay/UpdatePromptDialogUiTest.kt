@@ -86,6 +86,24 @@ class UpdatePromptDialogUiTest {
     }
 
     @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
+    fun longReleaseNotesScrollWithoutMovingTheActions() {
+        val longRelease = release.copy(releaseNotes = (1..80).joinToString("\n") { "第 $it 项更新说明" })
+        val dialog = open(UpdatePromptStage.OFFER, null, longRelease)
+        val root = dialog.dialog.window!!.decorView
+        val metrics = root.resources.displayMetrics
+        root.measure(View.MeasureSpec.makeMeasureSpec((320 * metrics.density).toInt(), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec((568 * metrics.density).toInt(), View.MeasureSpec.AT_MOST))
+        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+        assertTrue(dialog.messageView.measuredHeight > dialog.messageScroll.measuredHeight)
+        assertTrue(dialog.messageScroll.canScrollVertically(1))
+        for (button in listOf(dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE),
+            dialog.dialog.getButton(AlertDialog.BUTTON_NEGATIVE))) {
+            assertEquals(View.VISIBLE, button.visibility)
+            assertTrue(button.height >= 48 * metrics.density)
+        }
+    }
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun compactChineseLargeFontScreenshots() = capture("compact-zh")
 
@@ -93,7 +111,7 @@ class UpdatePromptDialogUiTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun expandedEnglishLargeFontScreenshots() = capture("expanded-en")
 
-    private fun open(stage: UpdatePromptStage, percent: Int?): UpdatePromptDialog {
+    private fun open(stage: UpdatePromptStage, percent: Int?, candidate: UpdateRelease = release): UpdatePromptDialog {
         val app = RuntimeEnvironment.getApplication()
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)
         val c = Robolectric.buildActivity(DiPlayActivity::class.java,
@@ -101,7 +119,7 @@ class UpdatePromptDialogUiTest {
         controller = c
         return UpdatePromptDialog(c.get(), { downloads++ }, { installs++ }, {}).also {
             prompt = it
-            it.show(release, stage, percent, "Test download failure")
+            it.show(candidate, stage, percent, "Test download failure")
             shadowOf(Looper.getMainLooper()).idle()
         }
     }
@@ -130,7 +148,7 @@ class UpdatePromptDialogUiTest {
                     (0 until layout.lineCount).all { layout.getLineMax(it)<=layout.width+2 })
             }
             for (text in descendants(root).filterIsInstance<TextView>()) {
-                if (text.visibility != View.VISIBLE || text.id == android.R.id.message) continue
+                if (text.visibility != View.VISIBLE || text === dialog.messageView) continue
                 val layout = text.layout ?: continue
                 assertTrue("Truncated dialog control: ${text.text}",
                     (0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 })
