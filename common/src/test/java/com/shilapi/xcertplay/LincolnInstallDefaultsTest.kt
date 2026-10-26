@@ -66,6 +66,7 @@ class LincolnInstallDefaultsTest {
         assertTrue(LincolnClusterSettings.navigation(context))
         assertTrue(LincolnClusterSettings.music(context))
         assertTrue(LincolnClusterSettings.remaining(context))
+        assertFalse(LincolnClusterSettings.enhancedNavigation(context))
     }
 
     @Test fun aSavedChoiceStillWins() {

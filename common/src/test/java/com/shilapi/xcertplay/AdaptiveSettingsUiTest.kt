@@ -718,6 +718,45 @@ class AdaptiveSettingsUiTest {
 
     @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun clusterCompatibilityScreenshotCompactChineseLargeFont() =
+        captureClusterCompatibility("compact-zh", AppLocale.SIMPLIFIED_CHINESE)
+
+    @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun clusterCompatibilityScreenshotExpandedEnglishLargeFont() =
+        captureClusterCompatibility("expanded-en", AppLocale.ENGLISH)
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w1320dp-h600dp-xhdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun clusterCompatibilityScreenshotHuaweiPhone() =
+        captureClusterCompatibility("huawei-2640x1200-zh", AppLocale.SIMPLIFIED_CHINESE, 1f)
+
+    private fun captureClusterCompatibility(name: String, language: String, fontScale: Float = 1.3f) {
+        RuntimeEnvironment.setFontScale(fontScale)
+        val screen = openSettings(language)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.NAVIGATION)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        layoutRoot(screen)
+        val title = screen.getString(R.string.settings_lincoln_cluster_enhanced_navigation)
+        val switch = texts(screen).single { it.text == title }
+        val layout = requireNotNull(switch.layout)
+        assertTrue((0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 })
+        assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_lincoln_cluster_navigation) })
+        val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+        val content = scroll.getChildAt(0)
+        val bitmap = Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888)
+        try {
+            content.draw(Canvas(bitmap))
+            val output = Paths.get("build/reports/lincoln-cluster-ui/$name.png")
+            Files.createDirectories(output.parent)
+            Files.newOutputStream(output).use { stream ->
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+            }
+        } finally { bitmap.recycle() }
+    }
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun cornerRadiusScreenshotCompactLargeFont() =
         captureCornerRadius("compact-zh", AppLocale.SIMPLIFIED_CHINESE)
 

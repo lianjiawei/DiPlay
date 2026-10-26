@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay.lincoln
 
+import com.shilapi.xcertplay.hud.BydAppleManeuver
+import com.shilapi.xcertplay.hud.BydClusterFrame
 import java.text.BreakIterator
 import java.util.Locale
 import java.util.UUID
@@ -27,6 +29,37 @@ object LincolnClusterProtocol {
     const val ACTION_NAV_REMAIN = "com.baidu.car.navi.REMAIN"
     const val ACTION_MEDIA_INFO = "com.baidu.car.radio.notify.PLAY_INFO"
 
+    // Additional factory Baidu channels used by head units that do not consume INFO alone.
+    const val ACTION_NAV_ACTIVE_OPEN = "ACTION_PHONE_NAV_ACTIVE_OPEN"
+    const val ACTION_NAV_ACTIVE_CLOSE = "ACTION_PHONE_NAV_ACTIVE_CLOSE"
+    const val ACTION_STANDARD_BROADCAST_SEND = "com.baidu.naviauto.STANDARD_BROADCAST_SEND"
+    const val ACTION_START_NAVIGATION = "com.baidu.naviauto.start_navigation"
+    const val ACTION_STOP_NAVIGATION = "com.baidu.naviauto.stop_navigation"
+    const val ACTION_TURN_BY_TURN = "com.baidu.naviauto.action.send"
+    const val EXTRA_KEY_TYPE = "KEY_TYPE"
+    const val EXTRA_MODULE_TYPE = "MODULE_TYPE"
+    const val VALUE_MODULE_NAVI = "NAVI"
+    const val VALUE_KEY_TYPE_NAV_START = "10101"
+    const val VALUE_KEY_TYPE_NAV_STOP = "10100"
+    const val FLAG_INCLUDE_STOPPED_PACKAGES = 32
+    const val NO_TURN_INDEX = -1
+
+    private const val EXTRA_TURN_TYPE = "KEY_TURNTYPE"
+    private const val EXTRA_TURN_TYPE_ALIAS = "turnType"
+    private const val EXTRA_MANEUVER_ID = "maneuverId"
+    private const val EXTRA_RES_ID = "resid"
+    private const val EXTRA_MANEUVER_NAME = "maneuverName"
+    private const val EXTRA_ICON_NAME = "icon_name"
+    private const val EXTRA_REMAIN_DIST = "remainDist"
+    private const val EXTRA_REMAIN_DIST_UNDERSCORE = "remain_dist"
+    private const val EXTRA_DISTANCE_TO_NEXT = "DistanceToNextManeuver"
+    private const val EXTRA_MANEUVER_TIPS = "maneuverTips"
+    private const val EXTRA_STREET_NAME = "StreetName"
+    private const val EXTRA_STREET_NAME_2 = "StreetName2"
+    private const val EXTRA_CURRENT_STREET_NAME = "CurentStreetName"
+    private const val EXTRA_CURRENT_STREET_NAME_2 = "CurentStreetName2"
+    private const val EXTRA_ROAD_NAME = "road_name"
+
     // Extras the tested build sends.
     const val EXTRA_STATE = "state"
     const val EXTRA_NAME = "name"
@@ -36,6 +69,8 @@ object LincolnClusterProtocol {
     // BargraphSteps itself; that downstream vendor-Bundle key is not a broadcast input.
     const val EXTRA_MANEUVER_LATITUDE = "latitude"
     const val EXTRA_MANEUVER_LONGITUDE = "longitude"
+    const val EXTRA_INFO_LATITUDE = EXTRA_MANEUVER_LATITUDE
+    const val EXTRA_INFO_LONGITUDE = EXTRA_MANEUVER_LONGITUDE
     const val EXTRA_REMAIN_DISTANCE = "remainDistance"
     const val EXTRA_REMAIN_TIME = "remainTime"
     const val EXTRA_TITLE = "title"
@@ -56,6 +91,9 @@ object LincolnClusterProtocol {
 
     /** The factory cluster applies the same 19-unit limit to its short media-text slots. */
     const val MAX_MEDIA_TEXT_CHARS = 19
+
+    /** The secondary navigation channel has a separate 21-unit street field. */
+    private const val MAX_TURN_STREET_CHARS = 21
 
     /** Beyond this the cluster is not asked to show a distance (matches the field build). */
     const val MAX_DISTANCE_METERS = 2_000_000
@@ -79,6 +117,65 @@ object LincolnClusterProtocol {
         else -> "turn_front"
     }
 
+    /** Factory Baidu turn index used by the secondary broadcast and HUD socket. */
+    fun turnIndex(maneuverType: Int?, drivingSide: Int): Int {
+        val type = maneuverType ?: return NO_TURN_INDEX
+        val icon = BydClusterFrame.from(
+            BydAppleManeuver(distanceMeters = 0, type = type, drivingSide = drivingSide),
+        ).icon
+        return when (icon) {
+            2, 6 -> 7
+            3, 7 -> 3
+            4 -> 8
+            5 -> 2
+            8, 19 -> 0
+            9 -> 1
+            11, 17 -> 9
+            12, 18 -> 10
+            15 -> 24
+            else -> NO_TURN_INDEX
+        }
+    }
+
+    fun hasTurnIcon(index: Int): Boolean = index != NO_TURN_INDEX && turnName(index).isNotEmpty()
+
+    fun turnName(index: Int): String = when (index) {
+        0 -> "turn_back"
+        1 -> "turn_front"
+        2 -> "turn_right_front"
+        3 -> "turn_right"
+        7 -> "turn_left"
+        8 -> "turn_left_front"
+        9 -> "turn_ring"
+        10 -> "turn_ring_out"
+        24 -> "turn_dest"
+        else -> ""
+    }
+
+    fun turnByTurnExtras(index: Int, metres: Int, street: String): Map<String, Any> {
+        val name = turnName(index)
+        val icon = if (name.isEmpty()) "" else "$name.png"
+        return linkedMapOf(
+            EXTRA_TURN_TYPE to index,
+            EXTRA_TURN_TYPE_ALIAS to index,
+            EXTRA_MANEUVER_ID to index,
+            EXTRA_RES_ID to index,
+            EXTRA_MANEUVER_NAME to icon,
+            EXTRA_ICON_NAME to icon,
+            EXTRA_DISTANCE to metres.toString(),
+            EXTRA_REMAIN_DIST to metres,
+            EXTRA_REMAIN_DISTANCE to metres,
+            EXTRA_REMAIN_DIST_UNDERSCORE to metres,
+            EXTRA_DISTANCE_TO_NEXT to metres,
+            EXTRA_MANEUVER_TIPS to "$metres 米",
+            EXTRA_STREET_NAME to street,
+            EXTRA_STREET_NAME_2 to "",
+            EXTRA_CURRENT_STREET_NAME to street,
+            EXTRA_CURRENT_STREET_NAME_2 to "",
+            EXTRA_ROAD_NAME to street,
+        )
+    }
+
     /**
      * Match Baidu's factory HUD packet distance: exact below 1 km, floor to 100 m below 100 km,
      * then floor to 1 km. Negative and implausibly large values are rejected before formatting.
@@ -93,6 +190,8 @@ object LincolnClusterProtocol {
     }
 
     fun sanitizeRoadName(text: String?): String? = sanitizeText(text, MAX_ROAD_NAME_CHARS)
+
+    fun sanitizeTurnStreet(text: String?): String = sanitizeText(text, MAX_TURN_STREET_CHARS).orEmpty()
 
     fun sanitizeMediaText(text: String?): String? = sanitizeText(text, MAX_MEDIA_TEXT_CHARS)
 

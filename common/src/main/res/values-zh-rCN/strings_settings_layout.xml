@@ -28,7 +28,6 @@
     <string name="settings_open_advanced">打开高级设置</string>
     <string name="settings_reconnect_pending">更改将在重新连接后生效</string>
     <string name="settings_reconnect_now">重新连接</string>
-    <string name="settings_byd_navigation_unavailable">此车机不支持比亚迪仪表盘和 HUD 导航提示。</string>
     <string name="settings_search_hint">搜索设置</string>
     <string name="settings_search_empty">没有匹配的设置。请换个词试试。</string>
 </resources>

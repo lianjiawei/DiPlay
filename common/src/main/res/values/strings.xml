@@ -400,7 +400,6 @@
     <string name="settings_vehicle_summary">Driving side, wheel keys, car button and CarPlay gestures</string>
     <string name="settings_reconnect_pending">Changes apply after reconnecting.</string>
     <string name="settings_reconnect_now">Reconnect</string>
-    <string name="settings_byd_navigation_unavailable">BYD dashboard and HUD guidance is not available on this head unit.</string>
     <string name="settings_advanced_media">Video and audio</string>
     <string name="settings_wheel_keys">Wheel keys</string>
     <string name="settings_experimental_display">Display (experimental)</string>
@@ -1009,6 +1008,8 @@
     <string name="settings_lincoln_cluster_description">Forward CarPlay guidance and song text to the verified Lincoln/Ford instrument-cluster app. Off by default; remove the standalone bridge first and do not run the car\'s own navigation at the same time.</string>
     <string name="settings_lincoln_cluster_navigation">Cluster navigation</string>
     <string name="settings_lincoln_cluster_navigation_description">Send the next turn arrow, distance and road to the cluster app. Takes effect at once.</string>
+    <string name="settings_lincoln_cluster_enhanced_navigation">Cluster compatibility</string>
+    <string name="settings_lincoln_cluster_enhanced_navigation_description">Also send the factory navigation broadcasts and HUD socket used by other Lincoln/Ford clusters. Enable only if the normal cluster navigation does not appear. Takes effect at once.</string>
     <string name="settings_lincoln_cluster_music">Cluster song text</string>
     <string name="settings_lincoln_cluster_music_description">Send the current line and play state to the cluster: apps that scroll lyrics put the lyric line here, others put the song name. The artist is left off. Takes effect at once.</string>
     <string name="settings_lincoln_cluster_remaining">Cluster remaining distance/time (experimental)</string>

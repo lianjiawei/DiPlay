@@ -30,13 +30,16 @@ import org.robolectric.annotation.Config
 class LincolnClusterOutputTest {
     private val app: Application get() = RuntimeEnvironment.getApplication()
     private var now = 1_000_000_000L
+    private val hud = RecordingLincolnHudSocket()
 
     @Before fun setUp() {
         LincolnClusterSettings.setClusterPackage(app, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         LincolnClusterSettings.setNavigation(app, true)
+        LincolnClusterSettings.setEnhancedNavigation(app, false)
         LincolnClusterSettings.setMusic(app, false)
         LincolnClusterSettings.setRemaining(app, false)
         LincolnClusterOutput.nanoTime = { now }
+        LincolnClusterOutput.hudSocket = hud
         CarPlayGlance.setConnected(false)
         LincolnClusterOutput.attach(app)
         shadowOf(app).clearBroadcastIntents()
@@ -44,7 +47,9 @@ class LincolnClusterOutputTest {
 
     @After fun tearDown() {
         LincolnClusterOutput.detach()
+        LincolnClusterOutput.hudSocket = LincolnHudSocketServer
         LincolnClusterSettings.setNavigation(app, false)
+        LincolnClusterSettings.setEnhancedNavigation(app, false)
         LincolnClusterSettings.setClusterPackage(app, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         CarPlayGlance.setConnected(false)
         shadowOf(app).clearBroadcastIntents()
@@ -79,6 +84,106 @@ class LincolnClusterOutputTest {
         }
         assertFalse("A quiet route must not clear the card", states().contains(LincolnClusterProtocol.STATE_OFF))
         assertTrue("The card must keep being refreshed", infos().size > info)
+    }
+
+    @Test fun factoryBaiduChannelsSupplementTheVerifiedProgressBroadcast() {
+        LincolnClusterSettings.setEnhancedNavigation(app, true)
+        val first = guidance().copy(maneuverType = 1, maneuverIndex = 7, distanceMeters = 400)
+        send(first)
+        val broadcasts = shadowOf(app).broadcastIntents
+        assertEquals(1, infos().size)
+        assertTrue(broadcasts.any { it.action == LincolnClusterProtocol.ACTION_NAV_ACTIVE_OPEN })
+        assertTrue(broadcasts.any { it.action == LincolnClusterProtocol.ACTION_START_NAVIGATION })
+        assertTrue(broadcasts.any {
+            it.action == LincolnClusterProtocol.ACTION_STANDARD_BROADCAST_SEND &&
+                it.getStringExtra(LincolnClusterProtocol.EXTRA_KEY_TYPE) == LincolnClusterProtocol.VALUE_KEY_TYPE_NAV_START
+        })
+        val turn = broadcasts.single { it.action == LincolnClusterProtocol.ACTION_TURN_BY_TURN }
+        assertEquals(LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE, turn.`package`)
+        assertEquals(7, turn.getIntExtra("KEY_TURNTYPE", -1))
+        assertEquals(400, turn.getIntExtra("remainDist", -1))
+        assertEquals(1, hud.starts)
+        assertEquals(400, hud.turns.single().metres)
+        assertEquals(token(infos().single()).first, hud.turns.single().latitude)
+
+        now += 1_000_000_000L
+        send(first.copy(distanceMeters = 200))
+        assertEquals(200, infos().last().getIntExtra("distance", -1))
+        assertEquals(200, hud.turns.last().metres)
+        assertEquals(1, broadcasts.count { it.action == LincolnClusterProtocol.ACTION_NAV_ACTIVE_OPEN })
+
+        send(ended())
+        now += 3_000_000_000L
+        send(ended())
+        assertTrue(broadcasts.any { it.action == LincolnClusterProtocol.ACTION_NAV_ACTIVE_CLOSE })
+        assertTrue(broadcasts.any { it.action == LincolnClusterProtocol.ACTION_STOP_NAVIGATION })
+        assertEquals(1, hud.ends)
+        assertTrue(hud.running) // A second route in this CarPlay session can reuse the socket.
+    }
+
+    @Test fun extraFactoryChannelsWaitForARealFirstDistanceButLegacyInfoKeepsWorking() {
+        LincolnClusterSettings.setEnhancedNavigation(app, true)
+        val start = guidance().copy(maneuverType = 1, maneuverIndex = 7, distanceMeters = 0)
+        send(start)
+        assertEquals(0, infos().last().getIntExtra("distance", -1))
+        assertTrue(shadowOf(app).broadcastIntents.none {
+            it.action == LincolnClusterProtocol.ACTION_TURN_BY_TURN
+        })
+        now += 2_000_000_000L
+        send(start)
+        assertTrue(hud.turns.isEmpty())
+        now += 1_000_000_000L
+        send(start)
+        assertEquals(0, hud.turns.single().metres)
+    }
+
+    @Test fun customClusterPackageKeepsItsExistingBroadcastWithoutFactoryExtras() {
+        LincolnClusterSettings.setEnhancedNavigation(app, true)
+        LincolnClusterSettings.setClusterPackage(app, "example.custom.cluster")
+        send(guidance().copy(maneuverType = 1, maneuverIndex = 7))
+        assertEquals("example.custom.cluster", infos().single().`package`)
+        assertTrue(shadowOf(app).broadcastIntents.none {
+            it.action == LincolnClusterProtocol.ACTION_TURN_BY_TURN ||
+                it.action == LincolnClusterProtocol.ACTION_START_NAVIGATION
+        })
+        assertEquals(0, hud.starts)
+    }
+
+    @Test fun existingClusterOutputIsUnchangedUntilCompatibilityIsExplicitlyEnabled() {
+        send(guidance().copy(maneuverType = 1, maneuverIndex = 7))
+        assertEquals(1, infos().size)
+        assertTrue(shadowOf(app).broadcastIntents.none {
+            it.action == LincolnClusterProtocol.ACTION_TURN_BY_TURN ||
+                it.action == LincolnClusterProtocol.ACTION_START_NAVIGATION ||
+                it.action == LincolnClusterProtocol.ACTION_NAV_ACTIVE_OPEN
+        })
+        assertEquals(0, hud.starts)
+    }
+
+    @Test fun compatibilityCanBeEnabledAndDisabledWithoutResettingTheVerifiedProgressStream() {
+        val receiver = FactoryNavigationReceiver()
+        val first = guidance().copy(maneuverType = 1, maneuverIndex = 7, distanceMeters = 400)
+        send(first)
+        assertEquals(256, receiver.receive(infos().last()))
+        val firstToken = token(infos().last())
+
+        LincolnClusterSettings.setEnhancedNavigation(app, true)
+        now += 1_000_000_000L
+        send(first.copy(distanceMeters = 200))
+        assertEquals(128, receiver.receive(infos().last()))
+        assertEquals(firstToken, token(infos().last()))
+        assertEquals(200, hud.turns.last().metres)
+
+        LincolnClusterSettings.setEnhancedNavigation(app, false)
+        now += 1_000_000_000L
+        send(first.copy(distanceMeters = 100))
+        assertEquals(64, receiver.receive(infos().last()))
+        assertEquals(firstToken, token(infos().last()))
+        assertTrue(hud.stops > 0)
+        assertTrue(shadowOf(app).broadcastIntents.any {
+            it.action == LincolnClusterProtocol.ACTION_NAV_ACTIVE_CLOSE
+        })
+        assertFalse(states().contains(LincolnClusterProtocol.STATE_OFF))
     }
 
     @Test fun sendsTheBoundedRoadNameAndKeepsItDuringQuietGuidance() {

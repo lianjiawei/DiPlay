@@ -1516,14 +1516,6 @@ class DiPlayActivity : CarPlayHostActivity() {
     private fun navigationSettings(content: LinearLayout) {
         settingsPageTitle(content, brandString(R.string.settings_navigation))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.NAVIGATION))
-        // The BYD card is hidden without its receiver; say so instead of leaving a gap. On a
-        // Lincoln/Ford unit there is nothing BYD to explain, and the cluster card above is the one
-        // that applies, so the note would only be noise there.
-        if (!com.shilapi.xcertplay.lincoln.LincolnVehicle.eligible(this) && !BydOutputSettings.available(this)) {
-            content.addView(label(brandString(R.string.settings_byd_navigation_unavailable), 15, MUTED).apply {
-                setPadding(dp(4), 0, dp(4), dp(SETTINGS_BLOCK_GAP_DP))
-            })
-        }
     }
 
     private fun vehicleSettings(content: LinearLayout) {
@@ -2697,10 +2689,11 @@ class DiPlayActivity : CarPlayHostActivity() {
             }
             if (bydNavigation) clusterSongSwitch(card)
         }
-        if (com.shilapi.xcertplay.lincoln.LincolnVehicle.eligible(this)) {
-            filteredSection(content, SettingsSection.LINCOLN_CLUSTER,
-                brandString(R.string.settings_lincoln_cluster), R.drawable.ic_dp_navigation, build = ::lincolnClusterSection)
-        }
+        // This fork targets Lincoln/Ford, and the same settings must remain reachable on a phone
+        // used to configure and verify it. Hardware/package detection only describes the current
+        // Android device; using it as a visibility gate hid the whole card on the Huawei test phone.
+        filteredSection(content, SettingsSection.LINCOLN_CLUSTER,
+            brandString(R.string.settings_lincoln_cluster), R.drawable.ic_dp_navigation, build = ::lincolnClusterSection)
         filteredSection(content, SettingsSection.PERMISSIONS_AND_HELP,
             brandString(R.string.permissions_and_connection_help), R.drawable.ic_dp_permissions) { card ->
             card.addView(label(brandString(R.string.nearby_devices_connects_your_iphone_microphone_enables_sir), 16, MUTED))
@@ -5111,6 +5104,11 @@ class DiPlayActivity : CarPlayHostActivity() {
             com.shilapi.xcertplay.lincoln.LincolnClusterSettings.navigation(this)) {
             com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setNavigation(this, it)
             if (it) com.shilapi.xcertplay.lincoln.LincolnClusterOutput.attach(applicationContext)
+        }
+        toggle(card, brandString(R.string.settings_lincoln_cluster_enhanced_navigation),
+            brandString(R.string.settings_lincoln_cluster_enhanced_navigation_description),
+            com.shilapi.xcertplay.lincoln.LincolnClusterSettings.enhancedNavigation(this)) {
+            com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setEnhancedNavigation(this, it)
         }
         toggle(card, brandString(R.string.settings_lincoln_cluster_music),
             brandString(R.string.settings_lincoln_cluster_music_description),

@@ -18,8 +18,10 @@ import org.robolectric.annotation.Config
 class LincolnClusterLifecycleTest {
     private val app: Application get() = RuntimeEnvironment.getApplication()
     private var now = 1_000_000_000L
+    private val hud = RecordingLincolnHudSocket()
     @Before fun setUp() {
         LincolnClusterOutput.detach()
+        LincolnClusterOutput.hudSocket = hud
         LincolnClusterSettings.setNavigation(app, true)
         LincolnClusterSettings.setMusic(app, false)
         LincolnClusterSettings.setRemaining(app, true)
@@ -33,6 +35,7 @@ class LincolnClusterLifecycleTest {
     }
     @After fun tearDown() {
         LincolnClusterOutput.detach()
+        LincolnClusterOutput.hudSocket = LincolnHudSocketServer
         LincolnClusterSettings.setNavigation(app, false)
         LincolnClusterSettings.setRemaining(app, false)
         CarPlayGlance.setConnected(false)

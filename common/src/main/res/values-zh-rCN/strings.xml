@@ -974,6 +974,8 @@
     <string name="settings_lincoln_cluster_description">向已验证的林肯/福特仪表应用转发 CarPlay 导航指引和歌曲文字。默认关闭；请先卸载独立仪表插件，避免同时使用原车导航。</string>
     <string name="settings_lincoln_cluster_navigation">仪表导航</string>
     <string name="settings_lincoln_cluster_navigation_description">向仪表应用发送下一转向箭头、距离和道路名。立即生效。</string>
+    <string name="settings_lincoln_cluster_enhanced_navigation">仪表兼容</string>
+    <string name="settings_lincoln_cluster_enhanced_navigation_description">额外发送原车导航广播与 HUD Socket，供基础仪表导航不显示的林肯／福特车型使用。开启后立即生效。</string>
     <string name="settings_lincoln_cluster_music">仪表歌曲文字</string>
     <string name="settings_lincoln_cluster_music_description">向仪表发送当前歌词行和播放状态：支持滚动歌词的应用把歌词行放在这里，其他应用放歌名。不含艺人名。立即生效。</string>
     <string name="settings_lincoln_cluster_remaining">仪表剩余里程/时间（实验性）</string>

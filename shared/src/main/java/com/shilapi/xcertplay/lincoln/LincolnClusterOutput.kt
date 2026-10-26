@@ -28,6 +28,10 @@ object LincolnClusterOutput {
     // What we last told the cluster, so a missing route actively clears a stale "arrived" card
     // left by an earlier session instead of only stopping new writes.
     private var navStateOn: Boolean? = null
+    private var auxiliaryNavOwned = false
+    private var firstManeuverNs = 0L
+    private var lastAuxiliaryIndex = LincolnClusterProtocol.NO_TURN_INDEX
+    private var lastAuxiliaryStreet = ""
     private var lastNavKey: String? = null
     // The instruction last written to the cluster, so the same one can be repeated. The cluster
     // retires a nav card it has not heard about for a few seconds, which read as the card blinking
@@ -61,6 +65,7 @@ object LincolnClusterOutput {
     private var endedSinceNs = 0L
     /** Injectable monotonic clock; the settle window is time-based, so tests advance it. */
     internal var nanoTime: () -> Long = System::nanoTime
+    internal var hudSocket: LincolnHudSocket = LincolnHudSocketServer
 
     // Guidance has expiry deadlines (a stale route retires ~30 s after the last frame, and an
     // empty maneuver list hides after 3 s). Those only advance when snapshot() is called, and a
@@ -77,6 +82,7 @@ object LincolnClusterOutput {
      * reroute sends a momentary NoRouteSet; acting on it at once blinked the card off and on.
      */
     private const val END_SETTLE_NS = 2_500_000_000L
+    private const val START_DISTANCE_HOLD_NS = 3_000_000_000L
     @Volatile private var ticker: HandlerThread? = null
     @Volatile private var tickHandler: Handler? = null
     /**
@@ -93,6 +99,8 @@ object LincolnClusterOutput {
             lastRemainKey = null
             lastNavSentNs = 0L
             lastFilteredRevision = null
+            // The cluster can forget the navigation announcement along with its card.
+            auxiliaryNavOwned = false
         }
     }
     private val tick = object : Runnable {
@@ -122,10 +130,16 @@ object LincolnClusterOutput {
         listener?.let { CarPlayGlance.removeListener(it) }
         listener = null
         com.shilapi.xcertplay.media.CarAudioOff.removeListener(audioOffListener)
+        context?.let { synchronized(lock) { endAuxiliaryNavLocked(it) } }
         context = null
         stopTicking()
+        hudSocket.stop()
         synchronized(lock) {
             navOwned = false
+            auxiliaryNavOwned = false
+            firstManeuverNs = 0L
+            lastAuxiliaryIndex = LincolnClusterProtocol.NO_TURN_INDEX
+            lastAuxiliaryStreet = ""
             musicOwned = false
             remainOwned = false
             navStateOn = null
@@ -194,6 +208,12 @@ object LincolnClusterOutput {
         val navEnabled = LincolnClusterSettings.navigation(app)
         val musicEnabled = LincolnClusterSettings.music(app)
         val remainingEnabled = LincolnClusterSettings.remaining(app)
+        val enhanced = navEnabled && LincolnClusterSettings.enhancedNavigation(app) && snapshot.connected &&
+            LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE
+        if (enhanced) hudSocket.start() else {
+            endAuxiliaryNavLocked(app)
+            hudSocket.stop()
+        }
         val changed = snapshot != lastSnapshot || navEnabled != lastNavEnabled ||
             musicEnabled != lastMusicEnabled || remainingEnabled != lastRemainingEnabled
         lastSnapshot = snapshot
@@ -270,6 +290,7 @@ object LincolnClusterOutput {
             return
         }
         val road = LincolnClusterProtocol.sanitizeRoadName(snapshot.road).orEmpty()
+        if (firstManeuverNs == 0L) firstManeuverNs = nanoTime()
         if (navStateOn != true) {
             if (broadcast(app, Intent(LincolnClusterProtocol.ACTION_NAV_STATE)
                     .putExtra(LincolnClusterProtocol.EXTRA_STATE, LincolnClusterProtocol.STATE_ON))) {
@@ -313,6 +334,7 @@ object LincolnClusterOutput {
                 lastNavSentNs = nanoTime()
                 navSent++
                 if (changed) Log.i(TAG, "nav INFO $turn ${distance}m '${snapshot.road}' (#$navSent)")
+                sendAuxiliaryNavLocked(app, snapshot, distance, maneuverToken)
             } else {
                 // Failure does not tell us whether the receiver processed the packet. Start
                 // fresh on the next valid sample. Also give held data a fresh identity: replaying
@@ -368,6 +390,7 @@ object LincolnClusterOutput {
         if (broadcast(app, info)) {
             lastNavSentNs = nanoTime()
             navSent++
+            repeatAuxiliaryNavLocked(app, distance, token)
         }
     }
 
@@ -388,6 +411,81 @@ object LincolnClusterOutput {
                     putExtra(LincolnClusterProtocol.EXTRA_MANEUVER_LONGITUDE, token.longitude)
                 }
             }
+    }
+
+    /** Additional factory channels, emitted only for the inspected Lincoln/Ford cluster package. */
+    private fun sendAuxiliaryNavLocked(
+        app: Context,
+        snapshot: CarPlayGlance.Snapshot,
+        distance: Int,
+        token: LincolnManeuverToken,
+    ) {
+        if (!LincolnClusterSettings.enhancedNavigation(app) ||
+            LincolnClusterSettings.clusterPackage(app) != LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE) return
+        val index = LincolnClusterProtocol.turnIndex(snapshot.maneuverType, snapshot.drivingSide)
+        if (!LincolnClusterProtocol.hasTurnIcon(index)) return
+        // Route startup can contain a transient 0 m placeholder. Give the phone three seconds to
+        // supply the real first distance before opening the other receivers' navigation view.
+        if (distance == 0 && !auxiliaryNavOwned && nanoTime() - firstManeuverNs < START_DISTANCE_HOLD_NS) return
+        if (!auxiliaryNavOwned) {
+            val opened = auxiliaryBroadcast(app, Intent(LincolnClusterProtocol.ACTION_NAV_ACTIVE_OPEN))
+            val status = auxiliaryBroadcast(app, standardNavStatus(LincolnClusterProtocol.VALUE_KEY_TYPE_NAV_START))
+            val announced = auxiliaryBroadcast(app, Intent(LincolnClusterProtocol.ACTION_START_NAVIGATION), global = true)
+            if (!opened && !status && !announced) return
+            auxiliaryNavOwned = true
+            Log.i(TAG, "auxiliary nav start open=$opened status=$status announced=$announced")
+        }
+        val street = LincolnClusterProtocol.sanitizeTurnStreet(snapshot.road)
+        publishAuxiliaryTurnLocked(app, index, distance, street, token)
+    }
+
+    private fun repeatAuxiliaryNavLocked(app: Context, distance: Int, token: LincolnManeuverToken) {
+        if (!auxiliaryNavOwned || lastAuxiliaryIndex == LincolnClusterProtocol.NO_TURN_INDEX) return
+        publishAuxiliaryTurnLocked(app, lastAuxiliaryIndex, distance, lastAuxiliaryStreet, token)
+    }
+
+    private fun publishAuxiliaryTurnLocked(
+        app: Context, index: Int, distance: Int, street: String, token: LincolnManeuverToken,
+    ) {
+        val intent = Intent(LincolnClusterProtocol.ACTION_TURN_BY_TURN)
+        LincolnClusterProtocol.turnByTurnExtras(index, distance, street).forEach { (key, value) ->
+            when (value) {
+                is Int -> intent.putExtra(key, value)
+                is String -> intent.putExtra(key, value)
+            }
+        }
+        auxiliaryBroadcast(app, intent)
+        hudSocket.update(index, distance, street, token.latitude, token.longitude)
+        lastAuxiliaryIndex = index
+        lastAuxiliaryStreet = street
+    }
+
+    private fun endAuxiliaryNavLocked(app: Context) {
+        firstManeuverNs = 0L
+        lastAuxiliaryIndex = LincolnClusterProtocol.NO_TURN_INDEX
+        lastAuxiliaryStreet = ""
+        if (!auxiliaryNavOwned) return
+        auxiliaryNavOwned = false
+        auxiliaryBroadcast(app, Intent(LincolnClusterProtocol.ACTION_NAV_ACTIVE_CLOSE))
+        auxiliaryBroadcast(app, standardNavStatus(LincolnClusterProtocol.VALUE_KEY_TYPE_NAV_STOP))
+        auxiliaryBroadcast(app, Intent(LincolnClusterProtocol.ACTION_STOP_NAVIGATION), global = true)
+        hudSocket.end()
+        Log.i(TAG, "auxiliary nav ended")
+    }
+
+    private fun standardNavStatus(keyType: String): Intent =
+        Intent(LincolnClusterProtocol.ACTION_STANDARD_BROADCAST_SEND)
+            .putExtra(LincolnClusterProtocol.EXTRA_KEY_TYPE, keyType)
+            .putExtra(LincolnClusterProtocol.EXTRA_MODULE_TYPE, LincolnClusterProtocol.VALUE_MODULE_NAVI)
+
+    private fun auxiliaryBroadcast(app: Context, intent: Intent, global: Boolean = false): Boolean = runCatching {
+        if (!global) intent.setPackage(LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
+        intent.addFlags(LincolnClusterProtocol.FLAG_INCLUDE_STOPPED_PACKAGES)
+        app.sendBroadcast(intent)
+        true
+    }.getOrElse {
+        Log.w(TAG, "auxiliary broadcast failed ${intent.action} ${it.javaClass.simpleName}")
+        false
     }
 
     /**
@@ -450,6 +548,7 @@ object LincolnClusterOutput {
 
     private fun clearNavLocked(app: Context) {
         maneuverTracker.reset("navigation-cleared")
+        endAuxiliaryNavLocked(app)
         // Send OFF whenever the cluster was told ON, even if a later snapshot already dropped the
         // owned flag, so a finished route cannot leave "arrived" on the cluster.
         if (navStateOn != true) return
@@ -463,6 +562,7 @@ object LincolnClusterOutput {
             lastNavRoad = ""
             lastNavManeuverToken = null
             lastNavSentNs = 0L
+            firstManeuverNs = 0L
             Log.i(TAG, "nav cleared")
         }
     }
