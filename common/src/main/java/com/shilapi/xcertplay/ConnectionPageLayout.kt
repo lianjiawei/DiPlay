@@ -39,7 +39,8 @@ internal object ConnectionPageLayout {
     private var cachedActions: ActionMetrics? = null
 
     fun compactActions(context: Context, width: Int) =
-        width < COMPACT_ACTION_WIDTH_DP * context.resources.displayMetrics.density
+        width < COMPACT_ACTION_WIDTH_DP * context.resources.displayMetrics.density *
+            context.resources.configuration.fontScale.coerceAtLeast(1f)
 
     fun actionHeight(context: Context, width: Int): Int = actionMetrics(context, width).height
 
@@ -50,8 +51,10 @@ internal object ConnectionPageLayout {
         val key = "$width/${metrics.densityDpi}/${resources.configuration.fontScale}/${resources.configuration.locales.toLanguageTags()}/${resources.configuration.layoutDirection}"
         cachedActions?.takeIf { actionKey == key }?.let { return it }
         val compact = compactActions(context, width)
-        val usb = if (compact) R.string.ui_glass_usb_short else R.string.connect_with_usb
-        val icons = setOf(usb, R.string.disconnect, R.string.settings)
+        val fullConnectionModes = setOf(R.string.home_connection_mode_wireless, R.string.home_connection_mode_usb)
+        val compactConnectionModes = setOf(R.string.home_connection_mode_wireless_short, R.string.home_connection_mode_usb_short)
+        val connectionModes = if (compact) compactConnectionModes else fullConnectionModes
+        val icons = connectionModes + setOf(R.string.home_cancel_connection, R.string.home_disconnect_carplay, R.string.settings)
         val labels = icons + setOf(R.string.ui_glass_connect_carplay, R.string.open_carplay,
             R.string.ui_glass_connecting_action,
             if (compact) R.string.ui_glass_retry_short else R.string.retry_carplay_connection,
@@ -74,7 +77,12 @@ internal object ConnectionPageLayout {
             var fits = true
             for (id in labels) {
                 measure.text = context.getString(id)
-                measure.setPadding(((ACTION_SIDE_PAD_DP + if (id in icons) ACTION_ICON_RESERVE_DP else 0)*density).roundToInt(),
+                val iconReserve = when {
+                    id in fullConnectionModes -> ACTION_ICON_RESERVE_DP * 2
+                    id in icons -> ACTION_ICON_RESERVE_DP
+                    else -> 0
+                }
+                measure.setPadding(((ACTION_SIDE_PAD_DP + iconReserve)*density).roundToInt(),
                     (ACTION_VERTICAL_PAD_DP*density).roundToInt(), (ACTION_SIDE_PAD_DP*density).roundToInt(), (ACTION_VERTICAL_PAD_DP*density).roundToInt())
                 measure.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))

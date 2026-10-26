@@ -146,7 +146,8 @@ class HomeFooterLayoutTest {
                     resolvedInsets = true
                     layout()
                     val primary = ReflectionHelpers.getField<TextView>(activity, "connectButton")
-                    val usb = ReflectionHelpers.getField<TextView>(activity, "homeUsbFooter")
+                    val connectionMode = ReflectionHelpers.getField<TextView>(activity, "homeConnectionFooter")
+                    val disconnect = ReflectionHelpers.getField<TextView>(activity, "disconnectButton")
                     val settings = descendants(root).filterIsInstance<TextView>().single { it.text.toString() == activity.getString(R.string.settings) }
                     val brand = descendants(root).filterIsInstance<HomeBrandView>().single()
                     val ring = descendants(root).filterIsInstance<ConnectionRingView>().single()
@@ -179,8 +180,14 @@ class HomeFooterLayoutTest {
                         assertTrue("$name/$state no home scrolling", root.getChildAt(0).height <= height-root.paddingTop-root.paddingBottom)
                         assertTrue(rect(primary).bottom <= rect(settings).top)
                         assertTrue(primary.height >= 48*density)
-                        for (label in listOf(primary, settings, usb).filter { it.isShown }) {
-                            assertTrue("$name/$state label fits: ${label.text}", label.layout.height <= label.height-label.compoundPaddingTop-label.compoundPaddingBottom)
+                        for (label in listOf(primary, settings, connectionMode, disconnect).filter { it.isShown }) {
+                            assertTrue("$name/$state label fits: ${label.text}; layout=${label.layout.height}, height=${label.height}, " +
+                                "padding=${label.compoundPaddingTop}+${label.compoundPaddingBottom}, lines=${label.layout.lineCount}",
+                                label.layout.height <= label.height-label.compoundPaddingTop-label.compoundPaddingBottom)
+                        }
+                        when (state) {
+                            "connecting" -> assertEquals(activity.getString(R.string.home_cancel_connection), disconnect.text.toString())
+                            "connected" -> assertEquals(activity.getString(R.string.home_disconnect_carplay), disconnect.text.toString())
                         }
                         if (state == "ready" || state == "connected") capture(root, "$name-$state")
                     }

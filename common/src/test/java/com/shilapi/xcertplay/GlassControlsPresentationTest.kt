@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import org.junit.Assert.*
@@ -87,25 +88,38 @@ class GlassControlsPresentationTest {
         }
     }
 
-    @Test fun shortDialogActionsKeepCompactEqualWidthsAndMinimumTouchHeight() {
+    @Test fun multipleDialogActionsFillTheRowWithEqualWidthsAndMinimumTouchHeight() {
         withDialog(listOf("Cancel", "Save"), 560) { actions, bar ->
             assertEquals(actions[0].width, actions[1].width)
             assertEquals(actions[0].height, actions[1].height)
-            assertTrue(actions.all { it.width <= FidelitySettingsMetrics.DIALOG_ACTION_MAX_WIDTH_DP })
+            assertTrue(actions.all { it.gravity and Gravity.CENTER_HORIZONTAL == Gravity.CENTER_HORIZONTAL })
+            assertTrue(actions.all { it.gravity and Gravity.CENTER_VERTICAL == Gravity.CENTER_VERTICAL })
+            assertTrue(actions.all { it.textAlignment == View.TEXT_ALIGNMENT_GRAVITY })
             assertTrue("Short actions should keep the standard height: ${actions.map { it.height }}",
                 actions.all { it.height == FidelitySettingsMetrics.DIALOG_ACTION_DP })
-            assertTrue("Actions must leave space before their compact end-aligned group", actions.minOf { it.left } > 0)
-            assertTrue(actions.maxOf { it.right } <= bar.width)
+            val ordered = actions.sortedBy { it.left }
+            assertTrue("The action row must have balanced outer edges",
+                kotlin.math.abs(ordered.first().left - (bar.width - ordered.last().right)) <= 1)
+            assertTrue("Equal actions must use the available row", ordered.first().width * 2 > bar.width / 2)
         }
     }
 
-    @Test fun longThreeActionDialogsWrapAndRemainReachableOnNarrowWindows() {
+    @Test fun aSingleDialogActionStaysCompactAndCentred() {
+        withDialog(listOf("Done"), 560) { actions, bar ->
+            assertEquals(1, actions.size)
+            assertTrue(actions.single().width <= FidelitySettingsMetrics.DIALOG_ACTION_MAX_WIDTH_DP)
+            assertTrue(kotlin.math.abs(actions.single().left - (bar.width - actions.single().right)) <= 1)
+        }
+    }
+
+    @Test fun conciseThreeActionDialogsStaySingleLineAndRemainReachableOnNarrowWindows() {
         RuntimeEnvironment.setFontScale(1.3f)
         try {
-            withDialog(listOf("Cancel", "Apply and reconnect CarPlay", "Reset to current values"), 280) { actions, bar ->
+            withDialog(listOf("Cancel", "Grant permissions", "Accessibility"), 280) { actions, bar ->
                 assertTrue(actions.all { it.height >= FidelitySettingsMetrics.DIALOG_ACTION_DP })
                 assertTrue(actions.all { it.left >= 0 && it.right <= bar.width && it.bottom <= bar.height })
                 for (action in actions) {
+                    assertEquals("Dialog action copy should remain on one line", 1, action.layout.lineCount)
                     for (line in 0 until action.layout.lineCount) {
                         assertEquals(0, action.layout.getEllipsisCount(line))
                         assertTrue(action.layout.getLineMax(line) <= action.layout.width + 2)
@@ -121,8 +135,13 @@ class GlassControlsPresentationTest {
         check: (List<android.widget.Button>, ViewGroup) -> Unit) {
         val screen = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         val builder = GlassDialogBuilder(screen).setTitle("CarPlay")
-            .setNegativeButton(labels[0], null).setPositiveButton(labels[1], null)
-        if (labels.size > 2) builder.setNeutralButton(labels[2], null)
+        when (labels.size) {
+            1 -> builder.setPositiveButton(labels[0], null)
+            2 -> builder.setNegativeButton(labels[0], null).setPositiveButton(labels[1], null)
+            3 -> builder.setNegativeButton(labels[0], null).setPositiveButton(labels[1], null)
+                .setNeutralButton(labels[2], null)
+            else -> error("Unsupported dialog action count: ${labels.size}")
+        }
         val dialog = builder.show()
         try {
             shadowOf(Looper.getMainLooper()).idle()

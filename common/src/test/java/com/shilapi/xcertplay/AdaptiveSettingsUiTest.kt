@@ -121,7 +121,8 @@ class AdaptiveSettingsUiTest {
     @Test fun compactSettingsOpenOnAnEverydayDriverOverview() {
         val screen = openSettings()
 
-        assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_overview) })
+        assertFalse(texts(screen).any { it.text == screen.getString(R.string.settings_overview) })
+        assertFalse(texts(screen).any { it.text == screen.getString(R.string.ready) })
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_quick_settings) })
         assertFalse("The BYD setup guide must not appear in the Lincoln/Ford settings overview",
             texts(screen).any { it.text == screen.getString(R.string.setup_guide) })
@@ -237,34 +238,6 @@ class AdaptiveSettingsUiTest {
         })
     }
 
-    @Test fun readinessAsksForAnIphoneBeforeWirelessCanConnect() {
-        AirPlayPersistence.saveWirelessEnabled(context, true)
-        val screen = openSettings()
-        // Robolectric has no CarPlay authentication assets, which is a setup error of its own.
-        ReflectionHelpers.setField(screen, "setupError", null)
-        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
-
-        assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_choose_iphone_title) })
-        assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_choose_iphone_action) })
-        assertFalse(texts(screen).any { it.text == screen.getString(R.string.ready) })
-    }
-
-    @Test fun chosenPhoneWithMissingManualHotspotOffersConnectionSetup() {
-        AirPlayPersistence.saveWirelessEnabled(context, true)
-        AirPlayPersistence.saveWirelessHotspotMode(context, WirelessHotspotMode.MANUAL)
-        DiPlayPreferences.savePhone(context, "AA:BB:CC:DD:EE:FF", "My iPhone")
-        val screen = openSettings()
-        ReflectionHelpers.setField(screen, "setupError", null)
-        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
-
-        assertTrue(texts(screen).any { it.text == screen.getString(R.string.setup_needs_attention) })
-        assertFalse(texts(screen).any { it.text == screen.getString(R.string.ready) })
-        texts(screen).single { it.text == screen.getString(R.string.open_connection_setup) }.performClick()
-        assertEquals("connection", ReflectionHelpers.getField<String>(screen, "page"))
-        screen.onBackPressedDispatcher.onBackPressed()
-        assertEquals("settings", ReflectionHelpers.getField<String>(screen, "page"))
-    }
-
     @Test fun searchOpensTheCategoryThatOwnsTheSetting() {
         val screen = openSettings()
         val index = ReflectionHelpers.callInstanceMethod<List<Any>>(screen, "buildSettingsSearchIndex")
@@ -370,13 +343,12 @@ class AdaptiveSettingsUiTest {
 
     @Test
     @Config(qualifiers = "en-w900dp-h600dp-land")
-    fun backCollapsesAnEmptySearchAndFullLayoutKeepsItsExistingLabel() {
+    fun backCollapsesAnEmptySearchAndFullLayoutKeepsItsIconOnlyAction() {
         val screen = openSettings()
         val button = descendants(screen.window.decorView).single {
             it.contentDescription == screen.getString(R.string.settings_search)
         }
-        assertTrue(button is android.widget.Button)
-        assertEquals(screen.getString(R.string.settings_search_hint), (button as TextView).text.toString())
+        assertTrue(button is android.widget.ImageButton)
         button.performClick()
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(descendants(screen.window.decorView).any { it is EditText && it.hasFocus() })
@@ -1102,7 +1074,7 @@ class AdaptiveSettingsUiTest {
         open(R.string.language_section_title)
         assertEquals(SettingsCategory.LANGUAGE, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.language_hint) })
-        assertTrue(texts(screen).any { it.text == VehicleBranding.text(screen, R.string.settings_language_summary) })
+        assertFalse(texts(screen).any { it.text == VehicleBranding.text(screen, R.string.settings_language_summary) })
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "openSettingsCategory",
             ReflectionHelpers.ClassParameter(SettingsCategory::class.java, SettingsCategory.OVERVIEW))
         open(R.string.about)

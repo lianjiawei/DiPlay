@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_connection_mode_wireless">Connection mode · Wireless</string>
+    <string name="home_connection_mode_usb">Connection mode · USB</string>
+    <string name="home_connection_mode_wireless_short">Wireless</string>
+    <string name="home_connection_mode_usb_short">USB</string>
+    <string name="home_cancel_connection">Cancel connection</string>
+    <string name="home_disconnect_carplay">Disconnect CarPlay</string>
+</resources>

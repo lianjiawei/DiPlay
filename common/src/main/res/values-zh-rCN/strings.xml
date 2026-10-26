@@ -122,7 +122,7 @@
     <string name="app_name">CarPlay</string>
     <string name="app_permissions">应用权限</string>
     <string name="app_settings">应用设置</string>
-    <string name="apply_and_reconnect">应用并重新连接</string>
+    <string name="apply_and_reconnect">应用并重连</string>
     <string name="audio">音频</string>
     <string name="audio_routing">音频路由</string>
     <string name="auto">自动</string>
@@ -300,7 +300,7 @@
     <string name="open_this_setting_from_your_car_s_settings_app">请在车机的设置应用中打开此设置。</string>
     <string name="opening_carplay">正在打开 CarPlay…</string>
     <string name="opening_usb_data_paths">正在打开 USB 数据通道</string>
-    <string name="pair_another">配对其他设备</string>
+    <string name="pair_another">配对设备</string>
     <string name="pair_your_iphone">配对 iPhone</string>
     <string name="pair_your_iphone_with_the_car_s_bluetooth_keep_wi_fi_on_an">在车机蓝牙设置中配对 iPhone，保持 Wi-Fi 开启，并在 iPhone 上允许 CarPlay。请关闭其他手机投屏应用。\n\n如果之前的投屏应用残留了连接，请先重置下方的 CarPlay Wi-Fi，再重新连接。车机正常的互联网 Wi-Fi 不受影响。</string>
     <string name="paired_device">已配对设备</string>

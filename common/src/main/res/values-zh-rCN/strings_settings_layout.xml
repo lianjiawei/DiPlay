@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="settings_overview">概览</string>
-    <string name="settings_overview_subtitle">舒适、可靠驾驶的基本设置。</string>
     <string name="settings_your_setup">你的设置</string>
     <string name="settings_quick_settings">快捷设置</string>
     <string name="settings_display">显示</string>
@@ -15,7 +14,6 @@
     <string name="settings_advanced_caution_description">这些功能可能取决于车辆固件、ADB 权限或 CarPlay 的实验性行为。日常设置位于上方各类别中。</string>
     <string name="settings_search">搜索</string>
     <string name="settings_open_category">打开%1$s设置</string>
-    <string name="settings_ready_connected">CarPlay 正在运行。需要重新连接的更改会特别说明。</string>
     <string name="settings_connection_summary">手机、有线、无线及自动连接</string>
     <string name="settings_display_summary">外观、全屏、分辨率和帧率</string>
     <string name="settings_audio_summary">声音输出与音乐缓冲</string>
@@ -33,10 +31,4 @@
     <string name="settings_byd_navigation_unavailable">此车机不支持比亚迪仪表盘和 HUD 导航提示。</string>
     <string name="settings_search_hint">搜索设置</string>
     <string name="settings_search_empty">没有匹配的设置。请换个词试试。</string>
-    <string name="settings_ready_wireless">无线 CarPlay 将连接到 %1$s。</string>
-    <string name="settings_ready_usb">使用 USB 数据线连接 iPhone 以启动 CarPlay。</string>
-    <string name="settings_connecting_description">Lincoln 正在与你的 iPhone 启动 CarPlay。</string>
-    <string name="settings_choose_iphone_title">选择你的 iPhone</string>
-    <string name="settings_choose_iphone_description">无线 CarPlay 需要先配对 iPhone 才能连接。</string>
-    <string name="settings_choose_iphone_action">选择 iPhone</string>
 </resources>

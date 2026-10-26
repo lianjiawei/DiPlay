@@ -22,7 +22,6 @@ internal object FidelitySettingsMetrics {
     const val HEADER_DP=52
     const val RAIL_ROW_DP=56
     const val CONTENT_PAD_DP=20
-    const val READINESS_RING_DP=72
     const val GRID_GAP_DP=16
     const val CARD_PAD_DP=16
     const val CARD_VERTICAL_DP=14

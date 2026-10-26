@@ -6,6 +6,7 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -44,7 +45,16 @@ internal class GlassDialogBuilder(private val owner: Context) : AlertDialog.Buil
                 val primary=id==AlertDialog.BUTTON_POSITIVE
                 isAllCaps=false;textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
                 minimumHeight=dp(FidelitySettingsMetrics.DIALOG_ACTION_DP)
+                // setSingleLine(true) enables TextView's extremely wide horizontal-scrolling
+                // layout; on some densities a centred label is then drawn outside the button.
+                // Bound the action to one line without enabling that scrolling mode.
                 setSingleLine(false)
+                minLines=1
+                maxLines=1
+                gravity=Gravity.CENTER
+                // Framework dialog themes commonly force TEXT_END. Route horizontal placement
+                // back through the explicit CENTER gravity so OEM defaults cannot shift it.
+                textAlignment=View.TEXT_ALIGNMENT_GRAVITY
                 minWidth=dp(FidelitySettingsMetrics.DIALOG_ACTION_MIN_WIDTH_DP)
                 setPadding(dp(FidelitySettingsMetrics.DIALOG_ACTION_HORIZONTAL_PAD_DP),dp(FidelitySettingsMetrics.DIALOG_ACTION_VERTICAL_PAD_DP),
                     dp(FidelitySettingsMetrics.DIALOG_ACTION_HORIZONTAL_PAD_DP),dp(FidelitySettingsMetrics.DIALOG_ACTION_VERTICAL_PAD_DP))

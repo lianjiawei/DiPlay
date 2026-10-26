@@ -6,7 +6,7 @@
     <string name="settings_vehicle_custom">Custom image</string>
     <string name="settings_wallpaper_choose">Choose image</string>
     <string name="settings_wallpaper_replace">Change image</string>
-    <string name="settings_wallpaper_use_default">Use default background</string>
+    <string name="settings_wallpaper_use_default">Use default</string>
     <string name="settings_wallpaper_import_failed">Could not use this image. Please choose another image.</string>
     <string name="settings_home_brand">Vehicle selection</string>
     <string name="settings_home_brand_lincoln">Lincoln</string>

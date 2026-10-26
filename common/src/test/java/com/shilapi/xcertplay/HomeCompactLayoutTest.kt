@@ -46,17 +46,17 @@ class HomeCompactLayoutTest {
             root.layout(0, 0, width, height)
         }
         fun text(id: Int) = descendants(root).filterIsInstance<TextView>()
-            .single { it.visibility == View.VISIBLE && it.text == activity.getString(id) }
+            .single { it.visibility == View.VISIBLE && it.text.toString() == activity.getString(id) }
         val connect = text(R.string.ui_glass_connect_carplay)
-        val usb = text(R.string.connect_with_usb)
+        val connectionMode = text(R.string.home_connection_mode_usb)
         val connectPosition = IntArray(2).also(connect::getLocationOnScreen)
-        val usbPosition = IntArray(2).also(usb::getLocationOnScreen)
-        assertTrue(usbPosition[1] >= connectPosition[1] + connect.height)
+        val connectionModePosition = IntArray(2).also(connectionMode::getLocationOnScreen)
+        assertTrue(connectionModePosition[1] >= connectPosition[1] + connect.height)
         val settings = text(R.string.settings)
         val settingsPosition = IntArray(2).also(settings::getLocationOnScreen)
-        assertEquals("USB and Settings share the footer row", usbPosition[1], settingsPosition[1])
-        assertEquals("Footer actions have equal height", usb.height, settings.height)
-        assertTrue(settingsPosition[0] >= usbPosition[0] + usb.width)
+        assertEquals("Connection mode and Settings share the footer row", connectionModePosition[1], settingsPosition[1])
+        assertEquals("Footer actions have equal height", connectionMode.height, settings.height)
+        assertTrue(settingsPosition[0] >= connectionModePosition[0] + connectionMode.width)
         assertTrue(text(R.string.car_home).visibility == View.VISIBLE)
         assertFalse(descendants(root).filterIsInstance<TextView>().any {
             it.text == activity.getString(R.string.a_familiar_drive) ||
@@ -86,8 +86,11 @@ class HomeCompactLayoutTest {
                 CarPlayBackgroundSession.active = active
                 ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
                 verifyNoExtraCard()
-                assertEquals(View.GONE, usb.visibility)
-                assertTrue(text(R.string.disconnect).isShown)
+                assertEquals(View.GONE, connectionMode.visibility)
+                assertTrue(descendants(root).filterIsInstance<TextView>().any {
+                    it.isShown && it.text in listOf(activity.getString(R.string.home_cancel_connection),
+                        activity.getString(R.string.home_disconnect_carplay))
+                })
             }
         } finally {
             CarPlayBackgroundSession.clear()

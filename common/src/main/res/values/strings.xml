@@ -128,7 +128,7 @@
     <string name="android_9_compatibility">Android 9 compatibility</string>
     <string name="app_permissions">App permissions</string>
     <string name="app_settings">App settings</string>
-    <string name="apply_and_reconnect">Apply and reconnect</string>
+    <string name="apply_and_reconnect">Apply &amp; reconnect</string>
     <string name="audio">Audio</string>
     <string name="audio_routing">Audio routing</string>
     <string name="auto">Auto</string>
@@ -301,7 +301,7 @@
     <string name="open_this_setting_from_your_car_s_settings_app">Open this setting from your car’s Settings app.</string>
     <string name="opening_carplay">Opening CarPlay…</string>
     <string name="opening_usb_data_paths">Opening USB data paths</string>
-    <string name="pair_another">Pair another</string>
+    <string name="pair_another">Pair device</string>
     <string name="pair_your_iphone">Pair your iPhone</string>
     <string name="pair_your_iphone_with_the_car_s_bluetooth_keep_wi_fi_on_an">Pair your iPhone with the car’s Bluetooth, keep Wi-Fi on, and allow CarPlay on the iPhone. Close any other phone-projection app.\n\nIf a previous projection app left its connection running, reset CarPlay Wi-Fi below and connect again. Your car’s normal internet Wi-Fi stays on.</string>
     <string name="paired_device">Paired device</string>
@@ -378,7 +378,6 @@
     <string name="set_up_once_your_details_stay_saved_for_the_next_drive_cha">Set up once. Your details stay saved for the next drive. Changes apply to your next connection.</string>
     <string name="settings">Settings</string>
     <string name="settings_overview">Overview</string>
-    <string name="settings_overview_subtitle">The essentials for a comfortable, reliable drive.</string>
     <string name="settings_your_setup">Your setup</string>
     <string name="settings_quick_settings">Quick settings</string>
     <string name="settings_display">Display</string>
@@ -394,13 +393,6 @@
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_empty">No setting matches. Try another word.</string>
     <string name="settings_open_category">Open %1$s settings</string>
-    <string name="settings_ready_connected">CarPlay is active. Changes that need a reconnect will say so.</string>
-    <string name="settings_ready_wireless">Wireless CarPlay will connect to %1$s.</string>
-    <string name="settings_ready_usb">Connect your iPhone with a USB cable to start CarPlay.</string>
-    <string name="settings_connecting_description">Lincoln is starting CarPlay with your iPhone.</string>
-    <string name="settings_choose_iphone_title">Choose your iPhone</string>
-    <string name="settings_choose_iphone_description">Wireless CarPlay needs a paired iPhone before it can connect.</string>
-    <string name="settings_choose_iphone_action">Choose iPhone</string>
     <string name="settings_connection_summary">Phone, cable, wireless and automatic connection</string>
     <string name="settings_display_summary">Appearance, full screen, resolution and frame rate</string>
     <string name="settings_audio_summary">Speaker routing and music buffering</string>

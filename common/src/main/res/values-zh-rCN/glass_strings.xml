@@ -1,9 +1,9 @@
 <resources>
-    <string name="ui_glass_home_title">准备好，出发</string>
+    <string name="ui_glass_home_title">CarPlay 未连接</string>
     <string name="ui_glass_video_preparing">正在准备 CarPlay 画面…</string>
     <string name="ui_glass_video_ready">正在显示 CarPlay</string>
     <string name="ui_glass_connect_carplay">连接 CarPlay</string>
-    <string name="ui_glass_paired_waiting">已配对 · 等待连接</string>
+    <string name="ui_glass_paired_waiting">使用当前连接方式连接 iPhone</string>
     <string name="ui_glass_back_home">返回首页</string>
     <string name="ui_glass_reconnect_hint">更改后需重新连接</string>
     <string name="ui_glass_details">查看说明</string>

@@ -134,7 +134,7 @@ class GlassUiRegressionTest {
             call(screen, "render")
             screenshot(screen, "$name-home")
             val texts = descendants(screen.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }.toList()
-            for (id in listOf(R.string.ui_glass_connect_carplay, R.string.choose_iphone, R.string.connect_with_usb, R.string.settings)) {
+            for (id in listOf(R.string.ui_glass_connect_carplay, R.string.choose_iphone, R.string.home_connection_mode_usb, R.string.settings)) {
                 if(paired && id==R.string.choose_iphone)continue
                 val label = screen.getString(id)
                 val action = descendants(screen.window.decorView).filterIsInstance<TextView>()
@@ -285,7 +285,8 @@ class GlassUiRegressionTest {
                 position[1] + scene.height)
             for (button in descendants(scene).filterIsInstance<android.widget.Button>().filter { it.visibility == View.VISIBLE }) {
                 val textLayout = button.layout ?: continue
-                assertTrue("Button text fits vertically: ${button.text}", textLayout.height <=
+                assertTrue("Button text fits vertically: ${button.text}; layout=${textLayout.height}, height=${button.height}, " +
+                    "padding=${button.compoundPaddingTop}+${button.compoundPaddingBottom}, lines=${textLayout.lineCount}", textLayout.height <=
                     button.height - button.compoundPaddingTop - button.compoundPaddingBottom + 2)
                 if (textLayout.lineCount > 1) {
                     val offset = ReflectionHelpers.getField<Float>(button, "contentOffsetY")
@@ -318,9 +319,17 @@ class GlassUiRegressionTest {
                 root.layout(0, 0, root.measuredWidth, root.measuredHeight)
             }
             assertEquals(screen.getString(R.string.pair_another), dialog.getButton(AlertDialog.BUTTON_NEUTRAL).text)
-            for (id in listOf(AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE)) {
-                val action = dialog.getButton(id)
+            val actions = listOf(AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE)
+                .map(dialog::getButton).sortedBy { it.left }
+            assertEquals("Phone picker actions must have equal widths", actions[0].width, actions[1].width)
+            val actionBar = actions[0].parent as ViewGroup
+            assertTrue("Phone picker actions must have balanced outer edges",
+                kotlin.math.abs(actions[0].left - (actionBar.width - actions[1].right)) <= 1)
+            for (action in actions) {
                 assertTrue(action.height >= 48 * density)
+                assertEquals(android.view.Gravity.CENTER, action.gravity)
+                assertEquals(View.TEXT_ALIGNMENT_GRAVITY, action.textAlignment)
+                assertEquals("Phone picker action must stay on one line", 1, action.layout.lineCount)
                 for (line in 0 until action.layout.lineCount) assertEquals(0, action.layout.getEllipsisCount(line))
             }
             writeScreenshot(root, name)

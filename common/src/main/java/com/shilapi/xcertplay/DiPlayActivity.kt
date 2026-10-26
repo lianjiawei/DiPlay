@@ -232,7 +232,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     private var setupError: String? = null
     private var status: TextView? = null
     private var homeHeadline: TextView?=null
-    private var homeUsbFooter: Button?=null
+    private var homeConnectionFooter: Button?=null
     private var homeConnectionRing: ConnectionRingView? = null
     private var connectButton: Button? = null
     private var disconnectButton: Button? = null
@@ -258,7 +258,6 @@ class DiPlayActivity : CarPlayHostActivity() {
     private var rootScroll: ScrollView? = null
     private var settingsRailScroll: ScrollView? = null
     private var reconnectBar: View? = null
-    private var readinessCard: LinearLayout? = null
     private var searchIndexSink: MutableList<String>? = null
     private var settingsSearchBox: EditText? = null
     private var settingsSearchPopup: PopupWindow? = null
@@ -268,7 +267,6 @@ class DiPlayActivity : CarPlayHostActivity() {
     private var settingsSearchIndexing = false
     private var settingsSearchRestoreFocus = false
     private var settingsSearchOutsideTouch: EditText? = null
-    private var renderedReadiness: SettingsReadiness? = null
     private var renderedPage: String? = null
     private var renderedSettingsCategory: SettingsCategory? = null
     private var pendingScrollY: Int? = null
@@ -880,9 +878,8 @@ class DiPlayActivity : CarPlayHostActivity() {
         if (page != "settings") clearSettingsSearchState()
         status = null; connectButton = null; disconnectButton = null; lastRunning = null; carButtonCard = null
         homeConnectionRing = null
-        homeHeadline=null;homeUsbFooter=null;homeActionWidth=0
+        homeHeadline=null;homeConnectionFooter=null;homeActionWidth=0
         reconnectBar = null
-        readinessCard = null
         exportButton = null
         bydAdbControls = null
         adbSwitches.clear()
@@ -1091,9 +1088,28 @@ class DiPlayActivity : CarPlayHostActivity() {
         render()
     }
 
+    private fun openHomeConnectionSettings() {
+        openProjectionWhenReady = false
+        connectionSettingsReturnCategory = null
+        page = "settings"
+        settingsCategory = SettingsCategory.CONNECTION
+        render()
+    }
+
+    private fun homeConnectsWirelessly() = DiPlayPreferences.autoConnectWireless(this)
+
+    private fun homeConnectionModeLabel(compact: Boolean = false) = brandString(when {
+        homeConnectsWirelessly() && compact -> R.string.home_connection_mode_wireless_short
+        homeConnectsWirelessly() -> R.string.home_connection_mode_wireless
+        compact -> R.string.home_connection_mode_usb_short
+        else -> R.string.home_connection_mode_usb
+    })
+
     private fun settingsHeader(compact: Boolean): LinearLayout = row().apply {
         val controlHeight=dp(if (isExpandedSettingsLayout) (FidelitySettingsMetrics.HEADER_DP * resources.configuration.fontScale.coerceAtLeast(1f)).roundToInt() else if(compact)GlassChrome.MIN_TARGET_DP else FidelitySettingsMetrics.HEADER_DP)
-        val iconOnlySearch = compact || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        // Search is a secondary header action. Keep it icon-only at every window size so the
+        // settings title and back action retain a stable position on car and phone displays.
+        val iconOnlySearch = true
         gravity = Gravity.CENTER_VERTICAL
         addView(headerButton(brandString(if(returnToCarPlay) R.string.back else if(isExpandedSettingsLayout) R.string.ui_glass_back_home else R.string.settings),R.drawable.ic_dp_back,compact,::navigateBack).apply {
             contentDescription=brandString(if(isExpandedSettingsLayout && !returnToCarPlay)R.string.ui_glass_back_home else R.string.back)
@@ -1190,7 +1206,7 @@ class DiPlayActivity : CarPlayHostActivity() {
                 projectionNeedsWifiReset -> confirmWirelessReset()
                 projectionNeedsRetry -> { openProjectionWhenReady = true; retryUnifiedProjection() }
                 CarPlayBackgroundSession.hasSession() || projectionIsStarting -> openProjection()
-                else -> connect(true)
+                else -> connect(homeConnectsWirelessly())
             }
         }.apply { textSize=UiTypography.ACTION_SP.toFloat();includeFontPadding=false;minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) }
         disconnectButton=button(brandString(R.string.disconnect),false) {
@@ -1199,20 +1215,23 @@ class DiPlayActivity : CarPlayHostActivity() {
             stopUnifiedProjection { runOnUiThread { refreshStatus() } }
         }.apply {
             visibility=View.GONE;textSize=UiTypography.ACTION_SP.toFloat();includeFontPadding=false;minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);centeredIconGroup=true
-            persistentStartIcon=getDrawable(R.drawable.ic_dp_usb)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
+            persistentStartIcon=getDrawable(R.drawable.ic_glass_connection)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
             setCompoundDrawablesRelative(persistentStartIcon,null,null,null);compoundDrawablePadding=dp(8)
         }
         val primarySlot = FrameLayout(this).apply {
             addView(connectButton, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
         }
         val hero = ConnectionContentLayout(this, headline, homeConnectionRing!!, phone, status!!, primarySlot)
-        val usb=headerButton(brandString(R.string.connect_with_usb),R.drawable.ic_dp_usb,true) { connect(false) }.apply {
-            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false);centeredIconGroup=true
+        val connectionMode=button(homeConnectionModeLabel(),false,::openHomeConnectionSettings).apply {
+            textSize=UiTypography.ACTION_SP.toFloat();minHeight=dp(ReferenceHomeMetrics.ACTION_HEIGHT_DP);setSingleLine(false)
+            persistentStartIcon=getDrawable(R.drawable.ic_glass_connection)?.mutate()?.apply { setTint(TEXT);setBounds(0,0,dp(20),dp(20)) }
+            text=homeConnectionModeLabel()
+            compoundDrawablePadding=dp(8)
         }
-        homeUsbFooter=usb
+        homeConnectionFooter=connectionMode
         val footerStart=android.widget.FrameLayout(this).apply {
             setMeasureAllChildren(true)
-            addView(usb,android.widget.FrameLayout.LayoutParams(-1,-1))
+            addView(connectionMode,android.widget.FrameLayout.LayoutParams(-1,-1))
             addView(disconnectButton,android.widget.FrameLayout.LayoutParams(-1,-1))
         }
         val settings=headerButton(brandString(R.string.settings),R.drawable.ic_glass_settings,true) { openProjectionWhenReady = false; page="settings";render() }.apply {
@@ -1342,7 +1361,7 @@ class DiPlayActivity : CarPlayHostActivity() {
             SettingsCategory.DIAGNOSTICS -> diagnosticsSettings(content)
             SettingsCategory.ADVANCED -> advancedSettings(content)
             SettingsCategory.LANGUAGE -> {
-                settingsPageTitle(content, brandString(R.string.language_section_title), brandString(R.string.settings_language_summary))
+                settingsPageTitle(content, brandString(R.string.language_section_title))
                 renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.LANGUAGE))
             }
             SettingsCategory.ABOUT -> about(content)
@@ -1350,12 +1369,6 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun settingsOverview(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.settings_overview), brandString(R.string.settings_overview_subtitle))
-        val readiness = card()
-        readinessCard = readiness
-        renderedReadiness = null
-        refreshReadiness()
-        content.addView(readiness, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
         content.addView(settingsSectionHeading(R.string.settings_quick_settings))
         content.addView(quickSettingsCard(),LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(SETTINGS_BLOCK_GAP_DP) })
         val destinations = listOf(
@@ -1375,72 +1388,6 @@ class DiPlayActivity : CarPlayHostActivity() {
         }
 
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.OVERVIEW))
-    }
-
-    private fun currentReadiness() = SettingsReadiness.of(
-        setupError = setupError != null,
-        active = CarPlayBackgroundSession.active,
-        running = CarPlayBackgroundSession.hasSession(),
-        wireless = AirPlayPersistence.loadWirelessEnabled(this),
-        phoneChosen = DiPlayPreferences.phoneAddress(this) != null,
-        hotspotSetupNeeded = AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL &&
-            carHotspotDetailsMissing(),
-    )
-
-    private fun refreshReadiness() {
-        val card = readinessCard ?: return
-        val state = currentReadiness()
-        if (state == renderedReadiness) return
-        renderedReadiness = state
-        card.removeAllViews()
-        val title = brandString(when (state) {
-            SettingsReadiness.SETUP_ERROR, SettingsReadiness.HOTSPOT_SETUP -> R.string.setup_needs_attention
-            SettingsReadiness.CONNECTED -> R.string.carplay_connected
-            SettingsReadiness.CONNECTING -> R.string.connecting_to_your_iphone
-            SettingsReadiness.CHOOSE_IPHONE -> R.string.settings_choose_iphone_title
-            SettingsReadiness.READY_WIRELESS, SettingsReadiness.READY_USB -> R.string.ready
-        })
-        val detail = when (state) {
-            SettingsReadiness.SETUP_ERROR -> setupError.orEmpty()
-            SettingsReadiness.HOTSPOT_SETUP -> brandString(R.string.save_the_name_and_password_from_the_car_s_hotspot_settings)
-            SettingsReadiness.CONNECTED -> brandString(R.string.settings_ready_connected)
-            SettingsReadiness.CONNECTING -> brandString(R.string.settings_connecting_description)
-            SettingsReadiness.CHOOSE_IPHONE -> brandString(R.string.settings_choose_iphone_description)
-            SettingsReadiness.READY_WIRELESS -> brandString(R.string.settings_ready_wireless, DiPlayPreferences.phoneName(this))
-            SettingsReadiness.READY_USB -> brandString(R.string.settings_ready_usb)
-        }
-        val tint = when {
-            state.needsAction -> WARNING
-            state == SettingsReadiness.CONNECTED -> READY
-            else -> TEXT
-        }
-        val text=column()
-        text.addView(label(title,UiTypography.STATUS_SP,if(state==SettingsReadiness.CONNECTED)TEXT else tint,true).apply {
-            if(state==SettingsReadiness.CONNECTED) {
-                val check=getDrawable(R.drawable.ic_connection_done)?.mutate()?.apply { setTint(READY);setBounds(0,0,dp(24),dp(24)) }
-                setCompoundDrawablesRelative(null,null,check,null);compoundDrawablePadding=dp(FidelitySettingsMetrics.ROW_GAP_DP)
-            }
-        },LinearLayout.LayoutParams(-2,-2))
-        if(state==SettingsReadiness.CONNECTED && DiPlayPreferences.phoneAddress(this)!=null) text.addView(actionButton(DiPlayPreferences.phoneName(this),false) { choosePhone() }.apply {
-            textSize=UiTypography.ROW_SP.toFloat();minHeight=dp(GlassChrome.MIN_TARGET_DP);setPadding(0,0,0,0);gravity=Gravity.START or Gravity.CENTER_VERTICAL
-            doOnLayout { background=RippleDrawable(ColorStateList.valueOf(RIPPLE),ColorDrawable(Color.TRANSPARENT),null) }
-        },LinearLayout.LayoutParams(-2,-2))
-        if (state != SettingsReadiness.CONNECTED) text.addView(label(detail, 15, MUTED).apply { setPadding(0, dp(6), 0, 0) })
-        when (state) {
-            SettingsReadiness.CHOOSE_IPHONE -> text.addView(button(brandString(R.string.settings_choose_iphone_action), true) {
-                choosePhone()
-            }, matchButton(12, 56))
-            SettingsReadiness.SETUP_ERROR, SettingsReadiness.HOTSPOT_SETUP -> text.addView(button(brandString(R.string.open_connection_setup), true) {
-                openConnectionSetupFromSettings()
-            }, matchButton(12, 56))
-            else -> Unit
-        }
-        card.addView(row().apply {
-            gravity=Gravity.CENTER_VERTICAL
-            addView(ConnectionRingView(this@DiPlayActivity).apply { appearance(appNight);state(connecting=state==SettingsReadiness.CONNECTING) },
-                LinearLayout.LayoutParams(dp(FidelitySettingsMetrics.READINESS_RING_DP),dp(FidelitySettingsMetrics.READINESS_RING_DP)).apply { marginEnd=dp(FidelitySettingsMetrics.CONTENT_PAD_DP) })
-            addView(text,LinearLayout.LayoutParams(0,-2,1f))
-        })
     }
 
     private fun visualDescendants(view: View): List<View> = listOf(view) +
@@ -1514,23 +1461,20 @@ class DiPlayActivity : CarPlayHostActivity() {
         setOnClickListener { openSettingsCategory(category) }
     }
 
-    private fun settingsPageTitle(content: LinearLayout, title: String, subtitle: String) {
+    private fun settingsPageTitle(content: LinearLayout, title: String) {
         content.addView(label(title, if (isExpandedSettingsLayout) UiTypography.PAGE_SP else UiTypography.COMPACT_PAGE_SP, TEXT, true).apply {
             includeFontPadding=false;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-        })
-        content.addView(label(subtitle, UiTypography.BODY_SP, MUTED).apply {
-            includeFontPadding=false
-            setPadding(0,dp(FidelitySettingsMetrics.CAPTION_GAP_DP),0,dp(FidelitySettingsMetrics.ROW_GAP_DP))
+            setPadding(0,0,0,dp(FidelitySettingsMetrics.ROW_GAP_DP))
         })
     }
 
     private fun connectionSettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.connection), brandString(R.string.settings_connection_summary))
+        settingsPageTitle(content, brandString(R.string.connection))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.CONNECTION))
     }
 
     private fun displaySettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.settings_display), brandString(R.string.settings_display_summary))
+        settingsPageTitle(content, brandString(R.string.settings_display))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DISPLAY))
     }
 
@@ -1553,12 +1497,12 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun audioSettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.audio), brandString(R.string.settings_audio_summary))
+        settingsPageTitle(content, brandString(R.string.audio))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.AUDIO))
     }
 
     private fun navigationSettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.settings_navigation), brandString(R.string.settings_navigation_summary))
+        settingsPageTitle(content, brandString(R.string.settings_navigation))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.NAVIGATION))
         // The BYD card is hidden without its receiver; say so instead of leaving a gap. On a
         // Lincoln/Ford unit there is nothing BYD to explain, and the cluster card above is the one
@@ -1571,7 +1515,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun vehicleSettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.settings_vehicle), brandString(R.string.settings_vehicle_summary))
+        settingsPageTitle(content, brandString(R.string.settings_vehicle))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.VEHICLE))
         section(content, brandString(R.string.settings_advanced), R.drawable.ic_dp_advanced) { card ->
             card.addView(settingsNote(brandString(R.string.settings_vehicle_description), 16, MUTED))
@@ -1583,7 +1527,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun diagnosticsSettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.diagnostics), brandString(R.string.settings_diagnostics_summary))
+        settingsPageTitle(content, brandString(R.string.diagnostics))
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
     }
 
@@ -1875,7 +1819,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun advancedSettings(content: LinearLayout) {
-        settingsPageTitle(content, brandString(R.string.settings_advanced), brandString(R.string.settings_advanced_subtitle))
+        settingsPageTitle(content, brandString(R.string.settings_advanced))
         val caution = card().apply {
             addView(label(brandString(R.string.settings_advanced_caution_title), UiTypography.ROW_SP, WARNING, true))
             addView(label(brandString(R.string.settings_advanced_caution_description), 14, MUTED).apply {
@@ -4690,10 +4634,10 @@ class DiPlayActivity : CarPlayHostActivity() {
         appDialogBuilder()
             .setTitle(brandString(R.string.usb_auto_confirm_title))
             .setMessage(brandString(R.string.usb_auto_confirm_dialog_msg))
-            .setPositiveButton(brandString(R.string.btn_auto_apply_permissions)) { _, _ ->
+            .setPositiveButton(brandString(R.string.dialog_auto_permissions)) { _, _ ->
                 autoApplyPermissions()
             }
-            .setNeutralButton(brandString(R.string.btn_open_accessibility_setting)) { _, _ ->
+            .setNeutralButton(brandString(R.string.dialog_open_accessibility)) { _, _ ->
                 if (!UsbAutoConfirmService.openSettings(this)) {
                     toast(brandString(R.string.wheel_keys_no_settings))
                 }
@@ -6402,7 +6346,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         appDialogBuilder().setTitle(brandString(R.string.wireless_connection_help))
             .setMessage(brandString(R.string.pair_your_iphone_with_the_car_s_bluetooth_keep_wi_fi_on_an))
             .setPositiveButton(brandString(R.string.got_it), null)
-            .setNeutralButton(brandString(R.string.reset_carplay_wi_fi)) { _, _ ->
+            .setNeutralButton(brandString(R.string.ui_glass_wifi_reset_short)) { _, _ ->
                 confirmWirelessReset()
             }.show()
     }
@@ -6461,7 +6405,7 @@ class DiPlayActivity : CarPlayHostActivity() {
             running -> R.string.ui_glass_connecting_title
             else -> R.string.ui_glass_home_title
         }))
-        homeUsbFooter?.visibility=if(running)View.GONE else View.VISIBLE
+        homeConnectionFooter?.visibility=if(running)View.GONE else View.VISIBLE
         homeConnectionRing?.state(connecting = running && !connected && !projectionNeedsRetry && !projectionNeedsWifiReset,
             completed = connected)
         setHomeText(status, when {
@@ -6480,15 +6424,16 @@ class DiPlayActivity : CarPlayHostActivity() {
         }
         connectButton?.isEnabled = setupError == null && (!running || connected || projectionNeedsRetry || projectionNeedsWifiReset)
         refreshReconnectBar()
-        refreshReadiness()
     }
     private fun refreshHomeActionLabels(width: Int = homeActionWidth) {
         homeActionWidth = width
         val compact = width > 0 && ConnectionPageLayout.compactActions(this, width)
         val running = CarPlayBackgroundSession.hasSession() || projectionIsStarting
         val connected = running && mainProjectionReady
-        setHomeText(homeUsbFooter, brandString(if (compact) R.string.ui_glass_usb_short else R.string.connect_with_usb))
-        homeUsbFooter?.contentDescription = brandString(R.string.connect_with_usb)
+        setHomeText(homeConnectionFooter, homeConnectionModeLabel(compact))
+        homeConnectionFooter?.contentDescription = homeConnectionModeLabel()
+        setHomeText(disconnectButton, brandString(if (connected) R.string.home_disconnect_carplay else R.string.home_cancel_connection))
+        disconnectButton?.contentDescription = disconnectButton?.text
         connectButton?.contentDescription = brandString(when {
             projectionNeedsWifiReset -> R.string.reset_carplay_wi_fi
             projectionNeedsRetry -> R.string.retry_carplay_connection
@@ -7612,7 +7557,7 @@ class DiPlayActivity : CarPlayHostActivity() {
             super.setText(styled, BufferType.SPANNABLE)
             refreshRowDescription(text)
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            setCompoundDrawablesRelativeWithIntrinsicBounds(null, null,
+            setCompoundDrawablesRelativeWithIntrinsicBounds(persistentStartIcon, null,
                 context.getDrawable(R.drawable.ic_dp_chevron)?.mutate()?.apply { setTint(accent) }, null)
         }
     }

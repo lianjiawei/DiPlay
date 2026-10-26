@@ -1,9 +1,9 @@
 <resources>
-    <string name="ui_glass_home_title">Ready, set, go</string>
+    <string name="ui_glass_home_title">CarPlay not connected</string>
     <string name="ui_glass_video_preparing">Preparing the CarPlay picture…</string>
     <string name="ui_glass_video_ready">Showing CarPlay</string>
     <string name="ui_glass_connect_carplay">Connect CarPlay</string>
-    <string name="ui_glass_paired_waiting">Paired · waiting to connect</string>
+    <string name="ui_glass_paired_waiting">Connect iPhone using the selected mode</string>
     <string name="ui_glass_back_home">Back home</string>
     <string name="ui_glass_reconnect_hint">Changes apply after reconnecting</string>
     <string name="ui_glass_details">Details</string>
