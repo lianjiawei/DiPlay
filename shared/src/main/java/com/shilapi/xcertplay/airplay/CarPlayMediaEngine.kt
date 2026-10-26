@@ -21,10 +21,10 @@ data class AudioStreamId(val type: Int, val audioType: String)
 interface MediaSink {
     fun onVideoCodec(type: Int, codec: VideoCodec) {}
     fun onVideoConfig(type: Int, codecData: ByteArray) {}
-    fun onVideoFrame(type: Int, naluBytes: ByteArray) {}
-    /** A frame with the iPhone's frame time and its arrival time (System.nanoTime); see [ScreenStream.Listener]. */
-    fun onVideoFrame(type: Int, naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) =
-        onVideoFrame(type, naluBytes)
+    /** Takes ownership of [accessUnit]; see [ScreenStream.Listener]. */
+    fun onVideoFrame(type: Int, accessUnit: VideoAccessUnit, senderNanos: Long, arrivalNanos: Long) {
+        accessUnit.close()
+    }
     fun setVideoRecoveryHandler(type: Int, handler: () -> Unit) {}
     fun setVideoDiagnosticHandler(type: Int, handler: (String) -> Unit) {}
     fun onScreenStreamActive(type: Int, active: Boolean) {}
@@ -50,9 +50,17 @@ interface MediaSink {
 internal fun currentScreenListener(type: Int, sink: MediaSink, isCurrent: () -> Boolean) = object : ScreenStream.Listener {
     override fun onCodec(codec: VideoCodec) { if (isCurrent()) sink.onVideoCodec(type, codec) }
     override fun onConfig(codecData: ByteArray) { if (isCurrent()) sink.onVideoConfig(type, codecData) }
-    override fun onFrame(naluBytes: ByteArray) { if (isCurrent()) sink.onVideoFrame(type, naluBytes) }
-    override fun onFrame(naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) {
-        if (isCurrent()) sink.onVideoFrame(type, naluBytes, senderNanos, arrivalNanos)
+    override fun onFrame(accessUnit: VideoAccessUnit, senderNanos: Long, arrivalNanos: Long) {
+        if (!isCurrent()) {
+            accessUnit.close()
+            return
+        }
+        try {
+            sink.onVideoFrame(type, accessUnit, senderNanos, arrivalNanos)
+        } catch (error: Throwable) {
+            accessUnit.close()
+            throw error
+        }
     }
 }
 

@@ -21,6 +21,17 @@ class MediaCodecSupportTest {
         assertFalse(MediaCodecSupport.isRandomAccess(byteArrayOf(0, 0, 0, 1, 2, 1, 20), VideoCodec.H265))
     }
 
+    @Test fun randomAccessScanIgnoresUnusedPooledTail() {
+        val predicted = byteArrayOf(0, 0, 0, 1, 0x41, 20)
+        val pooled = ByteArray(32)
+        predicted.copyInto(pooled)
+        byteArrayOf(0, 0, 0, 1, 0x65, 20).copyInto(pooled, predicted.size)
+
+        assertFalse(MediaCodecSupport.isRandomAccess(pooled, VideoCodec.H264, predicted.size))
+        assertTrue(MediaCodecSupport.isRandomAccess(pooled, VideoCodec.H264, predicted.size + 6))
+        assertFalse(MediaCodecSupport.isRandomAccess(pooled, VideoCodec.H264, pooled.size + 1))
+    }
+
     @Test
     fun lengthPrefixedNalUnitsBecomeOneAnnexBBuffer() {
         val first = byteArrayOf(0x40, 0x01)

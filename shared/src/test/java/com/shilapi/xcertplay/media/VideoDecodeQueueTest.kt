@@ -1,10 +1,17 @@
 package com.shilapi.xcertplay.media
 
+import com.shilapi.xcertplay.airplay.VideoAccessUnit
+import com.shilapi.xcertplay.airplay.VideoBufferPool
 import com.shilapi.xcertplay.airplay.VideoCodec
 import org.junit.Assert.*
 import org.junit.Test
 
 class VideoDecodeQueueTest {
+    private fun pooledFrame(pool: VideoBufferPool, size: Int): VideoJob.Frame {
+        val lease = pool.acquire(size)
+        return VideoJob.Frame(VideoAccessUnit(lease, size))
+    }
+
     @Test fun lostReferenceChainWaitsForSuccessfullyQueuedKeyframe() {
         val chain = VideoReferenceChain()
         val predicted = byteArrayOf(0, 0, 0, 1, 0x41, 1)
@@ -160,6 +167,37 @@ class VideoDecodeQueueTest {
             assertEquals(700L, paced.senderNanos)
             assertEquals(800L, paced.arrivalNanos)
         }
+    }
+
+    @Test fun everyQueueDiscardPathReleasesPooledPictures() {
+        val pool = VideoBufferPool(maxPerBucket = 1, maxRetainedBytes = 64 * 1024)
+
+        val overflow = VideoDecodeQueue(maxFrames = 1)
+        overflow.offer(pooledFrame(pool, 10))
+        overflow.offer(pooledFrame(pool, 11))
+        assertEquals(1, pool.snapshot().activeBuffers)
+        assertEquals(VideoJob.Resync, overflow.poll(0))
+        (overflow.poll(0) as VideoJob.Frame).close()
+        assertEquals(0, pool.snapshot().activeBuffers)
+
+        val invalidated = VideoDecodeQueue()
+        invalidated.offer(pooledFrame(pool, 12))
+        invalidated.discardCurrentChain()
+        assertEquals(0, pool.snapshot().activeBuffers)
+
+        val oversized = VideoDecodeQueue(maxBytes = 5)
+        oversized.offer(pooledFrame(pool, 6))
+        assertEquals(VideoJob.Resync, oversized.poll(0))
+        assertEquals(0, pool.snapshot().activeBuffers)
+
+        val closing = VideoDecodeQueue()
+        closing.offer(pooledFrame(pool, 13))
+        closing.closeAndDrain().forEach { (it as? VideoJob.Frame)?.close() }
+        assertEquals(0, pool.snapshot().activeBuffers)
+        closing.offer(pooledFrame(pool, 14))
+        assertEquals(0, pool.snapshot().activeBuffers)
+        assertNull(closing.poll(0))
+        pool.close()
     }
 
 }

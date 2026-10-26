@@ -27,14 +27,24 @@ class CurrentScreenListenerTest {
         data class TimedFrame(val type: Int, val data: List<Byte>, val senderNanos: Long, val arrivalNanos: Long) : Event()
     }
 
-    /** Records the four video deliveries; the 4-argument frame is recorded on its own, not via the 3-argument default. */
+    /** Records both untimed and timed access units, then releases the ownership transferred by the listener. */
     private class RecordingSink : MediaSink {
         val events: MutableList<Event> = Collections.synchronizedList(mutableListOf())
         override fun onVideoCodec(type: Int, codec: VideoCodec) { events += Event.Codec(type, codec) }
         override fun onVideoConfig(type: Int, codecData: ByteArray) { events += Event.CodecData(type, codecData.toList()) }
-        override fun onVideoFrame(type: Int, naluBytes: ByteArray) { events += Event.Frame(type, naluBytes.toList()) }
-        override fun onVideoFrame(type: Int, naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) {
-            events += Event.TimedFrame(type, naluBytes.toList(), senderNanos, arrivalNanos)
+        override fun onVideoFrame(
+            type: Int,
+            accessUnit: VideoAccessUnit,
+            senderNanos: Long,
+            arrivalNanos: Long,
+        ) {
+            try {
+                val data = accessUnit.bytes.copyOf(accessUnit.size).toList()
+                events += if (senderNanos == 0L && arrivalNanos == 0L) Event.Frame(type, data)
+                else Event.TimedFrame(type, data, senderNanos, arrivalNanos)
+            } finally {
+                accessUnit.close()
+            }
         }
         fun take(): List<Event> = synchronized(events) { events.toList().also { events.clear() } }
     }
@@ -46,8 +56,8 @@ class CurrentScreenListenerTest {
     private fun ScreenStream.Listener.deliverAll(codec: VideoCodec = VideoCodec.H265) {
         onCodec(codec)
         onConfig(config)
-        onFrame(frame)
-        onFrame(timedFrame, 1_234_567_890L, 9_876_543_210L)
+        onFrame(VideoAccessUnit.unpooled(frame), 0L, 0L)
+        onFrame(VideoAccessUnit.unpooled(timedFrame), 1_234_567_890L, 9_876_543_210L)
     }
 
     private fun expected(type: Int, codec: VideoCodec = VideoCodec.H265) = listOf(
@@ -92,14 +102,30 @@ class CurrentScreenListenerTest {
         listener.onCodec(VideoCodec.H264)
         listener.onConfig(config)
         current.set(false)
-        listener.onFrame(frame)
-        listener.onFrame(timedFrame, 1L, 2L)
+        listener.onFrame(VideoAccessUnit.unpooled(frame), 0L, 0L)
+        listener.onFrame(VideoAccessUnit.unpooled(timedFrame), 1L, 2L)
 
         assertEquals(4, checks)
         assertEquals(
             listOf(Event.Codec(110, VideoCodec.H264), Event.CodecData(110, config.toList())),
             sink.take(),
         )
+    }
+
+    @Test
+    fun replacedStreamReturnsItsPooledFrameWithoutCallingTheSink() {
+        val sink = RecordingSink()
+        val pool = VideoBufferPool(maxPerBucket = 1, maxRetainedBytes = 64 * 1024)
+        val lease = pool.acquire(frame.size)
+        frame.copyInto(lease.bytes)
+        val listener = currentScreenListener(110, sink) { false }
+
+        listener.onFrame(VideoAccessUnit(lease, frame.size), 1L, 2L)
+
+        assertEquals(emptyList<Event>(), sink.take())
+        assertEquals(0, pool.snapshot().activeBuffers)
+        assertEquals(1, pool.snapshot().retainedBuffers)
+        pool.close()
     }
 
     @Test
