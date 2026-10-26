@@ -177,26 +177,36 @@ object ScreenCodec {
      */
     fun lengthPrefixedToAnnexB(payload: ByteArray): ByteArray {
         if (payload.size < 4 || payload.startsWithStartCode()) return payload
+        lengthPrefixedToAnnexBInPlace(payload, payload.size)
+        return payload
+    }
+
+    /**
+     * Validates a complete four-byte-length-prefixed picture and changes only those prefixes.
+     * [length] is separate from array capacity because pooled arrays can contain an unused tail.
+     */
+    internal fun lengthPrefixedToAnnexBInPlace(payload: ByteArray, length: Int): Boolean {
+        if (length !in 4..payload.size) return false
 
         var offset = 0
-        while (offset + 4 <= payload.size) {
-            val length = readU32Be(payload, offset)
+        while (offset + 4 <= length) {
+            val unitLength = readU32Be(payload, offset)
             offset += 4
-            if (length <= 0 || offset + length > payload.size) return payload
-            offset += length
+            if (unitLength <= 0 || unitLength > length - offset) return false
+            offset += unitLength
         }
-        if (offset != payload.size) return payload
+        if (offset != length) return false
 
         offset = 0
-        while (offset + 4 <= payload.size) {
-            val length = readU32Be(payload, offset)
+        while (offset + 4 <= length) {
+            val unitLength = readU32Be(payload, offset)
             payload[offset] = 0
             payload[offset + 1] = 0
             payload[offset + 2] = 0
             payload[offset + 3] = 1
-            offset += 4 + length
+            offset += 4 + unitLength
         }
-        return payload
+        return true
     }
 
     fun detectConfig(payload: ByteArray): Pair<VideoCodec, ByteArray> {
@@ -224,8 +234,8 @@ object ScreenCodec {
     const val TAG_SIZE = 16
 }
 
-private fun ByteArray.startsWithStartCode(): Boolean =
-    size >= 4 &&
+private fun ByteArray.startsWithStartCode(limit: Int = size): Boolean =
+    limit >= 4 &&
         this[0] == 0.toByte() &&
         this[1] == 0.toByte() &&
         this[2] == 0.toByte() &&

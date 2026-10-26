@@ -135,6 +135,55 @@ class AirPlayCryptoChachaTest {
         } finally { pool.shutdownNow() }
     }
 
+    @Test fun reusableVideoOpenerWritesOnlyTheAuthenticatedPlaintextLength() {
+        val key = bytes(32)
+        val aad = bytes(128)
+        val opener = AirPlayCrypto.VideoFrameOpener(key)
+        for ((counter, size) in listOf(0, 1, 63, 64, 65, 65_537, 500_000).withIndex()) {
+            val plain = bytes(size)
+            val sealed = AirPlayCrypto.chachaSealBouncyCastle(key, AirPlayCrypto.nonce64(counter.toLong()), plain, aad)
+            val pooledInput = ByteArray(sealed.size + 31) { 0x55 }.also { sealed.copyInto(it) }
+            val pooledOutput = ByteArray(plain.size + 47) { 0x33 }
+
+            val written = opener.open(counter.toLong(), pooledInput, sealed.size, aad, pooledOutput)
+
+            assertEquals(plain.size, written)
+            assertArrayEquals(plain, pooledOutput.copyOf(written))
+            assertTrue(pooledOutput.copyOfRange(written, pooledOutput.size).all { it == 0x33.toByte() })
+        }
+    }
+
+    @Test fun reusableVideoOpenerFallbackMatchesTheExistingImplementation() {
+        val key = bytes(32)
+        val aad = bytes(128)
+        val counter = 51L
+        val plain = bytes(300_000)
+        val sealed = AirPlayCrypto.chachaSealBouncyCastle(key, AirPlayCrypto.nonce64(counter), plain, aad)
+        val output = ByteArray(plain.size)
+        val opener = AirPlayCrypto.VideoFrameOpener(key, platformCipher = null)
+
+        assertEquals(plain.size, opener.open(counter, sealed, sealed.size, aad, output))
+        assertArrayEquals(plain, output)
+        assertEquals("BouncyCastle", opener.implementation)
+        assertEquals(0, opener.platformFallbacks)
+    }
+
+    @Test fun reusableVideoOpenerRejectsTamperedTag() {
+        val key = bytes(32)
+        val aad = bytes(128)
+        val sealed = AirPlayCrypto.chachaSealBouncyCastle(key, AirPlayCrypto.nonce64(9), bytes(512), aad)
+            .also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() }
+        val opener = AirPlayCrypto.VideoFrameOpener(key)
+        try {
+            opener.open(9, sealed, sealed.size, aad, ByteArray(sealed.size - 16))
+            fail("reusable opener accepted a changed tag")
+        } catch (_: AEADBadTagException) {
+            // Expected from the platform provider.
+        } catch (_: InvalidCipherTextException) {
+            // Expected if this runtime has already fallen back to BouncyCastle.
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun platformState(): ThreadLocal<Any?> = AirPlayCrypto::class.java
         .getDeclaredField("platformState").apply { isAccessible = true }.get(null) as ThreadLocal<Any?>

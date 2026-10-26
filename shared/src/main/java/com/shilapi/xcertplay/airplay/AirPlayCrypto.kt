@@ -128,6 +128,65 @@ object AirPlayCrypto {
         }
 
     /**
+     * Reusable high-rate video decryptor that writes into caller-owned storage.
+     *
+     * A screen stream owns one instance on its receive thread. The platform cipher is preferred,
+     * preserving the existing provider choice, and is retired only when that provider refuses an
+     * otherwise valid operation. Authentication failures are never retried as a different provider.
+     */
+    internal class VideoFrameOpener(
+        key: ByteArray,
+        platformCipher: Cipher? = newPlatformChacha(),
+    ) {
+        private val keyBytes = key.copyOf()
+        private val keyParameter = KeyParameter(keyBytes)
+        private val nonce = ByteArray(NONCE_SIZE)
+        private val fallbackCipher = ChaCha20Poly1305()
+        private var platformCipher: Cipher? = platformCipher
+        var implementation: String = platformCipher?.provider?.name ?: "BouncyCastle"
+            private set
+        var platformFallbacks: Long = 0
+            private set
+
+        fun open(
+            counter: Long,
+            ciphertextAndTag: ByteArray,
+            ciphertextLength: Int,
+            aad: ByteArray,
+            output: ByteArray,
+        ): Int {
+            require(ciphertextLength in TAG_BYTES..ciphertextAndTag.size)
+            val expected = ciphertextLength - TAG_BYTES
+            require(output.size >= expected)
+            writeNonce64(counter, nonce)
+
+            platformCipher?.let { cipher ->
+                try {
+                    cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "ChaCha20"), IvParameterSpec(nonce))
+                    if (aad.isNotEmpty()) cipher.updateAAD(aad)
+                    return cipher.doFinal(ciphertextAndTag, 0, ciphertextLength, output, 0).also {
+                        check(it == expected) { "unexpected ChaCha plaintext length $it, expected $expected" }
+                        implementation = cipher.provider.name
+                    }
+                } catch (failure: AEADBadTagException) {
+                    throw failure
+                } catch (_: GeneralSecurityException) {
+                    platformCipher = null
+                    platformFallbacks++
+                }
+            }
+
+            fallbackCipher.init(false, AEADParameters(keyParameter, MAC_BITS, nonce, aad))
+            val processed = fallbackCipher.processBytes(ciphertextAndTag, 0, ciphertextLength, output, 0)
+            val finalized = fallbackCipher.doFinal(output, processed)
+            return (processed + finalized).also {
+                check(it == expected) { "unexpected fallback ChaCha plaintext length $it, expected $expected" }
+                implementation = "BouncyCastle"
+            }
+        }
+    }
+
+    /**
      * Null when the platform has no ChaCha20-Poly1305 or refuses this use of it (a desktop JDK rejects
      * reusing a key and nonce for encryption, which tests do); a failed tag still throws.
      */
@@ -201,11 +260,7 @@ object AirPlayCrypto {
     /** 12-byte nonce: four zero bytes followed by an eight-byte little-endian counter. */
     fun nonce64(counter: Long): ByteArray {
         val nonce = ByteArray(NONCE_SIZE)
-        var value = counter
-        for (index in 4 until NONCE_SIZE) {
-            nonce[index] = value.toByte()
-            value = value ushr 8
-        }
+        writeNonce64(counter, nonce)
         return nonce
     }
 
@@ -223,4 +278,19 @@ object AirPlayCrypto {
         digest.doFinal(output, 0)
         return output
     }
+
+    private fun newPlatformChacha(): Cipher? =
+        PLATFORM_CHACHA_NAMES.firstNotNullOfOrNull { runCatching { Cipher.getInstance(it) }.getOrNull() }
+
+    private fun writeNonce64(counter: Long, output: ByteArray) {
+        require(output.size == NONCE_SIZE)
+        output.fill(0)
+        var value = counter
+        for (index in 4 until NONCE_SIZE) {
+            output[index] = value.toByte()
+            value = value ushr 8
+        }
+    }
+
+    private const val TAG_BYTES = MAC_BITS / 8
 }

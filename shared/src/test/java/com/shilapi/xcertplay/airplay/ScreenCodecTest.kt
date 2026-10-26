@@ -2,7 +2,9 @@ package com.shilapi.xcertplay.airplay
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScreenCodecTest {
@@ -31,6 +33,31 @@ class ScreenCodecTest {
 
         assertSame(payload, ScreenCodec.lengthPrefixedToAnnexB(payload))
         assertArrayEquals(original, payload)
+    }
+
+    @Test fun conversionUsesTheRealLengthAndDoesNotReadOrWriteThePooledTail() {
+        val first = byteArrayOf(0x65, 1, 2)
+        val picture = byteArrayOf(0, 0, 0, first.size.toByte()) + first
+        val pooled = ByteArray(32) { 0x55 }.also { picture.copyInto(it) }
+
+        assertTrue(ScreenCodec.lengthPrefixedToAnnexBInPlace(pooled, picture.size))
+        assertArrayEquals(byteArrayOf(0, 0, 0, 1) + first, pooled.copyOf(picture.size))
+        assertTrue(pooled.copyOfRange(picture.size, pooled.size).all { it == 0x55.toByte() })
+    }
+
+    @Test fun malformedPooledPictureIsRejectedWithoutChangingItsBytes() {
+        val picture = byteArrayOf(0, 0, 0, 9, 0x65, 1)
+        val pooled = ByteArray(32) { 0x55 }.also { picture.copyInto(it) }
+        val original = pooled.copyOf()
+
+        assertFalse(ScreenCodec.lengthPrefixedToAnnexBInPlace(pooled, picture.size))
+        assertArrayEquals(original, pooled)
+    }
+
+    @Test fun oneByteNalLengthIsValidatedEvenThoughItsPrefixLooksLikeAStartCode() {
+        val valid = byteArrayOf(0, 0, 0, 1, 0x65)
+        assertTrue(ScreenCodec.lengthPrefixedToAnnexBInPlace(valid, valid.size))
+        assertFalse(ScreenCodec.lengthPrefixedToAnnexBInPlace(byteArrayOf(0, 0, 0, 1), 4))
     }
 
     @Test fun readsTheFrameTimeFromTheScreenHeader() {
