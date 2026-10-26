@@ -13,7 +13,7 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 应用名称 | CarPlay |
-| 当前正式版 | 1.1.8 |
+| 当前正式版 | 1.1.9 |
 | Release 包名 | `cn.manstep.phonemirrorBox` |
 | Debug 包名 | `cn.manstep.phonemirrorBox.hudtest` |
 | 最低系统 | Android 7.1（API 25） |
@@ -31,7 +31,7 @@
 ## 下载与更新
 
 - [GitHub 最新正式版](https://github.com/lianjiawei/DiPlay/releases/latest)
-- [CarPlay 1.1.8 更新说明](docs/RELEASE-NOTES-1.1.8.md)
+- [CarPlay 1.1.9 更新说明](docs/RELEASE-NOTES-1.1.9.md)
 - [项目仓库](https://github.com/lianjiawei/DiPlay)
 
 应用内更新位于 **设置 → 关于 → 检查更新**，支持直接检查、下载和安装新版本。下载完成后会校验文件、包名和 Android 签名。
