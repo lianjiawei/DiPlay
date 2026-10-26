@@ -85,6 +85,25 @@ class UpdateCheckUiTest {
         assertTrue(button.isEnabled)
     }
 
+    @Test fun latestVersionFeedbackStillExpiresWhileTheActivityIsPaused() {
+        val screen = screen(online = true)
+        screen.updateLookup = { null }
+        val button = checkButton(screen)
+        button.performClick()
+        workers.single().run()
+        idle()
+        assertEquals(screen.getString(R.string.update_up_to_date), button.text.toString())
+        assertFalse(button.isEnabled)
+
+        controller!!.pause()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(4))
+        controller!!.resume().visible()
+        idle()
+
+        assertEquals(screen.getString(R.string.update_check), checkButton(screen).text.toString())
+        assertTrue(checkButton(screen).isEnabled)
+    }
+
     @Test fun dnsFailureAndTimeoutHaveFriendlyMessagesAndRetainThePage() {
         val screen = screen(online = true)
         val page = field<View>(screen, "rootScroll")

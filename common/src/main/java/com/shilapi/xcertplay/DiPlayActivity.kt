@@ -767,7 +767,6 @@ class DiPlayActivity : CarPlayHostActivity() {
         wallpaperProgress = null
         updatePromptResumed = false
         handler.removeCallbacks(automaticUpdatePrompt)
-        handler.removeCallbacks(clearUpToDateFeedback)
         updatePrompt?.dismiss()
         updatePrompt = null
         updateHistoryDialog?.dismiss()
@@ -783,6 +782,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         updateFile?.parentFile?.let { UpdateStorage.release(applicationContext, it) }
         releaseHistoryInstaller()
         handler.removeCallbacks(automaticUpdatePrompt)
+        handler.removeCallbacks(clearUpToDateFeedback)
         updatePrompt?.dismiss()
         updatePrompt = null
         settingsSearchPopup?.dismiss()
