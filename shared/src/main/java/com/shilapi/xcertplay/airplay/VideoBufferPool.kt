@@ -38,6 +38,8 @@ internal class VideoBufferPool(
     )
 
     private val buckets = HashMap<Int, ArrayDeque<ByteArray>>()
+    /** Oldest to newest across all size classes, so a stream can adapt after its frame sizes change. */
+    private val retainedOrder = ArrayDeque<ByteArray>()
     private var retainedBuffers = 0
     private var retainedBytes = 0
     private var activeBuffers = 0
@@ -59,6 +61,7 @@ internal class VideoBufferPool(
             acquisitions++
             val reused = if (reusable) buckets[capacity]?.pollFirst() else null
             val selected = if (reused != null) {
+                check(retainedOrder.removeFirstOccurrence(reused)) { "reused video buffer missing from LRU" }
                 retainedBuffers--
                 retainedBytes -= reused.size
                 reuses++
@@ -82,9 +85,22 @@ internal class VideoBufferPool(
         releases++
         check(activeBuffers >= 0 && activeBytes >= 0) { "video buffer released more than once" }
 
-        val bucket = if (!closed && reusable) buckets.getOrPut(bytes.size) { ArrayDeque() } else null
+        val bucket = if (!closed && reusable && bytes.size <= maxRetainedBytes) {
+            buckets.getOrPut(bytes.size) { ArrayDeque() }
+        } else null
+        if (bucket != null && bucket.size < maxPerBucket) {
+            while (retainedBytes > maxRetainedBytes - bytes.size && retainedOrder.isNotEmpty()) {
+                val evicted = retainedOrder.removeFirst()
+                val evictedBucket = checkNotNull(buckets[evicted.size])
+                check(evictedBucket.removeFirstOccurrence(evicted)) { "evicted video buffer missing from bucket" }
+                retainedBuffers--
+                retainedBytes -= evicted.size
+                discardedBuffers++
+            }
+        }
         if (bucket != null && bucket.size < maxPerBucket && retainedBytes <= maxRetainedBytes - bytes.size) {
             bucket.addFirst(bytes)
+            retainedOrder.addLast(bytes)
             retainedBuffers++
             retainedBytes += bytes.size
         } else {
@@ -113,6 +129,7 @@ internal class VideoBufferPool(
         closed = true
         discardedBuffers += retainedBuffers.toLong()
         buckets.clear()
+        retainedOrder.clear()
         retainedBuffers = 0
         retainedBytes = 0
     }

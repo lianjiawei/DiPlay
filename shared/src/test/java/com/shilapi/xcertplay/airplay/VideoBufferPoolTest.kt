@@ -1,5 +1,8 @@
 package com.shilapi.xcertplay.airplay
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -42,7 +45,7 @@ class VideoBufferPoolTest {
 
         val snapshot = pool.snapshot()
         assertEquals(1, snapshot.retainedBuffers)
-        assertEquals(16 * 1024, snapshot.retainedBytes)
+        assertEquals(32 * 1024, snapshot.retainedBytes)
         assertEquals(2, snapshot.discardedBuffers)
         assertEquals(0, snapshot.activeBuffers)
     }
@@ -114,5 +117,64 @@ class VideoBufferPoolTest {
         } catch (_: IllegalStateException) {
             // Expected.
         }
+    }
+
+    @Test
+    fun sustainedMultiResolutionTrafficStaysBoundedAndReusesStorage() {
+        val pool = VideoBufferPool()
+
+        repeat(10_000) { index ->
+            // Most compressed pictures are small; larger interframes and keyframes occur periodically.
+            val size = when {
+                index % 1_000 == 0 -> 1_500_123
+                index % 200 == 0 -> 730_123
+                index % 3 == 0 -> 180_123
+                index % 2 == 0 -> 57_321
+                else -> 12_345
+            }
+            val sealed = pool.acquire(size + 16)
+            val picture = VideoAccessUnit(pool.acquire(size), size)
+            val main = picture.retain()
+            val mirror = picture.retain()
+            sealed.close()
+            picture.close()
+            main.close()
+            mirror.close()
+        }
+
+        val snapshot = pool.snapshot()
+        assertEquals(0, snapshot.activeBuffers)
+        assertTrue("expected at least 99.5% reuse: $snapshot", snapshot.reuses >= 19_900)
+        assertTrue(snapshot.allocations <= 100)
+        assertTrue(snapshot.retainedBytes <= 4 * 1024 * 1024)
+        pool.close()
+    }
+
+    @Test
+    fun concurrentConsumersReturnOneSharedPictureExactlyOnce() {
+        val pool = VideoBufferPool()
+        val picture = VideoAccessUnit(pool.acquire(250_000), 249_999)
+        val executor = Executors.newFixedThreadPool(8)
+        val done = CountDownLatch(5_000)
+        repeat(5_000) {
+            val handle = picture.retain()
+            executor.execute {
+                try {
+                    assertEquals(249_999, handle.size)
+                } finally {
+                    handle.close()
+                    done.countDown()
+                }
+            }
+        }
+        assertTrue(done.await(10, TimeUnit.SECONDS))
+        picture.close()
+        executor.shutdownNow()
+
+        val snapshot = pool.snapshot()
+        assertEquals(0, snapshot.activeBuffers)
+        assertEquals(1, snapshot.releases)
+        assertEquals(1, snapshot.retainedBuffers)
+        pool.close()
     }
 }

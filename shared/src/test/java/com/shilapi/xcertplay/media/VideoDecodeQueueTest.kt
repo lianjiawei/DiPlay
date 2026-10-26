@@ -200,4 +200,28 @@ class VideoDecodeQueueTest {
         pool.close()
     }
 
+    @Test fun overflowCannotRecycleAFrameAlreadyOwnedByTheConsumer() {
+        val pool = VideoBufferPool(maxPerBucket = 4, maxRetainedBytes = 64 * 1024)
+        val queue = VideoDecodeQueue(maxFrames = 1)
+        val current = pooledFrame(pool, 10)
+        current.nalus[0] = 17
+        queue.offer(current)
+        val polled = queue.poll(0) as VideoJob.Frame
+
+        val queued = pooledFrame(pool, 11)
+        queued.nalus[0] = 23
+        queue.offer(queued)
+        val newest = pooledFrame(pool, 12)
+        newest.nalus[0] = 42
+        queue.offer(newest) // Drops only the still-queued picture.
+
+        assertEquals(17, polled.nalus[0].toInt())
+        assertEquals(2, pool.snapshot().activeBuffers) // Current consumer plus newest queue entry.
+        polled.close()
+        assertEquals(VideoJob.Resync, queue.poll(0))
+        (queue.poll(0) as VideoJob.Frame).close()
+        assertEquals(0, pool.snapshot().activeBuffers)
+        pool.close()
+    }
+
 }

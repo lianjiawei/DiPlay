@@ -74,7 +74,7 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
 
     private fun run(sock: Socket) {
         var failure: Throwable? = null
-        val stats = StreamReceiveStats("video", onDiagnostic)
+        val stats = StreamReceiveStats("video", { line -> onDiagnostic("$line ${bufferSummary()}") })
         try {
             val input = sock.getInputStream()
             val header = ByteArray(HEADER_LEN)
@@ -174,6 +174,17 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
             offset += read
         }
         return true
+    }
+
+    /** Cumulative allocation counters only; never includes video bytes or network endpoints. */
+    private fun bufferSummary(): String {
+        val snapshot = buffers.snapshot()
+        return "videoBuffers=" +
+            "acquire:${snapshot.acquisitions},allocate:${snapshot.allocations},reuse:${snapshot.reuses}," +
+            "discard:${snapshot.discardedBuffers},inFlight:${snapshot.activeBuffers}/" +
+            "${snapshot.activeBytes},peak:${snapshot.peakActiveBytes},retained:" +
+            "${snapshot.retainedBuffers}/${snapshot.retainedBytes},closed:${snapshot.closed} " +
+            "videoDecrypt=${decryptor.implementation},fallbacks:${decryptor.platformFallbacks}"
     }
 
     private companion object {
