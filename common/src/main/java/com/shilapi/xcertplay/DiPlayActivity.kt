@@ -303,6 +303,10 @@ class DiPlayActivity : CarPlayHostActivity() {
     private var updateSavedUri: Uri? = null
     /** Runs the check of the public update copy; tests run it inline. */
     internal var updateInstallWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-install").start() }
+    internal var updateInstallerUri: (File) -> Uri = {
+        FileProvider.getUriForFile(this, "$packageName.update-apks", it)
+    }
+    internal var updateInstallerLauncher: (Intent) -> Unit = ::startActivity
     internal var updateCheckWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-check").start() }
     internal var updateDownloadWorker: (Runnable) -> Unit = { Thread(it, "diplay-update-download").start() }
     internal var updateConnection: (URL) -> URLConnection = ::openUpdateConnection
@@ -2810,7 +2814,10 @@ class DiPlayActivity : CarPlayHostActivity() {
         })
     }
 
-    private enum class UpdateStage { IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, VERIFYING, READY, FAILED }
+    private enum class UpdateStage {
+        IDLE, CHECKING, UP_TO_DATE, AVAILABLE, DOWNLOADING, VERIFYING, READY,
+        PREPARING_INSTALL, INSTALL_FAILED, FAILED,
+    }
     private enum class HistoryStage { IDLE, CHECKING, DOWNLOADING, VERIFYING }
 
     private fun openBackup(from: SettingsCategory = SettingsCategory.ABOUT) {
@@ -2964,6 +2971,12 @@ class DiPlayActivity : CarPlayHostActivity() {
                     matchButton(10, 60))
                 updateSavedPath?.let { container.addView(label(brandString(R.string.update_saved_to, it), 13, MUTED).apply { setPadding(0, dp(10), 0, 0) }) }
             }
+            UpdateStage.PREPARING_INSTALL -> container.addView(
+                button(brandString(R.string.update_preparing_install), false) { openUpdateProgress() }.apply {
+                    isEnabled = false
+                }, matchButton(10, 60))
+            UpdateStage.INSTALL_FAILED -> container.addView(
+                button(brandString(R.string.update_retry_install), true) { installUpdate() }, matchButton(10, 60))
         }
         historyMessage?.let {
             container.addView(label(it, 14, MUTED).apply { setPadding(0, dp(10), 0, 0) })
@@ -2971,7 +2984,8 @@ class DiPlayActivity : CarPlayHostActivity() {
         when (historyStage) {
             HistoryStage.IDLE -> container.addView(
                 button(brandString(R.string.update_history_download), false) { loadHistoryReleases() }.apply {
-                    isEnabled = updateStage != UpdateStage.CHECKING && updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING
+                    isEnabled = updateStage != UpdateStage.CHECKING && updateStage != UpdateStage.DOWNLOADING &&
+                        updateStage != UpdateStage.VERIFYING && updateStage != UpdateStage.PREPARING_INSTALL
                 }.also { historyActionButton = it },
                 matchButton(10, 56),
             )
@@ -3017,7 +3031,8 @@ class DiPlayActivity : CarPlayHostActivity() {
 
     private fun checkForUpdates() {
         if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.UP_TO_DATE || updateStage == UpdateStage.DOWNLOADING ||
-            updateStage == UpdateStage.VERIFYING || historyStage != HistoryStage.IDLE) return
+            updateStage == UpdateStage.VERIFYING || updateStage == UpdateStage.PREPARING_INSTALL ||
+            historyStage != HistoryStage.IDLE) return
         handler.removeCallbacks(clearUpToDateFeedback)
         if (updateNetworkUnavailable()) {
             updateMessage = brandString(R.string.update_no_network)
@@ -3079,7 +3094,8 @@ class DiPlayActivity : CarPlayHostActivity() {
 
     private fun loadHistoryReleases() {
         if (historyStage != HistoryStage.IDLE) return
-        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING) return
+        if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING ||
+            updateStage == UpdateStage.VERIFYING || updateStage == UpdateStage.PREPARING_INSTALL) return
         if (updateNetworkUnavailable()) {
             historyMessage = brandString(R.string.update_no_network)
             refreshUpdateRow(rebuild = true)
@@ -3171,7 +3187,8 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private fun downloadHistoryRelease(release: UpdateRelease) {
-        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING) return
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING ||
+            updateStage == UpdateStage.PREPARING_INSTALL) return
         historyStage = HistoryStage.DOWNLOADING
         historyProgress = null
         historyMessage = null
@@ -3229,7 +3246,8 @@ class DiPlayActivity : CarPlayHostActivity() {
 
     private fun openAvailableUpdate(release: UpdateRelease) {
         if (updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING ||
-            updateStage == UpdateStage.READY) {
+            updateStage == UpdateStage.READY || updateStage == UpdateStage.PREPARING_INSTALL ||
+            updateStage == UpdateStage.INSTALL_FAILED) {
             page = "settings"
             settingsCategory = SettingsCategory.ABOUT
             render()
@@ -3270,7 +3288,8 @@ class DiPlayActivity : CarPlayHostActivity() {
         if (release == null || !isUpdatePage() || !updatePromptResumed || isFinishing || isDestroyed ||
             updatePrompt?.isShowing == true || historyStage != HistoryStage.IDLE ||
             updateStage == UpdateStage.CHECKING || updateStage == UpdateStage.DOWNLOADING ||
-            updateStage == UpdateStage.VERIFYING || updateStage == UpdateStage.READY) return
+            updateStage == UpdateStage.VERIFYING || updateStage == UpdateStage.READY ||
+            updateStage == UpdateStage.PREPARING_INSTALL || updateStage == UpdateStage.INSTALL_FAILED) return
         if (automatic && (!window.decorView.hasWindowFocus() ||
                 projectionIsStarting || CarPlayBackgroundSession.hasSession() || !UpdateAvailability.shouldPrompt(this, release))) return
         val prompt = createUpdatePrompt()
@@ -3286,7 +3305,7 @@ class DiPlayActivity : CarPlayHostActivity() {
                 updateMessage = null
                 downloadUpdate()
             },
-            onInstall = { if (updateStage == UpdateStage.READY) installUpdate() },
+            onInstall = { if (updateStage == UpdateStage.READY || updateStage == UpdateStage.INSTALL_FAILED) installUpdate() },
             onHide = { updatePromptForDownload = false },
         )
         prompt.dialog.setOnDismissListener { if (updatePrompt === prompt) updatePrompt = null }
@@ -3300,6 +3319,8 @@ class DiPlayActivity : CarPlayHostActivity() {
             UpdateStage.DOWNLOADING -> UpdatePromptStage.DOWNLOADING
             UpdateStage.VERIFYING -> UpdatePromptStage.VERIFYING
             UpdateStage.READY -> UpdatePromptStage.READY
+            UpdateStage.PREPARING_INSTALL -> UpdatePromptStage.PREPARING_INSTALL
+            UpdateStage.INSTALL_FAILED -> UpdatePromptStage.INSTALL_FAILED
             UpdateStage.FAILED -> UpdatePromptStage.FAILED
             else -> return
         }
@@ -3325,7 +3346,8 @@ class DiPlayActivity : CarPlayHostActivity() {
 
     private fun downloadUpdate() {
         val requestedRelease = updateRelease ?: return
-        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING) return
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.VERIFYING ||
+            updateStage == UpdateStage.PREPARING_INSTALL) return
         if (historyStage == HistoryStage.DOWNLOADING || historyStage == HistoryStage.VERIFYING) return
         lateinit var release: UpdateRelease
         updateStage = UpdateStage.DOWNLOADING
@@ -3399,7 +3421,14 @@ class DiPlayActivity : CarPlayHostActivity() {
     private fun installUpdate() {
         // No unknown-sources pre-check: some head units answer its settings page with "Not supported yet".
         // The chosen installer asks for that permission itself.
-        installApk(updateFile ?: return)
+        if (updateStage != UpdateStage.READY && updateStage != UpdateStage.INSTALL_FAILED) return
+        val file = updateFile ?: return
+        updateStage = UpdateStage.PREPARING_INSTALL
+        updateMessage = null
+        updatePromptForDownload = true
+        refreshUpdateRow()
+        refreshUpdatePrompt()
+        installApk(file)
     }
 
     private fun installApk(file: File) {
@@ -3416,15 +3445,17 @@ class DiPlayActivity : CarPlayHostActivity() {
                 if (generation != updateGeneration || isFinishing || isDestroyed) return@runOnUiThread
                 protection.fold({ startInstaller(file, publicUri) }, { failure ->
                     Log.w("DiPlay-Update", "installation protection failed", failure)
-                    updateMessage = brandString(R.string.update_failed)
+                    updateMessage = brandString(R.string.update_install_failed)
+                    updateStage = UpdateStage.INSTALL_FAILED
                     refreshUpdateRow()
+                    refreshUpdatePrompt()
                 })
             }
         })
     }
 
     private fun startInstaller(file: File, publicUri: Uri?) {
-        val uri = publicUri ?: FileProvider.getUriForFile(this, "$packageName.update-apks", file)
+        val uri = publicUri ?: updateInstallerUri(file)
         val view = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -3434,14 +3465,20 @@ class DiPlayActivity : CarPlayHostActivity() {
         val launch = if (installers > 1) Intent.createChooser(view, null) else view
         val outcome = "${if (installers > 1) "chooser" else "direct"} uri=${if (publicUri != null) "public" else "provider"} installers=$installers"
         try {
-            startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            updateInstallerLauncher(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            updateStage = UpdateStage.READY
+            updateMessage = null
+            refreshUpdateRow()
+            refreshUpdatePrompt()
             Log.i("DiPlay-Update", "install started: $outcome")
             UpdateAvailability.recordInstall(applicationContext, System.currentTimeMillis(), outcome)
         } catch (failure: RuntimeException) {
             Log.w("DiPlay-Update", "install failed to start: $outcome", failure)
             UpdateAvailability.recordInstall(applicationContext, System.currentTimeMillis(), "$outcome failed=${failure.javaClass.simpleName}")
-            updateMessage = brandString(R.string.update_failed)
-            if (isUpdatePage()) render()
+            updateMessage = brandString(R.string.update_install_failed)
+            updateStage = UpdateStage.INSTALL_FAILED
+            refreshUpdateRow()
+            refreshUpdatePrompt()
         }
     }
 
@@ -3509,7 +3546,8 @@ class DiPlayActivity : CarPlayHostActivity() {
                 historyStage == HistoryStage.IDLE
         }
         historyActionButton?.isEnabled = updateStage != UpdateStage.CHECKING &&
-            updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING
+            updateStage != UpdateStage.DOWNLOADING && updateStage != UpdateStage.VERIFYING &&
+            updateStage != UpdateStage.PREPARING_INSTALL
         updateProgressButton?.text = updateProgress?.let { brandString(R.string.update_downloading, it) }
             ?: brandString(R.string.update_downloading_unknown)
         historyProgressLabel?.text = brandString(R.string.update_history_downloading, historyProgress ?: 0)

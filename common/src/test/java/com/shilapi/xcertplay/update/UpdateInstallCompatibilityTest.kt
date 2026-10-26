@@ -50,7 +50,8 @@ class UpdateInstallCompatibilityTest {
                 activityInfo = ActivityInfo().apply { packageName = "installer$it"; name = "Install" }
             })
         }
-        DiPlayActivity::class.java.getDeclaredMethod("installUpdate").apply { isAccessible = true }.invoke(activity)
+        DiPlayActivity::class.java.getDeclaredMethod("installApk", File::class.java)
+            .apply { isAccessible = true }.invoke(activity, apk)
         return shadowOf(activity).nextStartedActivity
     }
 

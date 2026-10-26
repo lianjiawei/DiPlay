@@ -1024,6 +1024,9 @@
     <string name="update_downloading_unknown">Downloading…</string>
     <string name="update_install_now">Install now</string>
     <string name="update_ready_to_install">Download complete. Tap Install now to open the Android installer.</string>
+    <string name="update_preparing_install">Opening the Android installer…</string>
+    <string name="update_install_failed">Could not open the Android installer.</string>
+    <string name="update_retry_install">Retry install</string>
     <string name="update_retry">Retry</string>
     <string name="update_hide">Hide</string>
     <string name="ui_glass_connection_incomplete">Connection incomplete</string>

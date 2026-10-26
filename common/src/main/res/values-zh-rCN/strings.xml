@@ -989,6 +989,9 @@
     <string name="update_downloading_unknown">正在下载…</string>
     <string name="update_install_now">立即安装</string>
     <string name="update_ready_to_install">下载完成。点击“立即安装”打开系统安装界面。</string>
+    <string name="update_preparing_install">正在打开系统安装界面…</string>
+    <string name="update_install_failed">无法打开系统安装界面。</string>
+    <string name="update_retry_install">重试安装</string>
     <string name="update_retry">重试</string>
     <string name="update_hide">收起</string>
     <string name="ui_glass_connection_incomplete">连接未完成</string>

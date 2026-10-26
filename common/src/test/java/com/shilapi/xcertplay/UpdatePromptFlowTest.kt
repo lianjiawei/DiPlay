@@ -330,6 +330,7 @@ class UpdatePromptFlowTest {
         assertEquals(c.get().getString(R.string.update_install_now), original.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
         assertNull(shadowOf(c.get()).nextStartedActivity)
         c.get().updateInstallWorker = { it.run() }
+        c.get().updateInstallerUri = { android.net.Uri.parse("content://${c.get().packageName}.update-apks/test.apk") }
         original.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         val installer = requireNotNull(shadowOf(c.get()).nextStartedActivity)
         assertEquals(Intent.ACTION_VIEW, installer.action)
@@ -342,6 +343,61 @@ class UpdatePromptFlowTest {
             assertArrayEquals(verified.readBytes(), app.contentResolver.openInputStream(installer.data!!)!!.use { it.readBytes() })
         }
         assertTrue(installer.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+    }
+
+    @Test fun installPreparationKeepsTheSameDialogAndPreventsRepeatedLaunches() {
+        val published = serveUpdate(validChecksum = { true })
+        UpdateAvailability.save(app, published)
+        val c = screen()
+        c.get().updateLookup = { published }
+        c.get().updateDownloadWorker = { it.run() }
+        c.get().updateConnection = { it.openConnection() }
+        val dialog = prompt(c.get())!!
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        val installs = mutableListOf<Runnable>()
+        c.get().updateInstallWorker = installs::add
+        c.get().updateInstallerUri = { android.net.Uri.parse("content://${c.get().packageName}.update-apks/test.apk") }
+
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals("PREPARING_INSTALL", ReflectionHelpers.getField<Any>(c.get(), "updateStage").toString())
+        assertSame(dialog, prompt(c.get()))
+        assertEquals(View.GONE, dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).visibility)
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals(1, installs.size)
+
+        installs.single().run()
+        idle()
+        assertEquals("READY", ReflectionHelpers.getField<Any>(c.get(), "updateStage").toString())
+        assertEquals(c.get().getString(R.string.update_install_now),
+            dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertNotNull(shadowOf(c.get()).nextStartedActivity)
+    }
+
+    @Test fun installerLaunchFailureStaysInTheDialogAndRetriesOnlyInstallation() {
+        val published = serveUpdate(validChecksum = { true })
+        UpdateAvailability.save(app, published)
+        val c = screen()
+        c.get().updateLookup = { published }
+        c.get().updateDownloadWorker = { it.run() }
+        c.get().updateInstallWorker = { it.run() }
+        c.get().updateInstallerUri = { android.net.Uri.parse("content://${c.get().packageName}.update-apks/test.apk") }
+        c.get().updateConnection = { it.openConnection() }
+        val dialog = prompt(c.get())!!
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        c.get().updateInstallerLauncher = { throw android.content.ActivityNotFoundException("test") }
+
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals("INSTALL_FAILED", ReflectionHelpers.getField<Any>(c.get(), "updateStage").toString())
+        assertSame(dialog, prompt(c.get()))
+        assertEquals(c.get().getString(R.string.update_retry_install),
+            dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        assertTrue(dialog.messageView.text.contains(c.get().getString(R.string.update_install_failed)))
+
+        var launches = 0
+        c.get().updateInstallerLauncher = { launches++ }
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals(1, launches)
+        assertEquals("READY", ReflectionHelpers.getField<Any>(c.get(), "updateStage").toString())
     }
 
     @Test fun checksumFailureOffersRetryAndOnlyTheSuccessfulRetryCanInstall() {

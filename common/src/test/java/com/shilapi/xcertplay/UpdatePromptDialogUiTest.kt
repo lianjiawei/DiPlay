@@ -77,6 +77,24 @@ class UpdatePromptDialogUiTest {
         assertEquals(0, downloads)
     }
 
+    @Test fun preparingInstallShowsProgressAndBlocksRepeatedInstallTaps() {
+        val dialog = open(UpdatePromptStage.PREPARING_INSTALL, 100)
+        assertTrue(dialog.progress.isIndeterminate)
+        assertEquals(View.GONE, dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).visibility)
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals(0, installs)
+        assertEquals(0, downloads)
+    }
+
+    @Test fun installFailureRetriesInstallWithoutDownloadingAgain() {
+        val dialog = open(UpdatePromptStage.INSTALL_FAILED, 100)
+        assertEquals(controller!!.get().getString(R.string.update_retry_install),
+            dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
+        dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        assertEquals(1, installs)
+        assertEquals(0, downloads)
+    }
+
     @Test fun failureCanOnlyRetryTheDownload() {
         val dialog = open(UpdatePromptStage.FAILED, null)
         assertEquals(controller!!.get().getString(R.string.update_retry), dialog.dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
@@ -133,7 +151,8 @@ class UpdatePromptDialogUiTest {
         val width = ((minOf(config.screenWidthDp, 600) - 32) * metrics.density).toInt()
         val height = ((config.screenHeightDp - 32) * metrics.density).toInt()
         for ((state, percent) in listOf(UpdatePromptStage.OFFER to null,
-            UpdatePromptStage.DOWNLOADING to 42, UpdatePromptStage.READY to 100)) {
+            UpdatePromptStage.DOWNLOADING to 42, UpdatePromptStage.READY to 100,
+            UpdatePromptStage.PREPARING_INSTALL to 100, UpdatePromptStage.INSTALL_FAILED to 100)) {
             dialog.update(release, state, percent, null)
             val root = dialog.dialog.window!!.decorView
             root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),

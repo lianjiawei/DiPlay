@@ -14,7 +14,7 @@ import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.update.UpdateRelease
 import com.shilapi.xcertplay.update.UpdateReleaseNotes
 
-internal enum class UpdatePromptStage { OFFER, DOWNLOADING, VERIFYING, READY, FAILED }
+internal enum class UpdatePromptStage { OFFER, DOWNLOADING, VERIFYING, READY, PREPARING_INSTALL, INSTALL_FAILED, FAILED }
 
 /** One window follows the explicit download through verification to the system installer. */
 internal class UpdatePromptDialog(
@@ -61,7 +61,7 @@ internal class UpdatePromptDialog(
                 getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     when (stage) {
                         UpdatePromptStage.OFFER, UpdatePromptStage.FAILED -> onDownload(displayedRelease)
-                        UpdatePromptStage.READY -> onInstall()
+                        UpdatePromptStage.READY, UpdatePromptStage.INSTALL_FAILED -> onInstall()
                         else -> Unit
                     }
                 }
@@ -90,34 +90,44 @@ internal class UpdatePromptDialog(
                 else text(R.string.update_downloading, percent.coerceIn(0, 100))
             UpdatePromptStage.VERIFYING -> text(R.string.update_verifying)
             UpdatePromptStage.READY -> text(R.string.update_ready_to_install)
+            UpdatePromptStage.PREPARING_INSTALL -> text(R.string.update_preparing_install)
+            UpdatePromptStage.INSTALL_FAILED -> text(R.string.update_install_failed) +
+                failure?.takeIf { it.isNotBlank() }?.let { "\n\n$it" }.orEmpty()
             UpdatePromptStage.FAILED -> text(R.string.update_failed) + "\n\n" + failure.orEmpty()
         }
         if (state == UpdatePromptStage.OFFER) messageScroll.post { messageScroll.scrollTo(0, 0) }
-        progressPanel.visibility = if (state == UpdatePromptStage.OFFER || state == UpdatePromptStage.FAILED)
+        progressPanel.visibility = if (state == UpdatePromptStage.OFFER || state == UpdatePromptStage.FAILED ||
+            state == UpdatePromptStage.INSTALL_FAILED)
             View.GONE else View.VISIBLE
         progress.isIndeterminate = state == UpdatePromptStage.VERIFYING ||
-            state == UpdatePromptStage.DOWNLOADING && percent == null
+            state == UpdatePromptStage.PREPARING_INSTALL || state == UpdatePromptStage.DOWNLOADING && percent == null
         progress.progress = if (state == UpdatePromptStage.READY) 100 else (percent ?: 0).coerceIn(0, 100)
         progress.contentDescription = when (state) {
             UpdatePromptStage.VERIFYING -> text(R.string.update_verifying)
             UpdatePromptStage.READY -> text(R.string.update_history_saved_title)
+            UpdatePromptStage.PREPARING_INSTALL -> text(R.string.update_preparing_install)
+            UpdatePromptStage.INSTALL_FAILED -> text(R.string.update_install_failed)
             else -> if (percent == null) text(R.string.update_downloading_unknown)
                 else text(R.string.update_downloading, percent.coerceIn(0, 100))
         }
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
-            visibility = if (state == UpdatePromptStage.DOWNLOADING || state == UpdatePromptStage.VERIFYING)
+            visibility = if (state == UpdatePromptStage.DOWNLOADING || state == UpdatePromptStage.VERIFYING ||
+                state == UpdatePromptStage.PREPARING_INSTALL)
                 View.GONE else View.VISIBLE
             text = text(when (state) {
                 UpdatePromptStage.READY -> R.string.update_install_now
+                UpdatePromptStage.INSTALL_FAILED -> R.string.update_retry_install
                 UpdatePromptStage.FAILED -> R.string.update_retry
                 else -> R.string.update_download
             })
         }
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.text = text(
-            if (state == UpdatePromptStage.DOWNLOADING || state == UpdatePromptStage.VERIFYING)
+            if (state == UpdatePromptStage.DOWNLOADING || state == UpdatePromptStage.VERIFYING ||
+                state == UpdatePromptStage.PREPARING_INSTALL)
                 R.string.update_hide else R.string.update_later,
         )
-        val busy = state == UpdatePromptStage.DOWNLOADING || state == UpdatePromptStage.VERIFYING
+        val busy = state == UpdatePromptStage.DOWNLOADING || state == UpdatePromptStage.VERIFYING ||
+            state == UpdatePromptStage.PREPARING_INSTALL
         dialog.setCancelable(!busy)
         dialog.setCanceledOnTouchOutside(!busy)
     }
