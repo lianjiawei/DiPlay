@@ -181,10 +181,11 @@ The mirror catalog uses the GitHub release format, but both APK and checksum URL
 point to the same HTTPS mirror. Head units do not need GitHub access when the mirror is healthy.
 The existing checksum verification and Android package signature checks still apply.
 
-`scripts/sync_diplay_updates.py` synchronizes up to 30 published releases. It verifies
-each APK before publishing a new catalog, reuses verified local files, and leaves
-the previous catalog available when GitHub is unavailable. Files removed from the
-catalog remain for seven days for cached history lists and active downloads.
+`scripts/sync_diplay_updates.py` keeps the three latest published non-prerelease
+versions. It verifies each APK before publishing a new catalog, reuses verified local
+files, and preserves the previous catalog if GitHub is unavailable or supplies fewer
+than three verified versions when three were already published. After publication,
+older mirrored release folders are removed; previously cached links may no longer work.
 The service, timer and Nginx snippet are in `deploy/diplay-updates/`. The service
 runs as `diplay-updates` and the timer refreshes every 15 minutes. To refresh manually:
 

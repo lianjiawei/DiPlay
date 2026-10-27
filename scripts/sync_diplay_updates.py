@@ -16,7 +16,9 @@ RELEASES_URL = 'https://api.github.com/repos/lianjiawei/DiPlay/releases?per_page
 CHECKSUMS = 'SHA256SUMS.txt'
 MAX_APK_BYTES = 256 * 1024 * 1024
 MAX_TEXT_BYTES = 4 * 1024 * 1024
+RETAIN_RELEASES = 3
 SAFE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._+-]{0,159}\Z')
+VERSION_FOLDER = re.compile(r'v[0-9][A-Za-z0-9._+-]*\Z')
 
 
 def download(url, destination, limit):
@@ -70,7 +72,7 @@ def sync(destination, public_base, fetch=download):
         if not isinstance(releases, list):
             raise ValueError('Release listing is not an array')
         for release in releases[:30]:
-            if release.get('draft'):
+            if release.get('draft') or release.get('prerelease'):
                 continue
             tag = release.get('tag_name', '')
             assets = release.get('assets', [])
@@ -115,14 +117,22 @@ def sync(destination, public_base, fetch=download):
                             ('tag_name', 'name', 'body', 'published_at', 'prerelease', 'draft') if key in release})
             catalog[-1]['assets'] = mirrored
             retained.add(tag)
+            if len(catalog) == RETAIN_RELEASES:
+                break
         if not catalog:
             raise ValueError('No verified releases; preserving the existing catalog')
+        previous_catalog = destination / 'releases.json'
+        if previous_catalog.exists() and len(catalog) < RETAIN_RELEASES:
+            previous = json.loads(previous_catalog.read_text())
+            if isinstance(previous, list) and len(previous) >= RETAIN_RELEASES:
+                raise ValueError('Too few verified releases; preserving the existing catalog')
         listing.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n')
         os.chmod(listing, 0o644)
         os.replace(listing, destination / 'releases.json')
-    # Keep old URLs alive for cached history lists and in-progress transfers.
+    # Publish the verified catalog first, then remove obsolete release directories.
     for folder in (destination / 'assets').iterdir():
-        if folder.is_dir() and folder.name not in retained and time.time() - folder.stat().st_mtime > 7 * 86400:
+        if (folder.is_dir() and not folder.is_symlink() and VERSION_FOLDER.fullmatch(folder.name)
+                and folder.name not in retained):
             shutil.rmtree(folder)
     return len(catalog)
 
