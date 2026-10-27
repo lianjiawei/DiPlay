@@ -221,6 +221,9 @@ class LincolnClusterOutputTest {
         assertEquals(256, receiver.receive(infos().last()))
         assertNotEquals(firstToken, token(infos().last()))
         send(guidance().copy(maneuverIndex = 8, distanceMeters = 0, road = "Next Road"))
+        assertEquals(256, receiver.receive(infos().last())) // First distant zero is a candidate.
+        now += 500_000_000L
+        send(guidance().copy(maneuverIndex = 8, distanceMeters = 0, road = "Next Road"))
         assertEquals(0, receiver.receive(infos().last()))
     }
 
@@ -711,6 +714,9 @@ class LincolnClusterOutputTest {
         val current = guidance().copy(maneuverIndex = 7, distanceMeters = 400)
         send(current)
         assertEquals(256, receiver.receive(infos().last()))
+        send(current.copy(distanceMeters = 0))
+        assertEquals(256, receiver.receive(infos().last()))
+        now += 500_000_000L
         send(current.copy(distanceMeters = 0))
         assertEquals(0, receiver.receive(infos().last()))
         send(current.copy(distanceMeters = 200))

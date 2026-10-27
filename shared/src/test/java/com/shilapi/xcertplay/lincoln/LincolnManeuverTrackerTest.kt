@@ -100,6 +100,24 @@ class LincolnManeuverTrackerTest {
         assertEquals(80, largeAccepted.second)
     }
 
+    @Test fun aFallingSmallCorrectionGetsABoundedExtraChanceToRecover() {
+        val drive = Drive()
+        val original = drive.sample(800)
+        for (raw in listOf(820, 818, 816, 814, 812, 810, 808)) {
+            assertEquals("falling correction should preserve the previous minimum", original, drive.sample(raw))
+        }
+        val timeout = drive.sample(806)
+        assertNotEquals("an unannounced long detour must not remain frozen", original.first, timeout.first)
+        assertEquals(806, timeout.second)
+
+        val recovers = Drive()
+        val before = recovers.sample(800)
+        for (raw in listOf(820, 818, 816, 814, 812, 810, 799)) recovers.sample(raw)
+        val resumed = recovers.sample(790)
+        assertEquals(before.first, resumed.first)
+        assertEquals(790, resumed.second)
+    }
+
     @Test fun subFiveMetreNoiseCannotPrimeEitherConfirmationBand() {
         val large = Drive()
         val largeOld = large.sample(100)

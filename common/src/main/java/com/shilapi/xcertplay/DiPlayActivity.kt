@@ -6774,6 +6774,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         appendLine()
         appendLine("--- Current cluster display diagnostics (even when disabled) ---")
         appendLine(ClusterMapPresentation.diagnosticReport(appContext))
+        appendLine(com.shilapi.xcertplay.lincoln.LincolnNavigationDiagnostics.report())
         appendLine()
         appendLine("--- ADB cluster activity routing ---")
         appendLine("adbClusterActivityEnabled=${AirPlayPersistence.loadAdbClusterEnabled(appContext)}")

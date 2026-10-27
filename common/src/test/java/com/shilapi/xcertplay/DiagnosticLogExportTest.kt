@@ -1,6 +1,10 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
+import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.iap2.message.Iap2Messages
+import com.shilapi.xcertplay.lincoln.LincolnClusterOutput
+import com.shilapi.xcertplay.lincoln.LincolnClusterSettings
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -15,6 +19,28 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [27, 33])
 class DiagnosticLogExportTest {
+    @Test fun aReportIncludesSanitizedNavigationFrames() {
+        val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
+        LincolnClusterOutput.detach()
+        CarPlayGlance.setConnected(false)
+        LincolnClusterSettings.setNavigation(activity, true)
+        try {
+            LincolnClusterOutput.attach(activity)
+            CarPlayGlance.setConnected(true)
+            CarPlayGlance.onFrame(Iap2Messages.buildRaw(0x5202) {
+                u16(1, 45789); u8(3, 2); string(4, "private-test-street")
+            })
+            val report = report(activity)
+            assertTrue(report.contains("Lincoln navigation frames v1"))
+            val frame = report.lineSequence().first { it.startsWith("frame ") && it.contains("maneuverIndex=45789") }
+            assertTrue(frame.contains("maneuverType=2"))
+            assertFalse(frame.contains("private-test-street"))
+        } finally {
+            LincolnClusterOutput.detach()
+            CarPlayGlance.setConnected(false)
+            LincolnClusterSettings.setNavigation(activity, false)
+        }
+    }
     @Test(timeout = 8_000) fun aReportIncludesRecordsAcceptedBeforeExport() = export(blockUntilTimeout = false)
     @Test(timeout = 8_000) fun aReportSaysWhenTheBoundedFlushTimesOutWithoutCancellingTheTail() = export(blockUntilTimeout = true)
 

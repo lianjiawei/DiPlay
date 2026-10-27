@@ -125,6 +125,9 @@ internal class BydHudRouteState(
     /** Guidance ended explicitly (Arrived, NoRouteSet, or a session drop), not merely went quiet. */
     fun routeEnded(): Boolean = endedExplicitly
 
+    /** Selected index can be known before its 0x5202 maneuver details have arrived. */
+    fun selectedManeuverIndex(): Int? = activeIndex.takeIf { routeActive() && it >= 0 }
+
     /** Next maneuver as Apple sent it, for outputs with a richer icon set than the HUD. */
     fun currentApple(): BydAppleManeuver? {
         val maneuver = activeManeuver() ?: return null

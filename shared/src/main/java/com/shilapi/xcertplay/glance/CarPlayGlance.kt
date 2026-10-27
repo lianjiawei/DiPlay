@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.glance
 import com.shilapi.xcertplay.hud.BydHudRouteState
 import com.shilapi.xcertplay.hud.ClusterSongState
 import com.shilapi.xcertplay.iap2.wire.Iap2Frame
+import com.shilapi.xcertplay.lincoln.LincolnNavigationDiagnostics
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -54,11 +55,14 @@ object CarPlayGlance {
         val routeEndPending: Boolean = false,
         /** New accepted distance frames only; a ticker or lyric cannot confirm a distance rise. */
         val distanceRevision: Long = 0,
+        /** Selected index even when its maneuver details have not arrived yet. */
+        val selectedManeuverIndex: Int? = null,
     )
 
     private val route = BydHudRouteState(progressEndGraceNs = 2_500_000_000L)
     private val song = ClusterSongState()
     private var connected = false
+    private var sessionSequence = 0L
     private var last = Snapshot()
 
     // More than one consumer follows the glance (the home-screen widget and, on a Lincoln/Ford
@@ -107,8 +111,15 @@ object CarPlayGlance {
     fun onFrame(frame: Iap2Frame) {
         val changed = synchronized(this) {
             when (frame.messageId) {
-                BydHudRouteState.ROUTE_GUIDANCE_UPDATE, BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE ->
-                    runCatching { route.accept(frame.messageId, frame.payload) }
+                BydHudRouteState.ROUTE_GUIDANCE_UPDATE, BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE -> {
+                    val payload = frame.payload
+                    runCatching { route.accept(frame.messageId, payload) }
+                    // Observation only; a diagnostic failure must not change route handling.
+                    runCatching {
+                        LincolnNavigationDiagnostics.frame(frame.messageId, payload, sessionSequence, connected,
+                            route.progressGeneration, route.distanceRevision)
+                    }
+                }
                 ClusterSongState.NOW_PLAYING_UPDATE -> runCatching { song.accept(frame) }
                 else -> return
             }
@@ -121,9 +132,14 @@ object CarPlayGlance {
         val changed = synchronized(this) {
             if (connected == next) return
             connected = next
+            if (next) sessionSequence++
             if (!next) {
                 route.clear()
                 song.clear()
+            }
+            runCatching {
+                LincolnNavigationDiagnostics.connection(sessionSequence, connected,
+                    route.progressGeneration, route.distanceRevision)
             }
             publishLocked()
         }
@@ -154,6 +170,7 @@ object CarPlayGlance {
             routeProgressPending = connected && route.progressPending,
             routeEndPending = connected && route.progressEndPending,
             distanceRevision = if (connected) route.distanceRevision else 0,
+            selectedManeuverIndex = if (connected) route.selectedManeuverIndex() else null,
         )
         if (next == last) return null
         last = next

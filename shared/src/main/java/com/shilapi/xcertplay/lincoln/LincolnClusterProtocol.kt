@@ -276,6 +276,7 @@ internal class LincolnManeuverTracker {
     private var lastRevision: Long? = null
     private var smallRiseSinceNs: Long? = null
     private var smallRiseSamples = 0
+    private var previousSmallRiseRaw: Int? = null
     private var largeRiseSamples = 0
     private var largeRiseSinceNs: Long? = null
     private var token: LincolnManeuverToken? = null
@@ -337,9 +338,12 @@ internal class LincolnManeuverTracker {
                     // Crossing between the small and large bands starts a new confirmation.
                     clearLargeRise()
                     if (smallRiseSinceNs == null) smallRiseSinceNs = nowNs
+                    val falling = previousSmallRiseRaw?.let { rawMeters < it } == true
+                    previousSmallRiseRaw = rawMeters
                     smallRiseSamples++
                     if (smallRiseSamples >= MIN_PERSISTENT_RISE_SAMPLES &&
-                        nowNs - checkNotNull(smallRiseSinceNs) >= MAX_SMALL_RISE_HOLD_NS
+                        nowNs - checkNotNull(smallRiseSinceNs) >= MAX_SMALL_RISE_HOLD_NS &&
+                        (!falling || nowNs - checkNotNull(smallRiseSinceNs) >= MAX_FALLING_RISE_HOLD_NS)
                     ) {
                         resetReason = "persistent-distance-increase"
                         start(rawMeters)
@@ -380,6 +384,7 @@ internal class LincolnManeuverTracker {
     private fun clearSmallRise() {
         smallRiseSinceNs = null
         smallRiseSamples = 0
+        previousSmallRiseRaw = null
     }
 
     private fun clearLargeRise() {
@@ -405,5 +410,8 @@ internal class LincolnManeuverTracker {
         const val MIN_LARGE_RISE_SAMPLES = 2
         const val LARGE_RISE_CONFIRM_NS = 1_000_000_000L
         const val MAX_SMALL_RISE_HOLD_NS = 5_000_000_000L
+        // A falling correction may return to the old minimum; bound the additional wait so a
+        // real unannounced reroute cannot pin the displayed distance indefinitely.
+        const val MAX_FALLING_RISE_HOLD_NS = 7_000_000_000L
     }
 }
