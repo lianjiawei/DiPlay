@@ -171,6 +171,7 @@ class CarPlayController(
     private val clearPairRecord: () -> Unit = {},
     private val locationProvider: Iap2LocationProvider? = null,
     private val vehicleStatusProvider: com.shilapi.xcertplay.transport.VehicleStatusProvider? = null,
+    private val takePreconnectedBluetooth: (String) -> PreconnectedBluetoothSocket? = { null },
 ) : Closeable {
     init {
         require(!config.locationReportingEnabled || locationProvider != null) {
@@ -1225,6 +1226,8 @@ class CarPlayController(
     }
 
     private fun runWireless(generation: Int) {
+        var usedPreconnectedSocket = false
+        var sentStartSession = false
         try {
             debugLog("wireless bring-up generation=$generation starting")
             closeWirelessStack(generation = generation)
@@ -1431,17 +1434,25 @@ class CarPlayController(
                 "wireless RFCOMM connecting address=${device.address} " +
                     "uuid=$IAP2_IPHONE_UUID",
             )
+            val preconnected = runCatching { takePreconnectedBluetooth(device.address) }.getOrNull()?.let { offered ->
+                if (runCatching { offered.socket.isConnected }.getOrDefault(false)) offered
+                else { runCatching { offered.close() }; null }
+            }
+            usedPreconnectedSocket = preconnected != null
             val socket = synchronized(wirelessResourceLock) {
-                if (isStaleWirelessRun(generation)) return
-                device.createRfcommSocketToServiceRecord(UUID.fromString(IAP2_IPHONE_UUID))
+                if (isStaleWirelessRun(generation)) {
+                    runCatching { preconnected?.close() }
+                    return
+                }
+                (preconnected?.socket ?: device.createRfcommSocketToServiceRecord(UUID.fromString(IAP2_IPHONE_UUID)))
                     .also { bluetoothSocket = it }
             }
             logBluetoothConnectionSnapshot(device, "before-connect")
             val bluetoothStarted = System.nanoTime()
             val bluetoothConnectMillis: Long
             try {
-                connectBluetoothSocket(socket, device.address)
-                bluetoothConnectMillis = elapsedMillis(bluetoothStarted)
+                if (preconnected == null) connectBluetoothSocket(socket, device.address)
+                bluetoothConnectMillis = preconnected?.connectMillis ?: elapsedMillis(bluetoothStarted)
                 connectionDiagnostic("Bluetooth connect completed elapsedMs=$bluetoothConnectMillis " +
                     "socketReportedConnected=${runCatching { socket.isConnected }.getOrNull() ?: "unknown"}")
             } catch (error: Throwable) {
@@ -1538,6 +1549,7 @@ class CarPlayController(
                 keepAliveAfterDeadline = { keepBluetoothControlAlive(generation) },
                 beforeStartSession = { startedHotspot?.validateReady() },
                 onStartSessionSent = {
+                    sentStartSession = true
                     watchdog.startSessionSent(it.sentAtNanos)
                     if (activeSession != null) bonjourClient.connectionEstablished()
                     else bonjourClient.startGatewayDiscovery()
@@ -1582,7 +1594,10 @@ class CarPlayController(
                 }
                 Iap2WirelessControlTerminal.TIMED_OUT ->
                     if (!wirelessActiveReported.get()) {
-                        onStatus(CarPlayStatus.ControlEnded)
+                        if (PreconnectedRetryPolicy.shouldRetry(usedPreconnectedSocket, sentStartSession, false)) {
+                            debugLog("preconnected Bluetooth timed out before StartSession; retrying original wireless path")
+                            restartWireless()
+                        } else onStatus(CarPlayStatus.ControlEnded)
                     }
             }
         } catch (error: Throwable) {
@@ -1592,6 +1607,11 @@ class CarPlayController(
             if (wirelessActiveReported.get() && error !is Error) {
                 debugLog("wireless RFCOMM control ended after tunnel handoff: ${error.message}")
             } else {
+                if (error !is Error && PreconnectedRetryPolicy.shouldRetry(usedPreconnectedSocket, sentStartSession, false)) {
+                    debugLog("preconnected Bluetooth failed before StartSession; retrying original wireless path", error)
+                    restartWireless()
+                    return
+                }
                 debugLog("wireless bring-up failed", error)
                 if (error is Error) throw error
                 // A link that "connected" at once and failed without a byte may never have been

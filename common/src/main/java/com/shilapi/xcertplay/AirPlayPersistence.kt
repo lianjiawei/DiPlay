@@ -128,6 +128,8 @@ object AirPlayPersistence {
     private const val KEY_MAIN_DISPLAY_DISABLE_SAFE_AREA = "main_display_disable_safe_area"
     private const val KEY_ADAPT_PIP_RESOLUTION = "adapt_pip_resolution"
     private const val KEY_AUTO_START_ON_BOOT = "auto_start_on_boot"
+    // Opt-in: old installs retain the existing boot route.
+    private const val KEY_BACKGROUND_START_ON_BOOT = "background_start_on_boot"
     private const val KEY_BT_SUSPEND_DURING_CARPLAY = "bt_suspend_during_carplay"
     private const val KEY_HIDE_BYD_CALL_POPUP = "hide_byd_call_popup"
     private const val KEY_BT_SUSPEND_DELAY = "bt_suspend_delay_seconds"
@@ -410,6 +412,10 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_WIRELESS_ENABLED, enabled)
             .apply()
+        if (!enabled && loadBackgroundStartOnBoot(context) &&
+            DiPlayPreferences.defaultConnectionMode(context) == DefaultConnectionMode.LAST_USED) {
+            BackgroundWirelessWake.cancel(context)
+        }
     }
 
     fun loadMfiTarget(context: Context): MfiTarget {
@@ -592,6 +598,18 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_AUTO_START_ON_BOOT, enabled)
             .apply()
+        if (!enabled && loadBackgroundStartOnBoot(context)) BackgroundWirelessWake.cancel(context)
+    }
+
+    internal fun loadBackgroundStartOnBoot(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_BACKGROUND_START_ON_BOOT, false)
+
+    internal fun saveBackgroundStartOnBoot(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_BACKGROUND_START_ON_BOOT, enabled)
+            .apply()
+        if (!enabled) BackgroundWirelessWake.cancel(context)
     }
 
     fun loadBtSuspendDuringCarplay(context: Context): Boolean =

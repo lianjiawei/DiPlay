@@ -25,6 +25,19 @@ internal object StartupDiagnosticSnapshot {
         }
     }
 
+    fun waitingInBackground(context: Context) {
+        runCatching {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString("launchResult", "background-wait")
+                .remove("failureClass").apply()
+        }
+    }
+
+    fun sessionAlreadyRunning(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("launchResult", "session-already-running").remove("failureClass").apply()
+    }
+
     fun report(context: Context): String = runCatching {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val receivedAt = prefs.getLong("receivedAt", 0)

@@ -13,9 +13,10 @@ import android.util.Log
 /** Optional DiLink wake-up path for the iPhone the user selected in connection setup. */
 class PhoneBluetoothReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED ||
-            !DiPlayPreferences.connectOnPhoneBluetooth(context) ||
-            CarPlayBackgroundSession.hasSession()) return
+        if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED || CarPlayBackgroundSession.hasSession()) return
+        val existingWake = DiPlayPreferences.connectOnPhoneBluetooth(context)
+        val backgroundWake = !existingWake && BackgroundWirelessWake.isArmed(context)
+        if (!existingWake && !backgroundWake) return
         val selected = DiPlayPreferences.phoneAddress(context) ?: return
         if (Build.VERSION.SDK_INT >= 31 &&
             context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return
@@ -27,6 +28,9 @@ class PhoneBluetoothReceiver : BroadcastReceiver() {
         } ?: return
         val address = runCatching { device.address }.getOrNull() ?: return
         if (!address.equals(selected, ignoreCase = true)) return
+        // Our RFCOMM attempt can itself emit ACL_CONNECTED. Give the active attempt a chance to
+        // transfer its socket; if it fails, the service still handles this independent wake.
+        if (BackgroundWirelessWake.isArmed(context) && BackgroundWirelessProbeService.noteAcl(address)) return
 
         // The car can send several ACL events during one wake-up. Commit before launching so
         // another receiver instance cannot open a second connection from the same event burst.
@@ -36,7 +40,10 @@ class PhoneBluetoothReceiver : BroadcastReceiver() {
         if (prefs.contains("last_launch_elapsed") && now >= previous && now - previous < 15_000) return
         prefs.edit().putLong("last_launch_elapsed", now).commit()
         PhoneWakeDiagnostics.record(context, "matched")
-        val launch = Intent(context, DiPlayActivity::class.java).apply {
+        val launch = if (backgroundWake) {
+            val token = BackgroundWirelessWake.token(context) ?: return
+            BackgroundWirelessWake.launchIntent(context, token)
+        } else Intent(context, DiPlayActivity::class.java).apply {
             putExtra(EXTRA_AUTO_CONNECT, true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
@@ -50,6 +57,7 @@ class PhoneBluetoothReceiver : BroadcastReceiver() {
 
     companion object {
         const val EXTRA_AUTO_CONNECT = "com.corsairplay.AUTO_CONNECT_SELECTED_PHONE"
+        const val EXTRA_BACKGROUND_BOOT_WIRELESS = "com.corsairplay.BACKGROUND_BOOT_WIRELESS"
     }
 }
 

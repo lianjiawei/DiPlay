@@ -113,6 +113,17 @@ class SettingsBackupCodecTest {
         assertEquals(85, prefs("xcertplay_airplay").getInt("display_scale_tenths", 0))
     }
 
+    @Test fun backgroundStartBackupRequiresBooleanEvenOnFreshInstall() {
+        prefs("xcertplay_airplay").edit().remove("background_start_on_boot").commit()
+        val bad = """{"format":"diplay-settings","version":1,"settings":{"xcertplay_airplay":{"background_start_on_boot":"yes"}}}"""
+        val rejected = SettingsBackupCodec.import(context, bad.toByteArray())
+        assertEquals(1, rejected.skipped)
+        assertFalse(prefs("xcertplay_airplay").contains("background_start_on_boot"))
+        val good = """{"format":"diplay-settings","version":1,"settings":{"xcertplay_airplay":{"background_start_on_boot":true}}}"""
+        assertEquals(1, SettingsBackupCodec.import(context, good.toByteArray()).applied)
+        assertTrue(prefs("xcertplay_airplay").getBoolean("background_start_on_boot", false))
+    }
+
     @Test
     fun importRejectsMissingOrUnsupportedVersions() {
         assertTrue(SettingsBackupCodec.import(context, "{\"format\":\"diplay-settings\",\"settings\":{}}".toByteArray()).invalid)

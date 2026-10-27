@@ -133,6 +133,13 @@
     <string name="audio_routing">Audio routing</string>
     <string name="auto">Auto</string>
     <string name="auto_start_on_boot">Auto-start on boot</string>
+    <string name="background_wireless_channel">CarPlay connection</string>
+    <string name="background_wireless_waiting">Waiting for the selected iPhone</string>
+    <string name="background_wireless_ready">iPhone found. Tap to connect if CarPlay did not open.</string>
+    <string name="background_wireless_needs_setup">Tap to open CarPlay and check wireless setup.</string>
+    <string name="settings_background_start">Start in background</string>
+    <string name="settings_background_start_requires_autostart">Enable auto-start first. Your background-start choice is retained.</string>
+    <string name="settings_background_start_description">With auto-start enabled, keep the home screen hidden until a connection starts. Takes effect on the next car start.</string>
     <string name="automatic_cluster_map_setup">Automatic cluster map setup</string>
     <string name="automatic_connection">Automatic connection</string>
     <string name="usb_auto_confirm_title">Auto-confirm USB permission</string>

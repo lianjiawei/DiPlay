@@ -14,7 +14,28 @@ class BootReceiver : BroadcastReceiver() {
         PhoneAudioRoute.attach(context)
         val launchEnabled = AirPlayPersistence.loadAutoStartOnBoot(context)
         StartupDiagnosticSnapshot.received(context, launchEnabled)
+        // Invalidate any prior boot's staged wake even when boot launch is disabled.
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(context)) BackgroundWirelessWake.cancel(context)
         if (!launchEnabled) return
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(context) && CarPlayBackgroundSession.hasSession()) {
+            StartupDiagnosticSnapshot.sessionAlreadyRunning(context)
+            return
+        }
+
+        // Keep the legacy entry completely unchanged unless the staged background mode is opted
+        // into. USB attach already has a system Activity entry, so waiting needs no permanent
+        // receiver or service. A phone attached before boot must be scanned because Android may
+        // not replay an attach event.
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(context) &&
+            !(DiPlayPreferences.autoConnect(context) && PreattachedIphone.isAttached(context))) {
+            StartupDiagnosticSnapshot.waitingInBackground(context)
+            BackgroundWirelessWake.armForCurrentBoot(context)
+            if (BackgroundWirelessWake.isArmed(context)) BackgroundWirelessProbeService.startWaiting(context)
+            else if (DiPlayPreferences.autoConnect(context) && DiPlayPreferences.autoConnectWireless(context)) {
+                BackgroundWirelessProbeService.notifyNeedsSetup(context)
+            }
+            return
+        }
 
         val launch = Intent(context, DiPlayActivity::class.java).apply {
             addFlags(

@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.backup
 
 import android.content.Context
 import android.content.SharedPreferences.Editor
+import com.shilapi.xcertplay.BackgroundWirelessWake
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -36,7 +37,7 @@ object SettingsBackupCodec {
         "center_map_follows_dashboard", "settings_gesture_fingers", "display_width_physical_mm",
         "display_physical_size_basis", "right_hand_drive", "hide_top_bar", "hide_bottom_bar",
         "harman_fullscreen", "safe_area_draw_outside", "main_display_disable_safe_area",
-        "adapt_pip_resolution", "auto_start_on_boot", "bt_suspend_during_carplay", "hide_byd_call_popup",
+        "adapt_pip_resolution", "auto_start_on_boot", "background_start_on_boot", "bt_suspend_during_carplay", "hide_byd_call_popup",
         "bt_suspend_delay_seconds", "location_reporting_enabled", "external_controller", "usb_charging_current",
     )
 
@@ -100,6 +101,9 @@ object SettingsBackupCodec {
         }
         val files = root.optJSONObject("settings")
             ?: return SettingsImportOutcome(0, 0, invalid = true)
+        // Restore writes preferences directly. Discard a wait created under the old settings
+        // before applying any imported connection/boot policy; it must not revive later.
+        if (BackgroundWirelessWake.isArmed(context)) BackgroundWirelessWake.cancel(context)
         var applied = 0
         var skipped = 0
         for (name in files.keys()) {
@@ -114,7 +118,8 @@ object SettingsBackupCodec {
             val editor = prefs.edit()
             for (key in file.keys()) {
                 val value = file.opt(key)
-                if (!policy.includes(key) || value === JSONObject.NULL) {
+                if (!policy.includes(key) || value === JSONObject.NULL ||
+                    (name == "xcertplay_airplay" && key == "background_start_on_boot" && value !is Boolean)) {
                     skipped++
                     continue
                 }

@@ -127,6 +127,13 @@
     <string name="audio_routing">音频路由</string>
     <string name="auto">自动</string>
     <string name="auto_start_on_boot">开机后自动启动</string>
+    <string name="background_wireless_channel">CarPlay 连接</string>
+    <string name="background_wireless_waiting">正在等待选定的 iPhone</string>
+    <string name="background_wireless_ready">已找到 iPhone；如未自动打开，请点击连接。</string>
+    <string name="background_wireless_needs_setup">点击打开 CarPlay，检查无线连接设置。</string>
+    <string name="settings_background_start">后台启动</string>
+    <string name="settings_background_start_requires_autostart">先开启车机自启动。已保存的后台启动选择会保留。</string>
+    <string name="settings_background_start_description">开启车机自启动后，开机先不显示首页，开始连接时再打开。下次车机启动时生效。</string>
     <string name="automatic_cluster_map_setup">自动仪表盘地图设置</string>
     <string name="automatic_connection">自动连接</string>
     <string name="usb_auto_confirm_title">自动确认 USB 权限</string>

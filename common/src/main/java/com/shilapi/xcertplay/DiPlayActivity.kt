@@ -394,6 +394,16 @@ class DiPlayActivity : CarPlayHostActivity() {
     private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) choosePhone() else permissionHelp(brandString(R.string.nearby_devices), brandString(R.string.allow_nearby_devices_so_diplay_can_connect_to_your_paired))
     }
+    private val backgroundBluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!AirPlayPersistence.loadBackgroundStartOnBoot(this)) return@registerForActivityResult
+        if (granted) {
+            if (DiPlayPreferences.phoneAddress(this) == null) choosePhone()
+        } else {
+            AirPlayPersistence.saveBackgroundStartOnBoot(this, false)
+            render()
+            permissionHelp(brandString(R.string.nearby_devices), brandString(R.string.allow_nearby_devices_so_diplay_can_connect_to_your_paired))
+        }
+    }
     private val bluetoothAutoConnectPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             if (DiPlayPreferences.phoneAddress(this) == null) choosePhone()
@@ -470,6 +480,7 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     private var languagePreferenceAtCreate = AppLocale.SIMPLIFIED_CHINESE
+    private var bluetoothLaunchGeneration = 0
 
     private var interfaceOverride: Configuration? = null
     private var interfaceSystemDensityDpi = 0
@@ -500,6 +511,16 @@ class DiPlayActivity : CarPlayHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val backgroundLaunch = intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false)
+        if (intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false) &&
+            !BackgroundWirelessWake.matches(this, intent)) {
+            finish()
+            return
+        }
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(this) &&
+            !intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false)) {
+            BackgroundWirelessWake.cancel(this)
+        }
         scheduleBackgroundUpdateChecks()
         availableUpdate = UpdateAvailability.available(this, version())
         enforceInterfaceSize()
@@ -547,7 +568,13 @@ class DiPlayActivity : CarPlayHostActivity() {
                 initialLaunch = false
                 startCarHotspotOnLaunch()
             }
-            handler.post { connect(true) }
+            scheduleBluetoothAutoConnect(backgroundLaunch)
+        } else if (backgroundLaunch) {
+            initialLaunch = false
+            if (setupError == null && !CarPlayBackgroundSession.hasSession()) {
+                finish()
+                return
+            }
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -575,7 +602,16 @@ class DiPlayActivity : CarPlayHostActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent); setIntent(intent)
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false) &&
+            !BackgroundWirelessWake.matches(this, intent)) return
+        val backgroundLaunch = intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false)
+        bluetoothLaunchGeneration++
+        setIntent(intent)
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(this) &&
+            !intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false)) {
+            BackgroundWirelessWake.cancel(this)
+        }
         connectionSettingsReturnCategory = null
         returnToCarPlay = intent.getBooleanExtra(EXTRA_RETURN_TO_CARPLAY, false)
         val openRequested = intent.getBooleanExtra(EXTRA_OPEN_PROJECTION, false) || intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED ||
@@ -600,7 +636,24 @@ class DiPlayActivity : CarPlayHostActivity() {
                 initialLaunch = false
                 startCarHotspotOnLaunch()
             }
-            handler.post { connect(true) }
+            scheduleBluetoothAutoConnect(backgroundLaunch)
+        } else if (backgroundLaunch) {
+            // Do not let ordinary onResume auto-connect revive a rejected background request.
+            initialLaunch = false
+        }
+    }
+
+    private fun scheduleBluetoothAutoConnect(backgroundLaunch: Boolean) {
+        val generation = ++bluetoothLaunchGeneration
+        val selected = DiPlayPreferences.phoneAddress(this)
+        handler.post {
+            if (generation != bluetoothLaunchGeneration || isFinishing || isDestroyed ||
+                CarPlayBackgroundSession.hasSession()) return@post
+            if (backgroundLaunch && (!AirPlayPersistence.loadBackgroundStartOnBoot(this) ||
+                !AirPlayPersistence.loadAutoStartOnBoot(this) || !DiPlayPreferences.autoConnect(this) ||
+                !DiPlayPreferences.autoConnectWireless(this) ||
+                !selected.equals(DiPlayPreferences.phoneAddress(this), true))) return@post
+            connect(true)
         }
     }
 
@@ -615,10 +668,20 @@ class DiPlayActivity : CarPlayHostActivity() {
 
     private fun consumeBluetoothAutoConnectIntent(intent: Intent): Boolean {
         val requested = intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_AUTO_CONNECT, false)
+        val backgroundWake = intent.getBooleanExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS, false)
+        val token = intent.getStringExtra(BackgroundWirelessWake.EXTRA_TOKEN)
         intent.removeExtra(PhoneBluetoothReceiver.EXTRA_AUTO_CONNECT)
-        return requested && DiPlayPreferences.connectOnPhoneBluetooth(this) &&
-            DiPlayPreferences.phoneAddress(this) != null && setupError == null &&
-            !CarPlayBackgroundSession.hasSession()
+        intent.removeExtra(PhoneBluetoothReceiver.EXTRA_BACKGROUND_BOOT_WIRELESS)
+        intent.removeExtra(BackgroundWirelessWake.EXTRA_TOKEN)
+        val allowed = if (backgroundWake) BackgroundWirelessWake.matches(this, token)
+            else DiPlayPreferences.connectOnPhoneBluetooth(this)
+        val accepted = requested && allowed && DiPlayPreferences.phoneAddress(this) != null &&
+            setupError == null && !CarPlayBackgroundSession.hasSession()
+        if (backgroundWake) {
+            if (accepted) return BackgroundWirelessWake.consume(this, token)
+            else BackgroundWirelessWake.cancelIfCurrent(this, token)
+        }
+        return accepted
     }
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(EXTRA_RETURN_TO_CARPLAY, returnToCarPlay)
@@ -1955,7 +2018,21 @@ class DiPlayActivity : CarPlayHostActivity() {
                     AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL },
                 permissions = { listOf(CarHotspotSetup.Permission.BOOT_LAUNCH) }) {
                 AirPlayPersistence.saveAutoStartOnBoot(this, it)
+                if (page == "settings") render()
             }
+            val backgroundStartAvailable = AirPlayPersistence.loadAutoStartOnBoot(this)
+            toggle(card, brandString(R.string.settings_background_start),
+                brandString(if (backgroundStartAvailable) R.string.settings_background_start_description
+                    else R.string.settings_background_start_requires_autostart),
+                AirPlayPersistence.loadBackgroundStartOnBoot(this), enabled = backgroundStartAvailable) {
+                AirPlayPersistence.saveBackgroundStartOnBoot(this, it)
+                if (it && DiPlayPreferences.autoConnect(this) && DiPlayPreferences.autoConnectWireless(this)) {
+                    if (Build.VERSION.SDK_INT >= 31 &&
+                        checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        backgroundBluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    } else if (DiPlayPreferences.phoneAddress(this) == null) choosePhone()
+                }
+            }.also { control -> (control.parent as View).alpha = if (backgroundStartAvailable) 1f else 0.5f }
             val autoConfirmActive = UsbPermissionSetup.Permission.ACCESSIBILITY.granted(this)
             toggle(
                 card,
@@ -6738,6 +6815,7 @@ class DiPlayActivity : CarPlayHostActivity() {
         appendLine()
         appendLine("--- Last received boot and app-launch result ---")
         appendLine(StartupDiagnosticSnapshot.report(appContext))
+        appendLine(BackgroundWirelessDiagnostics.report(appContext))
         appendLine("Startup settings: openAfterBoot=${AirPlayPersistence.loadAutoStartOnBoot(appContext)} " +
             "connectWhenOpened=${DiPlayPreferences.autoConnect(appContext)}")
         appendLine("Car hotspot control: autoEnable=${CarHotspotSettings.enabled(appContext)} " +

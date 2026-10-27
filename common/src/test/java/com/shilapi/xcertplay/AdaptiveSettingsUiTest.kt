@@ -679,6 +679,27 @@ class AdaptiveSettingsUiTest {
         }
     }
 
+    @Test fun backgroundStartDependsOnBootAutoStartAndPreservesItsChoice() {
+        AirPlayPersistence.saveBackgroundStartOnBoot(context, true)
+        AirPlayPersistence.saveAutoStartOnBoot(context, false)
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.CONNECTION)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        fun control(id: Int) = descendants(screen.window.decorView).filterIsInstance<Switch>()
+            .single { it.contentDescription == screen.getString(id) }
+        val background = control(R.string.settings_background_start)
+        assertFalse(background.isEnabled)
+        assertTrue(background.isChecked)
+        (background.parent as View).performClick()
+        assertTrue(AirPlayPersistence.loadBackgroundStartOnBoot(context))
+        (control(R.string.open_after_the_car_starts).parent as View).performClick()
+        assertTrue(control(R.string.settings_background_start).isEnabled)
+        assertTrue(control(R.string.settings_background_start).isChecked)
+        (control(R.string.open_after_the_car_starts).parent as View).performClick()
+        assertFalse(control(R.string.settings_background_start).isEnabled)
+        assertTrue(AirPlayPersistence.loadBackgroundStartOnBoot(context))
+    }
+
     @Test fun navigationAttenuationSliderSavesAndUpdatesActiveAudioWithoutReconnect() {
         val screen = openSettings()
         val session = mock(CarPlayController::class.java)

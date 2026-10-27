@@ -67,18 +67,27 @@ internal object DiPlayPreferences {
     fun phoneAddress(context: Context): String? = prefs(context).getString("phone_address", null)
     fun phoneName(context: Context): String = prefs(context).getString("phone_name", null) ?: "Your iPhone"
     fun savePhone(context: Context, address: String, name: String) {
+        // A queued wake belongs to the previously selected phone. Do not let that event
+        // launch a connection to a different phone after the selection changes.
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(context) &&
+            !phoneAddress(context).equals(address, ignoreCase = true)) {
+            BackgroundWirelessWake.cancel(context)
+        }
         prefs(context).edit().putString("phone_address", address).putString("phone_name", name).apply()
     }
     fun defaultConnectionMode(context: Context) =
         DefaultConnectionMode.fromKey(prefs(context).getString("default_connection_mode", DefaultConnectionMode.USB.key))
     fun saveDefaultConnectionMode(context: Context, mode: DefaultConnectionMode) {
         prefs(context).edit().putString("default_connection_mode", mode.key).apply()
+        if (AirPlayPersistence.loadBackgroundStartOnBoot(context) &&
+            !mode.wireless(AirPlayPersistence.loadWirelessEnabled(context))) BackgroundWirelessWake.cancel(context)
     }
     fun autoConnectWireless(context: Context) =
         defaultConnectionMode(context).wireless(AirPlayPersistence.loadWirelessEnabled(context))
     fun autoConnect(context: Context) = prefs(context).getBoolean("auto_connect", true)
     fun saveAutoConnect(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean("auto_connect", value).apply()
+        if (!value && AirPlayPersistence.loadBackgroundStartOnBoot(context)) BackgroundWirelessWake.cancel(context)
     }
     fun connectOnPhoneBluetooth(context: Context) = prefs(context).getBoolean("connect_on_phone_bluetooth", false)
     fun saveConnectOnPhoneBluetooth(context: Context, value: Boolean) {
