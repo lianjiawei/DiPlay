@@ -584,6 +584,8 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
     private var activeDisplaySize: DisplaySize? = null
     private var pendingDisplaySize: DisplaySize? = null
+    private var initialDisplaySizeCheck: Runnable? = null
+    private var initialDisplaySizeCheckView: View? = null
     /** The pending size was derived from system-bar insets after a session used the raw window. */
     private var pendingProjectionViewportCorrection = false
     private var sessionDisplay: CarPlaySessionDisplay? = null
@@ -807,6 +809,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
     }
     private val applyDisplaySize = Runnable {
+        cancelInitialDisplaySizeCheck()
         val size = pendingDisplaySize ?: return@Runnable
         val projectionViewportCorrection = pendingProjectionViewportCorrection
         pendingDisplaySize = null
@@ -1851,6 +1854,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     override fun onPause() {
         if ((unifiedHome && !hostInitialized) || legacyForwardOnly) { super.onPause(); return }
+        cancelInitialDisplaySizeCheck()
         dropHeldTouch()
         mainHandler.removeCallbacks(connectionVisualTick)
         framePresentation?.finish()
@@ -1993,6 +1997,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (MapMirrors.onChanged === mirrorsChanged) MapMirrors.onChanged = null
         dismissClusterPresentation()
         mainHandler.removeCallbacks(applyDisplaySize)
+        cancelInitialDisplaySizeCheck()
         mainHandler.removeCallbacks(expireOldLogLines)
         mainHandler.removeCallbacks(pollConfiguration)
         videoSurfaceOwner.clear()
@@ -5788,6 +5793,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 pendingProjectionViewportCorrection || projectionViewportCorrection
             return
         }
+        cancelInitialDisplaySizeCheck()
         mainHandler.removeCallbacks(applyDisplaySize)
         if (size == activeDisplaySize && !displayLayoutChanged()) {
             pendingDisplaySize = null
@@ -5801,6 +5807,90 @@ open class CarPlayHostActivity : ComponentActivity() {
         // With a turning screen's square canvas nothing reconnects, so the turn need not wait for the size to settle.
         mainHandler.postDelayed(applyDisplaySize,
             if (sessionDisplay?.viewAreas?.turnsWithScreen == true) 0L else DISPLAY_CHANGE_DEBOUNCE_MILLIS)
+        confirmInitialDisplaySize(size)
+    }
+
+    /**
+     * Only accelerate the first wired, full-screen canvas. Keep the existing debounce as the
+     * deadline/fallback; this confirmation never reschedules it. Later resizes and uncertain OEM
+     * insets still use the old path, including the visible-status-bar viewport correction.
+     */
+    private fun confirmInitialDisplaySize(size: DisplaySize) {
+        if (wirelessEnabled || activeDisplaySize != null || controller != null || sessionDisplay != null ||
+            !hideTopBar || !hideBottomBar || harmanFullscreenEnabled || isMultiWindowActive()) return
+        val view = videoView ?: return
+        var previousRotation: Int? = null
+        val check = object : Runnable {
+            override fun run() {
+                if (initialDisplaySizeCheck !== this) return
+                if (isFinishing || isDestroyed || shuttingDown.get() || wirelessEnabled ||
+                    activeDisplaySize != null || controller != null || sessionDisplay != null ||
+                    pendingDisplaySize != size || videoView !== view ||
+                    !hideTopBar || !hideBottomBar || harmanFullscreenEnabled || isMultiWindowActive() ||
+                    (unifiedHome && !unifiedConnectionRequested)) {
+                    cancelInitialDisplaySizeCheck()
+                    return
+                }
+                // An optional fast path must not turn a broken OEM window query into a failed connection.
+                val sample = runCatching { confirmedInitialFullscreenRotation(view, size) }
+                val rotation = sample.getOrNull()
+                if (sample.isFailure || rotation != null && previousRotation != null && previousRotation != rotation) {
+                    cancelInitialDisplaySizeCheck()
+                    return
+                }
+                if (rotation != null && previousRotation == rotation) {
+                    cancelInitialDisplaySizeCheck()
+                    mainHandler.removeCallbacks(applyDisplaySize)
+                    appendLog("Initial wired display confirmed: ${size.width}x${size.height}; skipping remaining resize debounce")
+                    applyDisplaySize.run()
+                } else {
+                    // Focus/insets may arrive after the first layout. Continue only until the
+                    // already-scheduled 500 ms fallback; unknown frames reset the confirmation.
+                    previousRotation = rotation
+                    view.postOnAnimation(this)
+                }
+            }
+        }
+        initialDisplaySizeCheck = check
+        initialDisplaySizeCheckView = view
+        view.postOnAnimation(check)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun confirmedInitialFullscreenRotation(view: View, size: DisplaySize): Int? {
+        if (isFinishing || isDestroyed || shuttingDown.get() || wirelessEnabled ||
+            activeDisplaySize != null || controller != null || sessionDisplay != null ||
+            CarPlayBackgroundSession.hasSession() || pendingDisplaySize != size ||
+            videoView !== view || !view.isAttachedToWindow || !view.hasWindowFocus() || view.isLayoutRequested ||
+            menuOpen || handshakeResetInProgress || !hideTopBar || !hideBottomBar ||
+            harmanFullscreenEnabled || isMultiWindowActive() ||
+            (unifiedHome && !unifiedConnectionRequested)) return null
+        val decor = window.decorView
+        if (!decor.isAttachedToWindow || decor.isLayoutRequested ||
+            view.width != size.width || view.height != size.height ||
+            decor.width != size.width || decor.height != size.height) return null
+        val insets = ViewCompat.getRootWindowInsets(decor) ?: return null
+        if (insets.isVisible(WindowInsetsCompat.Type.statusBars()) ||
+            insets.isVisible(WindowInsetsCompat.Type.navigationBars()) ||
+            insets.isVisible(WindowInsetsCompat.Type.ime()) ||
+            insets.getInsets(WindowInsetsCompat.Type.systemBars()) != Insets.NONE ||
+            insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout()) != Insets.NONE) return null
+        // A full-sized Surface alone is not evidence: it can be an old measurement during a turn
+        // or a camera overlay. Cross-check both the display and the currently visible window.
+        val display = view.display ?: return null
+        val metrics = android.util.DisplayMetrics().also(display::getRealMetrics)
+        if (metrics.widthPixels != size.width || metrics.heightPixels != size.height) return null
+        val visible = android.graphics.Rect()
+        decor.getWindowVisibleDisplayFrame(visible)
+        if (visible.left != 0 || visible.top != 0 ||
+            visible.width() != size.width || visible.height() != size.height) return null
+        return display.rotation
+    }
+
+    private fun cancelInitialDisplaySizeCheck() {
+        initialDisplaySizeCheck?.let { initialDisplaySizeCheckView?.removeCallbacks(it) }
+        initialDisplaySizeCheck = null
+        initialDisplaySizeCheckView = null
     }
 
     private fun isMultiWindowActive(): Boolean {
@@ -6441,6 +6531,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         startupRetryBudget.disconnected()
         restartGeneration += 1
         mainHandler.removeCallbacks(applyDisplaySize)
+        cancelInitialDisplaySizeCheck()
         val oldController = controller
         val oldSink = sink
         CarPlayMediaKeys.detach(oldController)
