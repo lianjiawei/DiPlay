@@ -43,6 +43,7 @@ class WiredUsbRecoveryTest {
     private val transitions = mutableListOf<(IphoneUsbHost.TransitionResult) -> Unit>()
     private val sessionCallbacks = mutableListOf<(IphoneUsbHost.Iap2SessionResult) -> Unit>()
     private val statuses = mutableListOf<CarPlayStatus>()
+    private val timingLines = mutableListOf<String>()
     private val controllers = mutableListOf<CarPlayController>()
     private val host = mock(IphoneUsbHost::class.java) { call ->
         when (call.method.name) {
@@ -78,6 +79,25 @@ class WiredUsbRecoveryTest {
 
     @Test fun aPreconnectedPhoneNeedsNoAttachBroadcast() {
         startPhone(controller())
+        idle()
+        assertEquals(listOf(old), requested)
+    }
+
+    @Test fun timingDistinguishesReenumerationAndDeduplicatesRepeatedAttachSignals() {
+        val c = controller()
+        begin(c)
+        devices = listOf(next)
+        repeat(10) { attached(c, next) }
+        advance(1_000)
+        assertEquals(listOf(next), requested)
+        for (stage in listOf("USB_TRANSITION_REQUESTED", "USB_REENUMERATED", "USB_ACCESS_CHECK", "USB_PERMISSION_WAIT")) {
+            val line = timingLines.single { it.contains("stage=$stage ") }
+            assertTrue(line.contains("usbCycle=1"))
+        }
+    }
+
+    @Test fun aBrokenTimingSinkCannotPreventDiscoveryAndPermissionRequests() {
+        startPhone(controller { error("optional diagnostic failed") })
         idle()
         assertEquals(listOf(old), requested)
     }
@@ -372,7 +392,7 @@ class WiredUsbRecoveryTest {
         `when`(it.productId).thenReturn(0x12a8)
     }
 
-    private fun controller(): CarPlayController {
+    private fun controller(timingSink: (String) -> Unit = timingLines::add): CarPlayController {
         val context = object : ContextWrapper(RuntimeEnvironment.getApplication()) {
             override fun getApplicationContext(): Context = this
             override fun bindService(service: Intent, conn: ServiceConnection, flags: Int) = false
@@ -385,6 +405,7 @@ class WiredUsbRecoveryTest {
             AirPlayConfig("test", "test", "", "1", AirPlayDisplayConfig(800, 480)),
             AirPlayIdentity(ByteArray(32), ByteArray(32), "test"), PairingStore(),
             object : AirPlaySessionListener {}, object : AirPlayMediaHandler {}, statuses::add,
+            startupTiming = WiredStartupTiming(timingSink),
         ).also {
             ReflectionHelpers.setField(it, "iphoneHost\$delegate", lazyOf(host))
             controllers += it

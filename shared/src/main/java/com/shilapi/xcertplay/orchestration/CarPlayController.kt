@@ -172,6 +172,7 @@ class CarPlayController(
     private val locationProvider: Iap2LocationProvider? = null,
     private val vehicleStatusProvider: com.shilapi.xcertplay.transport.VehicleStatusProvider? = null,
     private val takePreconnectedBluetooth: (String) -> PreconnectedBluetoothSocket? = { null },
+    startupTiming: WiredStartupTiming? = null,
 ) : Closeable {
     init {
         require(!config.locationReportingEnabled || locationProvider != null) {
@@ -187,6 +188,7 @@ class CarPlayController(
     private val appContext = context.applicationContext
     private val diagnosticAttempt = diagnosticAttempts.incrementAndGet()
     private val diagnosticRun = AtomicInteger()
+    private val wiredTiming = startupTiming.takeIf { config.transport == CarPlayTransport.WIRED }
     private val usbManager: UsbManager? = context.getSystemService(UsbManager::class.java)
     private val bluetoothAdapter =
         appContext.getSystemService(BluetoothManager::class.java)?.adapter
@@ -322,7 +324,11 @@ class CarPlayController(
 
     private val sessionListener = object : AirPlaySessionListener {
         override val protocolTraceEnabled: Boolean get() = uiListener?.protocolTraceEnabled == true
+        override fun onTcpAccepted(event: AirPlayTcpAccepted) {
+            wiredTiming?.mark(WiredStartupTiming.Stage.AIRPLAY_TCP_ACCEPTED)
+        }
         override fun onSessionActive(session: AirPlaySession) {
+            wiredTiming?.mark(WiredStartupTiming.Stage.AIRPLAY_ACTIVE)
             wiredSessionActive = true
             wiredStartWatchdog?.sessionActive()
             val replacement = activeSession !== session
@@ -464,6 +470,7 @@ class CarPlayController(
         synchronized(this) {
             if (closed) return
         }
+        wiredTiming?.mark(WiredStartupTiming.Stage.CONTROLLER_START)
         connectionDiagnostic("start transport=${config.transport}")
         if (!hasRequiredUsbService()) return
         videoListener?.let { listener ->
@@ -642,6 +649,7 @@ class CarPlayController(
             wirelessGeneration.incrementAndGet()
             dashboardMapOutputVisible = false
         }
+        wiredTiming?.mark(WiredStartupTiming.Stage.CANCELLED)
         firstTcpWatchdog?.terminate()
         wiredStartWatchdog?.terminate()
         BydBluetoothSuspend.resume(appContext, this) { debugLog(it) }
@@ -849,6 +857,7 @@ class CarPlayController(
     }
 
     private fun startMfi() {
+        wiredTiming?.mark(WiredStartupTiming.Stage.MFI_PREPARING)
         if (!hasRequiredUsbService()) return
         cancelWiredReenumeration()
         availabilityPollGeneration.incrementAndGet()
@@ -1170,6 +1179,7 @@ class CarPlayController(
     }
 
     private fun startPhone() {
+        wiredTiming?.mark(WiredStartupTiming.Stage.MFI_READY)
         if (config.locationReportingEnabled) {
             val started = try {
                 locationProvider?.start() == true
@@ -1883,6 +1893,7 @@ class CarPlayController(
             pendingUsbAdbGrants.clear()
             phase = Phase.IPHONE
             reenumerationAttempts = 0
+            wiredTiming?.mark(WiredStartupTiming.Stage.USB_DISCOVERY)
             onStatus(CarPlayStatus.DiscoveringIphone)
             checkIphoneAvailability()
         }
@@ -1899,6 +1910,7 @@ class CarPlayController(
                 ::checkIphoneAvailability,
             )
         } else {
+            wiredTiming?.mark(WiredStartupTiming.Stage.USB_FOUND)
             debugLog(
                 "wired iPhone discovered vid=0x${device.vendorId.toString(16)} " +
                     "pid=0x${device.productId.toString(16)}",
@@ -1926,6 +1938,7 @@ class CarPlayController(
     private fun doRequestIphonePermission(device: UsbDevice, allowAdbFallback: Boolean = true) {
         if (closed) return
         if (usbAdbGrantKey(device) in pendingUsbAdbGrants) return
+        wiredTiming?.mark(WiredStartupTiming.Stage.USB_ACCESS_CHECK, reenumerationAttempts)
         try {
             when (val request = iphoneHost.requestPermission(device, allowAdbFallback)) {
                 is IphoneUsbHost.PermissionRequest.AlreadyGranted -> {
@@ -1934,6 +1947,7 @@ class CarPlayController(
                     onIphonePermission(IphoneUsbHost.PermissionResult.Granted(request.device))
                 }
                 is IphoneUsbHost.PermissionRequest.Requested -> {
+                    wiredTiming?.mark(WiredStartupTiming.Stage.USB_PERMISSION_WAIT, reenumerationAttempts)
                     debugLog(
                         "wired iPhone USB permission requested " +
                             "afterMissingUiAdbFailure=${request.afterMissingUiAdbFailure}",
@@ -1943,6 +1957,7 @@ class CarPlayController(
                     pollIphonePermission(device, request.afterMissingUiAdbFailure)
                 }
                 is IphoneUsbHost.PermissionRequest.AdbRequired -> {
+                    wiredTiming?.mark(WiredStartupTiming.Stage.USB_PERMISSION_WAIT, reenumerationAttempts)
                     debugLog("wired iPhone USB permission route=ADB; system permission UI unavailable")
                     permissionGrant.set(false)
                     permissionPollGeneration++
@@ -2002,6 +2017,7 @@ class CarPlayController(
             is IphoneUsbHost.PermissionResult.Granted -> {
                 // The system broadcast and the polling fallback can both observe the grant.
                 if (!permissionGrant.compareAndSet(false, true)) return
+                wiredTiming?.mark(WiredStartupTiming.Stage.USB_PERMISSION_READY, reenumerationAttempts)
                 debugLog("wired iPhone USB permission granted")
                 permissionPollGeneration++
                 when (phase) {
@@ -2091,6 +2107,7 @@ class CarPlayController(
         requestedIphonePermissionKey = null
         phase = Phase.REENUMERATION
         reenumerationAttempts += 1
+        wiredTiming?.mark(WiredStartupTiming.Stage.USB_TRANSITION_REQUESTED, reenumerationAttempts)
         val wait = WiredUsbReenumeration(device,
             runCatching { iphoneHost.discover() }.getOrDefault(listOf(device)),
             SystemClock.elapsedRealtime() + USB_REENUMERATION_TIMEOUT_MILLIS)
@@ -2139,6 +2156,7 @@ class CarPlayController(
                     checkWiredReenumeration(wait)
                 }
                 Phase.IPHONE -> {
+                    wiredTiming?.mark(WiredStartupTiming.Stage.USB_FOUND)
                     availabilityPollGeneration.incrementAndGet()
                     requestIphonePermission(device)
                 }
@@ -2177,6 +2195,7 @@ class CarPlayController(
         val device = current?.let(wait::candidate)
         if (device != null) {
             cancelWiredReenumeration()
+            wiredTiming?.mark(WiredStartupTiming.Stage.USB_REENUMERATED, reenumerationAttempts)
             connectionDiagnostic("USB reenumeration detected; requesting access to the current node")
             requestIphonePermission(device)
             return
@@ -2220,6 +2239,7 @@ class CarPlayController(
         val run = diagnosticRun.get()
         val transition = reenumerationAttempts
         phase = Phase.DATAPATHS
+        wiredTiming?.mark(WiredStartupTiming.Stage.USB_DATA_OPEN)
         wiredDeviceName = device.deviceName
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
@@ -2232,6 +2252,7 @@ class CarPlayController(
             }
             when (result) {
                 is IphoneUsbHost.Iap2SessionResult.Connected -> {
+                    wiredTiming?.mark(WiredStartupTiming.Stage.USB_DATA_READY)
                     try {
                         val ncm = openNcm(device)
                         runStack(result.session, ncm)
@@ -2246,6 +2267,7 @@ class CarPlayController(
     }
 
     private fun openNcm(device: UsbDevice): NcmUsbBridge {
+        wiredTiming?.mark(WiredStartupTiming.Stage.NCM_OPEN)
         val configuration = IphoneCarPlayConfiguration.find(device)
             ?: throw IphoneUsbException.Protocol(
                 "iPhone exposes no CarPlay configuration for NCM",
@@ -2260,7 +2282,14 @@ class CarPlayController(
         )
         val connection = requireUsbManager().openDevice(device)
             ?: throw IphoneUsbException.DeviceUnavailable("Could not open the iPhone NCM connection")
-        return NcmUsbBridge.open(connection, function, onDiagnostic = ::connectionDiagnostic)
+        return NcmUsbBridge.open(connection, function, onDiagnostic = { message ->
+            if (message.startsWith("NCM bulk-out ready after ")) {
+                wiredTiming?.mark(WiredStartupTiming.Stage.NCM_LINK_ACCEPTING)
+            }
+            connectionDiagnostic(message)
+        }).also {
+            wiredTiming?.mark(WiredStartupTiming.Stage.NCM_READY)
+        }
     }
 
     private fun runStack(usbSession: Iap2UsbSession, ncm: NcmUsbBridge) {
@@ -2271,13 +2300,18 @@ class CarPlayController(
                 usbSession.close()
                 return
             }
+            wiredTiming?.mark(WiredStartupTiming.Stage.USBMUX_OPEN)
             val mux = Iap2UsbMuxHost.open(usbSession, onDiagnostic = ::connectionDiagnostic)
             this.mux = mux
+            wiredTiming?.mark(WiredStartupTiming.Stage.USBMUX_READY)
             debugLog("wired USBMUX host opened")
             onStatus(CarPlayStatus.Pairing)
             val pairingClient = LockdownPairingClient(mux)
+            wiredTiming?.mark(WiredStartupTiming.Stage.PAIRING_LOAD)
             val savedPairRecord = loadPairRecord()
+            if (savedPairRecord != null) wiredTiming?.mark(WiredStartupTiming.Stage.PAIRING_REUSED)
             var pairRecord = savedPairRecord ?: pairNewRecord(pairingClient)
+            wiredTiming?.mark(WiredStartupTiming.Stage.PAIRING_READY)
             debugLog(
                 if (savedPairRecord != null) {
                     "wired using saved Lockdown pair record"
@@ -2287,16 +2321,19 @@ class CarPlayController(
             )
             onStatus(CarPlayStatus.ConnectingControl)
             val carKitClient = LockdownCarKitClient(mux)
+            wiredTiming?.mark(WiredStartupTiming.Stage.CARKIT_OPEN)
             val carkit = try {
                 carKitClient.open(pairRecord, config.label)
             } catch (error: Throwable) {
                 val rejection = rejectedPairRecordError(error)
                 if (savedPairRecord == null || rejection == null) throw error
+                wiredTiming?.mark(WiredStartupTiming.Stage.PAIRING_REJECTED)
                 debugLog("saved Lockdown pair record rejected by Lockdown error=$rejection; clearing and pairing again")
                 clearPairRecord()
                 pairRecord = pairNewRecord(pairingClient)
                 carKitClient.open(pairRecord, config.label)
             }
+            wiredTiming?.mark(WiredStartupTiming.Stage.CARKIT_READY)
             debugLog("wired com.apple.carkit.service stream opened")
             // Lab transport diagnostics: packet headers only, never certificate or challenge data.
             fun wireSummary(bytes: ByteArray): String {
@@ -2343,6 +2380,7 @@ class CarPlayController(
                     try { carkit.close() } finally { io.finish() }
                 }
             }
+            wiredTiming?.mark(WiredStartupTiming.Stage.IAP2_LINK_OPEN)
             val csm = Iap2Session.open(
                 tracedCarkit,
                 traceContext = "wired",
@@ -2350,14 +2388,17 @@ class CarPlayController(
                 onArtwork = ::onArtworkTransfer,
             )
             this.csm = csm
+            wiredTiming?.mark(WiredStartupTiming.Stage.IAP2_LINK_READY)
             debugLog("wired iAP2 CSM channel opened")
 
             val ncmHostMac = ncm.hostMac ?: config.hostMac
             debugLog("ncm using hostMac=${ncmHostMac.macString()}")
+            wiredTiming?.mark(WiredStartupTiming.Stage.NETWORK_ATTACH)
             if (!attachVpn(ncm, ncmHostMac)) {
                 throw IphoneUsbException.DeviceUnavailable("Could not attach the NCM/VPN AirPlay transport")
             }
             ncmOwnedLocally = false
+            wiredTiming?.mark(WiredStartupTiming.Stage.NETWORK_ATTACHED)
             debugLog("wired NCM/VPN AirPlay transport attached")
             if (closed) {
                 vpnService?.detach()
@@ -2416,6 +2457,12 @@ class CarPlayController(
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
+                    when (message) {
+                        "iap2 identification accepted" -> wiredTiming?.mark(WiredStartupTiming.Stage.IDENTIFICATION_READY)
+                        "iap2 authentication accepted" -> wiredTiming?.mark(WiredStartupTiming.Stage.AUTHENTICATION_READY)
+                        "iap2 tx=0x4301 carplay-start-session" -> wiredTiming?.mark(WiredStartupTiming.Stage.START_SESSION_SENT)
+                        Iap2WiredControlClient.START_SESSION_AGAIN_PROGRESS -> wiredTiming?.mark(WiredStartupTiming.Stage.START_SESSION_RESENT)
+                    }
                     if (message == Iap2WiredControlClient.START_SESSION_AGAIN_PROGRESS) {
                         startWatchdog.startSessionSentAgain()
                     } else if (message.startsWith(START_SESSION_PROGRESS)) {
@@ -2454,14 +2501,18 @@ class CarPlayController(
         }
     }
 
-    private fun pairNewRecord(client: LockdownPairingClient): LockdownPairRecord =
-        client.pair(
+    private fun pairNewRecord(client: LockdownPairingClient): LockdownPairRecord {
+        wiredTiming?.mark(WiredStartupTiming.Stage.PAIRING_NEW)
+        return client.pair(
             label = config.label,
             hostId = hostId,
             systemBuid = systemBuid,
             totalTimeoutMillis = PAIR_TIMEOUT_MILLIS,
             isCancelled = { closed },
-        ).pairRecord.also(savePairRecord)
+        ).pairRecord.also(savePairRecord).also {
+            wiredTiming?.mark(WiredStartupTiming.Stage.PAIRING_CREATED)
+        }
+    }
 
     private fun rejectedPairRecordError(error: Throwable): String? {
         var cause: Throwable? = error
@@ -3130,6 +3181,9 @@ class CarPlayController(
 
     private fun onStatus(status: CarPlayStatus, generation: Int? = null) {
         if (closed) return
+        if (status is CarPlayStatus.Failed || status == CarPlayStatus.ControlEnded) {
+            wiredTiming?.mark(WiredStartupTiming.Stage.FAILED)
+        }
         mainHandler.post {
             if (!closed && (generation == null || generation == wirelessGeneration.get()) && status != lastReportedStatus) {
                 lastReportedStatus = status

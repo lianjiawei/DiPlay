@@ -579,6 +579,8 @@ class AndroidMediaSink(
     navigationDuckMs: Int = NavigationDuckSettings.DEFAULT_DUCK_MS,
     navigationDuckRestoreMs: Int = NavigationDuckSettings.DEFAULT_RESTORE_MS,
     navigationDuckHoldMs: Int = NavigationDuckSettings.DEFAULT_HOLD_MS,
+    /** Startup diagnostic only; excludes cluster/mirror output and never runs for every frame. */
+    private val onMainVideoFirstFrame: () -> Unit = {},
 ) : MediaSink {
     // Each downlink publishes its own reference; a mic must match that stream and sample rate.
     private val callEchoReferences = ConcurrentHashMap<AudioStreamId, EchoReference>()
@@ -1169,7 +1171,12 @@ class AndroidMediaSink(
         videoHeight,
         preferSoftwareHevcDecoder,
         requestKeyFrame = { requestVideoRecovery(type) },
-        report = { videoDiagnosticHandlers[type]?.invoke(it) },
+        report = { message ->
+            if (type == MAIN_SCREEN_TYPE && statsLabel == null && message == FIRST_FRAME_DIAGNOSTIC) {
+                runCatching { onMainVideoFirstFrame() }
+            }
+            videoDiagnosticHandlers[type]?.invoke(message)
+        },
         statsLabel = statsLabel,
         onExit = ::onVideoDecoderExit,
         // Only the main screen goes to the host's SurfaceView; mirrors and the cluster keep their path.
@@ -1357,6 +1364,8 @@ internal fun nextLowLatencyDecoder(requested: String?, used: DecoderAttempt?): S
  * with smooth video, and only on a decoder that lists the parameter.
  */
 internal const val PICTURE_ORDER_PARAMETER = "vendor.qti-ext-dec-picture-order.enable"
+
+private const val FIRST_FRAME_DIAGNOSTIC = "first frame rendered"
 
 /** Serial MediaCodec video decoder: one worker owns configure and frame feeding. */
 private class VideoDecoder(
@@ -2100,7 +2109,7 @@ private class VideoDecoder(
                 }
                 if (shown && !renderedFrameLogged) {
                     renderedFrameLogged = true
-                    report("first frame rendered")
+                    report(FIRST_FRAME_DIAGNOSTIC)
                     Log.i(TAG, "video decoder rendered first frame bytes=${info.size}")
                 }
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return false

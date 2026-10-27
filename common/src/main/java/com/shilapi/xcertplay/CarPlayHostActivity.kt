@@ -123,6 +123,7 @@ import com.shilapi.xcertplay.transport.BluetoothRadioCheck
 import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
+import com.shilapi.xcertplay.orchestration.WiredStartupTiming
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
@@ -705,6 +706,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var requestedSmallWindowForStream: Boolean? = null
     @Volatile private var adbNaviMode: com.shilapi.xcertplay.hud.BydClusterNaviMode? = null
     @Volatile private var sessionLog: SessionDiagnosticLog? = null
+    private var wiredStartupTiming: WiredStartupTiming? = null
     private var gestureFingerCount = 3
     private var settingsGestureHint: TextView? = null
     private var gestureSequenceActive = false
@@ -981,6 +983,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             return
         }
         val reusedBackgroundSession = adoptBackgroundSession()
+        if (!reusedBackgroundSession) prepareWiredStartupTiming()
         microphoneAvailable =
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         microphonePermissionResolved = microphonePermissionResolved || microphoneAvailable
@@ -2007,6 +2010,8 @@ open class CarPlayHostActivity : ComponentActivity() {
         carPlayRootView = null
         fallbackVideoView = null
         fallbackVideoBounds = null
+        if (controller == null) wiredStartupTiming?.mark(WiredStartupTiming.Stage.CANCELLED)
+        wiredStartupTiming = null
         sessionLog?.finish("Activity destroyed")
         sessionLog = null
         if (unifiedHome && !CarPlayBackgroundSession.isOwner(this)) {
@@ -5300,6 +5305,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         videoWidth: Int,
         videoHeight: Int,
         controllerGeneration: Int,
+        startupTiming: WiredStartupTiming? = null,
     ): AndroidMediaSink {
         // Capture this session's log: late decoder shutdown must not write into a new session.
         val diagnosticLog = sessionLog
@@ -5328,6 +5334,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             onAudioDiagnostic = { message ->
                 AsyncDiagnosticLog.append(diagnosticLog, message)
             },
+            onMainVideoFirstFrame = { startupTiming?.mark(WiredStartupTiming.Stage.MAIN_FRAME_SUBMITTED) },
             onMediaAudioChanged = CarPlayMediaKeys::onMediaAudioChanged,
             callEchoCancellation = AirPlayPersistence.loadCallEchoCancellation(this),
             callVoiceFilter = AirPlayPersistence.loadCallVoiceFilter(this),
@@ -5526,6 +5533,8 @@ open class CarPlayHostActivity : ComponentActivity() {
             return false
         }
         displayDiagnosticAttempt = DisplayDiagnosticSnapshot.currentAttempt(this)
+        wiredStartupTiming?.mark(WiredStartupTiming.Stage.CANCELLED)
+        wiredStartupTiming = null
         adbClusterConfigured = AdbClusterRouter.enabled(this) && snapshot.controller.configuredClusterSize() ==
             (DiLink4ClusterDisplay.STREAM_WIDTH to DiLink4ClusterDisplay.STREAM_HEIGHT)
         controller = snapshot.controller
@@ -5591,6 +5600,27 @@ open class CarPlayHostActivity : ComponentActivity() {
         return true
     }
 
+    /** One recorder per new connection; callbacks capture it, never the next attempt's field. */
+    private fun prepareWiredStartupTiming(): WiredStartupTiming? {
+        if (wirelessEnabled) {
+            wiredStartupTiming?.mark(WiredStartupTiming.Stage.CANCELLED)
+            wiredStartupTiming = null
+            return null
+        }
+        return wiredStartupTiming ?: run {
+            val target = sessionLog
+            WiredStartupTiming({ message -> AsyncDiagnosticLog.append(target, message) }).also {
+                wiredStartupTiming = it
+                it.mark(WiredStartupTiming.Stage.HOST_REQUESTED)
+                if (pendingDisplaySize != null) {
+                    it.mark(WiredStartupTiming.Stage.DISPLAY_PENDING)
+                } else if (activeDisplaySize != null) {
+                    it.mark(WiredStartupTiming.Stage.DISPLAY_READY)
+                }
+            }
+        }
+    }
+
     private fun startCarPlay(size: DisplaySize) {
         if (unifiedHome && !unifiedConnectionRequested) return
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
@@ -5602,6 +5632,8 @@ open class CarPlayHostActivity : ComponentActivity() {
             return
         }
         val controllerGeneration = restartGeneration
+        val startupTiming = prepareWiredStartupTiming()
+        startupTiming?.mark(WiredStartupTiming.Stage.CONTROLLER_SETUP)
         // Settings → Connection can change the target while this screen stays open (#696).
         mfiTarget = AirPlayPersistence.loadMfiTarget(this)
         runCatching { DiPlayBootstrap.ensure(this, mfiTarget) }
@@ -5652,6 +5684,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             videoWidth = airPlayConfig.main.widthPixels,
             videoHeight = airPlayConfig.main.heightPixels,
             controllerGeneration = controllerGeneration,
+            startupTiming = startupTiming,
         )
         sink = renderer
         currentSurface?.let(::attachSurface)
@@ -5675,6 +5708,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             clearPairRecord = { AirPlayPersistence.clearLockdownRecord(this) },
             locationProvider = locationProvider,
             takePreconnectedBluetooth = BackgroundSocketHandoff::take,
+            startupTiming = startupTiming,
             vehicleStatusProvider = if (com.shilapi.xcertplay.hud.BydOutputSettings.batteryToIphoneActive(this)) {
                 com.shilapi.xcertplay.hud.BydNavigationOutputs.batteryStatus(applicationContext)
             } else {
@@ -5804,6 +5838,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         pendingDisplaySize = size
         pendingProjectionViewportCorrection = projectionViewportCorrection
+        wiredStartupTiming?.mark(WiredStartupTiming.Stage.DISPLAY_PENDING)
         // With a turning screen's square canvas nothing reconnects, so the turn need not wait for the size to settle.
         mainHandler.postDelayed(applyDisplaySize,
             if (sessionDisplay?.viewAreas?.turnsWithScreen == true) 0L else DISPLAY_CHANGE_DEBOUNCE_MILLIS)
@@ -5964,6 +5999,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         val previous = activeDisplaySize
         activeDisplaySize = size
+        wiredStartupTiming?.mark(WiredStartupTiming.Stage.DISPLAY_READY)
         recordDetectedMaximum(size)
         updateResolutionMenu()
         if (previous == null) {
@@ -6312,6 +6348,8 @@ open class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(reason)
         Log.i(TAG, "$reason; rebuilding stack at ${size.width}x${size.height}")
         val generation = ++restartGeneration
+        wiredStartupTiming?.mark(WiredStartupTiming.Stage.RESTARTED)
+        wiredStartupTiming = null
         updateDebugOverlays()
         handshakeResetInProgress = true
         callPopupSessionReady = false
@@ -6523,6 +6561,8 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     private fun shutdown(terminateProcess: Boolean, reason: String, completion: () -> Unit = {}) {
         if (!shuttingDown.compareAndSet(false, true)) { completion(); return }
+        wiredStartupTiming?.mark(WiredStartupTiming.Stage.CANCELLED)
+        wiredStartupTiming = null
         unifiedConnectionRequested = false
         callPopupSessionReady = false
         updateCallPopupGuard()
