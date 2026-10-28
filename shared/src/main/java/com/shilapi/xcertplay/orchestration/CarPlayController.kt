@@ -207,6 +207,7 @@ class CarPlayController(
     }
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val touchExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val touchQueue = TouchDispatchQueue { touchExecutor }
     private val tunnelExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hostId = UUID.randomUUID().toString().uppercase(Locale.US)
@@ -513,11 +514,15 @@ class CarPlayController(
         }
     }
 
-    fun sendTouch(contacts: List<AirPlayContact>): Boolean {
+    fun sendTouch(contacts: List<AirPlayContact>): Boolean = sendTouch(contacts, isMove = false)
+
+    fun sendTouch(contacts: List<AirPlayContact>, isMove: Boolean): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
         return try {
-            touchExecutor.execute { session.sendTouch(contacts) }
+            touchQueue.touch(session, contacts, isMove) { latest ->
+                if (!closed && activeSession === session) session.sendTouch(latest)
+            }
             true
         } catch (_: Exception) {
             false
@@ -530,7 +535,7 @@ class CarPlayController(
         val session = activeSession ?: return false
         val token = session.mainScreenSessionToken() ?: return false
         return try {
-            touchExecutor.execute {
+            touchQueue.control {
                 if (!closed && activeSession === session && session.mainScreenSessionToken() === token) {
                     debugLog("View area $index sent=${session.showViewArea(index)}")
                 }
@@ -548,7 +553,7 @@ class CarPlayController(
         val token = session.mainScreenSessionToken() ?: return false
         if (closed || activeSession !== session) return false
         return try {
-            touchExecutor.execute {
+            touchQueue.control {
                 if (!closed && activeSession === session && session.mainScreenSessionToken() === token) {
                     session.sendKnob(state, momentary)
                 }
@@ -592,7 +597,7 @@ class CarPlayController(
         val route = dashboardMapRoute() ?: return false
         val session = activeSession ?: return false
         return try {
-            touchExecutor.execute {
+            touchQueue.control {
                 if (activeSession === session && dashboardMapRoute() == route) session.changeMapZoomLevel(zoomIn)
             }
             true
@@ -606,7 +611,7 @@ class CarPlayController(
         if (closed) return false
         val session = activeSession ?: return false
         return try {
-            touchExecutor.execute { session.invokeSiri() }
+            touchQueue.control { session.invokeSiri() }
             true
         } catch (_: Exception) {
             false
@@ -623,7 +628,7 @@ class CarPlayController(
         if (closed) return false
         val session = activeSession ?: return false
         return try {
-            touchExecutor.execute { session.sendTelephony(index) }
+            touchQueue.control { session.sendTelephony(index) }
             true
         } catch (_: Exception) {
             false
@@ -634,7 +639,7 @@ class CarPlayController(
         if (closed) return false
         val session = activeSession ?: return false
         return try {
-            touchExecutor.execute { session.sendMedia(index) }
+            touchQueue.control { session.sendMedia(index) }
             true
         } catch (_: Exception) {
             false
@@ -665,7 +670,7 @@ class CarPlayController(
         availabilityPollGeneration.incrementAndGet()
         permissionPollGeneration += 1
         cancelWiredReenumeration()
-        touchExecutor.shutdownNow()
+        touchQueue.stop { touchExecutor.shutdownNow() }
         tunnelExecutor.shutdownNow()
         val service = vpnService
         unbindVpn()
@@ -725,7 +730,7 @@ class CarPlayController(
             return
         }
         try {
-            touchExecutor.execute {
+            touchQueue.control {
                 val sent = synchronized(clusterUiLock) {
                     if (closed || activeSession !== session || session.clusterStream != stream) {
                         return@synchronized false
@@ -752,7 +757,7 @@ class CarPlayController(
     /** A new phone inherits the last accepted selection; all command work stays off its listener. */
     private fun restoreDashboardContent(session: AirPlaySession) {
         try {
-            touchExecutor.execute {
+            touchQueue.control {
                 synchronized(clusterUiLock) {
                     if (closed || activeSession !== session) return@synchronized
                     val url = requestedDashboardUrl ?: return@synchronized
