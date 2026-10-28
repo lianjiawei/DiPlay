@@ -18,7 +18,7 @@
 | Debug 包名 | `cn.manstep.phonemirrorBox.hudtest` |
 | 最低系统 | Android 7.1（API 25） |
 | 主要适配 | 林肯/福特原厂 Android 车机，重点适配 Freescale MEK / i.MX8 平台 |
-| 开发分支 | `lincoln-0.2.20` |
+| 开发分支 | `lincoln` |
 
 这个分支与上游的主要区别：
 

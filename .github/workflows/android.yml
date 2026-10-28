@@ -1,7 +1,7 @@
 name: Android checks
 on:
   push:
-    branches: [main, lincoln-0.2.20]
+    branches: [main, lincoln]
   pull_request:
   workflow_dispatch:
 permissions:
