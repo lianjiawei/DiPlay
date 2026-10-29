@@ -40,6 +40,7 @@ class UpdateActionLayoutTest {
 
     @After fun cleanup() {
         controller?.pause()?.stop()?.destroy()
+        UpdateAvailability.saveTestReleasesEnabled(RuntimeEnvironment.getApplication(), false)
         RuntimeEnvironment.setFontScale(1f)
         CarPlayBackgroundSession.clear()
     }
@@ -58,6 +59,7 @@ class UpdateActionLayoutTest {
         if (screenshot != null) RuntimeEnvironment.setFontScale(1.3f)
         val app = RuntimeEnvironment.getApplication()
         UpdateAvailability.saveBackgroundChecksEnabled(app, false)
+        UpdateAvailability.saveTestReleasesEnabled(app, screenshot != null)
         val connectivity = shadowOf(app.getSystemService(ConnectivityManager::class.java))
         connectivity.clearAllNetworks()
         connectivity.setActiveNetworkInfo(null)

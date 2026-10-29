@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.content.Intent
 import android.os.Handler
+import android.view.View
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicBoolean
@@ -96,14 +97,14 @@ class CarPlayHomeNavigationTest {
             val activity = c.get()
             ReflectionHelpers.setField(activity, "setupError", null)
             ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
-            val button = ReflectionHelpers.getField<android.widget.Button>(activity, "connectButton")
+            val button = ReflectionHelpers.getField<View>(activity, "homeConnectionRing")
             assertFalse(button.isEnabled)
-            assertEquals(activity.getString(com.shilapi.xcertplay.host.R.string.ui_glass_connecting_action), button.text.toString())
+            assertEquals("", ReflectionHelpers.getField<android.widget.TextView>(activity, "homeActionHint").text.toString())
             CarPlayBackgroundSession.mainPictureReady = true
             ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
             assertTrue(button.isEnabled)
-            assertEquals(activity.getString(com.shilapi.xcertplay.host.R.string.open_carplay), button.text.toString())
-            assertSame(button, ReflectionHelpers.getField<android.widget.Button>(activity, "connectButton"))
+            assertEquals(activity.getString(com.shilapi.xcertplay.host.R.string.home_ring_open_hint), ReflectionHelpers.getField<android.widget.TextView>(activity, "homeActionHint").text.toString())
+            assertSame(button, ReflectionHelpers.getField<View>(activity, "homeConnectionRing"))
             CarPlayBackgroundSession.clear()
             assertFalse(CarPlayBackgroundSession.mainPictureReady)
         } finally { c.pause().stop().destroy() }

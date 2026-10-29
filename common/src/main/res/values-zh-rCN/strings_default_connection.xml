@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="default_connection_mode">默认连接模式</string>
+    <string name="default_connection_mode">默认连接方式</string>
     <string name="default_connection_last_used">上次使用</string>
     <string name="default_connection_wireless">无线</string>
     <string name="default_connection_usb">USB</string>

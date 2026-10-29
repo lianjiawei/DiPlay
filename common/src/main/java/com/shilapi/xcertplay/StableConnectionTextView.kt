@@ -44,8 +44,17 @@ internal class StableConnectionTextView(context: Context, variants: IntArray) : 
 }
 
 internal object ConnectionScreenCopy {
+    val urgentStages = intArrayOf(
+        R.string.ui_connection_stage_usb_permission, R.string.ui_connection_stage_pairing,
+        R.string.requesting_mfi_usb_permission, R.string.allow_the_connection_permission_to_continue,
+        R.string.ui_connection_hint_permissions, R.string.ui_connection_hint_usb_fallback,
+        R.string.ui_connection_hint_reset_wifi, R.string.ui_connection_hint_network,
+        R.string.ui_connection_wifi_off, R.string.ui_connection_bluetooth_off,
+        R.string.settings_existing_wifi_setup_required,
+    )
     val headlines = intArrayOf(R.string.ui_glass_home_title, R.string.ui_glass_connecting_title,
-        R.string.connecting_to_your_iphone, R.string.carplay_connected, R.string.ui_glass_connection_incomplete)
+        R.string.connecting_to_your_iphone, R.string.carplay_connected, R.string.ui_glass_connection_incomplete,
+        R.string.home_reconnecting)
     private val conciseStages = mapOf(
         R.string.this_head_unit_may_not_support_wireless_carplay_try_a_usb to R.string.ui_connection_hint_usb_fallback,
         R.string.your_iphone_isn_t_available_unlock_it_and_check_bluetooth to R.string.ui_connection_hint_wireless,
@@ -82,14 +91,24 @@ internal object ConnectionScreenCopy {
         R.string.waiting_for_mfi_coprocessor, R.string.requesting_mfi_usb_permission,
         R.string.ui_glass_video_preparing, R.string.ui_connection_waiting_network,
         R.string.ui_connection_network_timeout,
+        R.string.ui_connection_stage_bluetooth, R.string.ui_connection_stage_usb_permission,
+        R.string.ui_connection_stage_usb_transition, R.string.ui_connection_stage_usb_data,
+        R.string.ui_connection_stage_pairing,
     ).map { conciseStages[it] ?: it }.distinct().toIntArray()
     val allStages get() = (stages + hints + intArrayOf(R.string.setup_needs_attention, R.string.carplay_connected,
         R.string.ui_glass_connecting_hint, R.string.ui_glass_paired_waiting, R.string.ready_when_you_are,
-        R.string.settings_existing_wifi_setup_required)).distinct().toIntArray()
+        R.string.settings_existing_wifi_setup_required, R.string.home_authentication_unavailable)).distinct().toIntArray()
     val hints = intArrayOf(
         R.string.ui_connection_hint_usb, R.string.ui_connection_hint_same_wifi,
         R.string.ui_connection_hint_wireless, R.string.ui_connection_hint_reset_wifi,
         R.string.ui_connection_hint_permissions, R.string.ui_connection_hint_usb_fallback,
         R.string.ui_connection_hint_network, R.string.ui_connection_hint_retry,
+        R.string.ui_connection_wifi_off, R.string.ui_connection_bluetooth_off,
+        R.string.ui_connection_usb_permission, R.string.ui_connection_usb_transition_timeout,
+        R.string.ui_connection_timeout_same_wifi, R.string.ui_connection_timeout_hotspot,
+        R.string.ui_connection_timeout_wireless,
+        R.string.home_ring_connect_hint, R.string.home_ring_open_hint,
+        R.string.home_ring_retry_hint, R.string.home_ring_reset_hint,
+        R.string.home_connection_help_hint, R.string.home_retry_and_help_hint, R.string.home_reset_and_help_hint,
     )
 }

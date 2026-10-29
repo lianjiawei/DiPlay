@@ -16,6 +16,7 @@ internal object UpdateAvailability {
     private const val PROMPTED_SOURCE = "prompted_source"
     private const val LAST_ATTEMPT_MILLIS = "last_attempt_millis"
     private const val BACKGROUND_CHECKS = "background_checks"
+    private const val TEST_RELEASES = "test_releases_enabled"
     private const val LAST_RESULT = "last_result"
     private const val LAST_RESULT_MILLIS = "last_result_millis"
     private const val LAST_INSTALL = "last_install"
@@ -32,6 +33,13 @@ internal object UpdateAvailability {
     fun saveBackgroundChecksEnabled(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(BACKGROUND_CHECKS, enabled).apply()
     }
+
+    fun testReleasesEnabled(context: Context): Boolean = preferences(context).getBoolean(TEST_RELEASES, false)
+
+    fun saveTestReleasesEnabled(context: Context, enabled: Boolean) {
+        preferences(context).edit().putBoolean(TEST_RELEASES, enabled).apply()
+    }
+
 
     fun shouldPrompt(context: Context, release: UpdateRelease): Boolean {
         if (!backgroundChecksEnabled(context)) return false
@@ -113,7 +121,7 @@ internal object UpdateAvailability {
         val values = preferences(context)
         fun age(key: String) = values.getLong(key, 0L).takeIf { it > 0L }
             ?.let { "${(nowMillis - it).coerceAtLeast(0L) / 60_000} min ago" } ?: "never"
-        return "Update check: background=${if (backgroundChecksEnabled(context)) "on" else "off"}; " +
+        return "Update check: background=off; " +
             "lastSuccess=${age(LAST_ATTEMPT_MILLIS)}; cachedRelease=${values.getString(TAG, null) ?: "none"}; " +
             "lastResult=${values.getString(LAST_RESULT, null) ?: "none"} (${age(LAST_RESULT_MILLIS)}); " +
             "lastInstall=${values.getString(LAST_INSTALL, null) ?: "none"} (${age(LAST_INSTALL_MILLIS)})"

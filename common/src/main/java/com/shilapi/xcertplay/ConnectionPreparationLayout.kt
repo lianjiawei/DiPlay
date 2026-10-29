@@ -76,10 +76,12 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
             }
         }
         actions.measure(exact(innerWidth), exact(footerHeight))
-        val wordmarkWidth = if (landscape) (innerWidth-actionWidth*2-dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP*2)).coerceAtLeast(0) else innerWidth
-        wordmark.measure(exact(wordmarkWidth), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
-        footerStackHeight = if (landscape) maxOf(footerHeight,wordmark.measuredHeight)
-            else footerHeight+wordmark.measuredHeight+dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        wordmark.visibility = if (landscape) View.VISIBLE else View.GONE
+        if (landscape) {
+            val wordmarkWidth = (innerWidth-actionWidth*2-dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP*2)).coerceAtLeast(0)
+            wordmark.measure(exact(wordmarkWidth), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+        }
+        footerStackHeight = if (landscape) maxOf(footerHeight,wordmark.measuredHeight) else footerHeight
         brand.measure(exact(innerWidth), exact(brandHeight))
         val bodyHeight = (height-paddingTop-paddingBottom-headerReserve-footerStackHeight-
             dp(ConnectionScreenMetrics.BOTTOM_DP + ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)).coerceAtLeast(1)
@@ -98,9 +100,11 @@ internal class ConnectionPreparationLayout(context: Context) : FrameLayout(conte
         val footerBottom = height-paddingBottom-dp(ConnectionScreenMetrics.BOTTOM_DP)
         val actionTop = footerBottom-footerStackHeight
         actions.layout(start, actionTop, start+actions.measuredWidth, actionTop+actions.measuredHeight)
-        val wordmarkTop = if (landscape) actionTop+(footerStackHeight-wordmark.measuredHeight)/2 else footerBottom-wordmark.measuredHeight
-        val wordmarkLeft = paddingLeft+(width-paddingLeft-paddingRight-wordmark.measuredWidth)/2
-        wordmark.layout(wordmarkLeft, wordmarkTop, wordmarkLeft+wordmark.measuredWidth, wordmarkTop+wordmark.measuredHeight)
+        if (landscape) {
+            val wordmarkTop = actionTop+(footerStackHeight-wordmark.measuredHeight)/2
+            val wordmarkLeft = paddingLeft+(width-paddingLeft-paddingRight-wordmark.measuredWidth)/2
+            wordmark.layout(wordmarkLeft, wordmarkTop, wordmarkLeft+wordmark.measuredWidth, wordmarkTop+wordmark.measuredHeight)
+        } else wordmark.layout(0, 0, 0, 0)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
@@ -120,6 +124,7 @@ internal class ConnectionContentLayout(
     private var visualHeight = 0
     private var detailsHeight = 0
     var actionHeight = 0
+    var reserveActionHeight = false
     private val hintMeasure = StableConnectionTextView(context, ConnectionScreenCopy.hints).apply { includeFontPadding = false }
 
     init {
@@ -145,7 +150,7 @@ internal class ConnectionContentLayout(
         phone.textSize = if (compact) 14f else UiTypography.ROW_SP.toFloat()
         stage.textSize = if (compact) 12f else UiTypography.BODY_SP.toFloat()
         hintMeasure.textSize = if (compact) 12f else UiTypography.CAPTION_SP.toFloat()
-        var primaryAction = false
+        var primaryAction = reserveActionHeight
         for (index in 0 until hint.childCount) {
             val child = hint.getChildAt(index)
             if (child is android.widget.Button) {
@@ -166,6 +171,11 @@ internal class ConnectionContentLayout(
             phone.measuredHeight + stage.measuredHeight + detailHeight + gap * 2 <= height
         stage.visibility = if (showStage) View.VISIBLE else View.GONE
         if (!showStage) stage.measure(exact(detailsWidth), exact(0))
+        if (columns && showStage) {
+            // Very short windows can be a few pixels tighter after reserving localized hints.
+            // Reduce only the gaps, keeping the stable, complete status and hint visible.
+            gap = minOf(gap, ((height - phone.measuredHeight - stage.measuredHeight - hint.measuredHeight) / 2).coerceAtLeast(0))
+        }
         detailsHeight = phone.measuredHeight+stage.measuredHeight+hint.measuredHeight+gap*(if (showStage) 2 else 1)
         val ringRoom = height-headline.measuredHeight-gap-(if (columns) 0 else detailsHeight+gap)
         val ringSize = minOf(dp(ConnectionPageLayout.RING_DP), ringRoom).coerceAtLeast(dp(ReferenceHomeMetrics.MIN_RING_DP))

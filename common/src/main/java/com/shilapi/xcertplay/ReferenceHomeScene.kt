@@ -1,8 +1,6 @@
 package com.shilapi.xcertplay
 
 import android.content.Context
-import android.view.TouchDelegate
-import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -35,10 +33,9 @@ internal class HomeViewportScrollView(context: Context) : ScrollView(context) {
 /** Home and preparation share their content slots, action dimensions and safe bottom edge. */
 internal class ReferenceHomeScene(
     context: Context, private val hero: ConnectionContentLayout,
-    private val phone: View, private val primary: TextView, private val usb: View, private val settings: View,
+    private val usb: View, private val settings: View,
     private val brand: View, private val viewportHeight: () -> Int,
     private val reservedHeight: Int,
-    private val prepareActions: (Int) -> Unit = {},
 ) : FrameLayout(context) {
     private val density = resources.displayMetrics.density
     private fun dp(v: Int) = (v*density).roundToInt()
@@ -55,7 +52,6 @@ internal class ReferenceHomeScene(
         val fullHeight = viewportHeight()
         landscape = fullWidth > fullHeight * 1.3f
         val footerWidth = ConnectionPageLayout.actionWidth(w, landscape, density)
-        prepareActions(footerWidth)
         val actionMetrics = ConnectionPageLayout.actionMetrics(context, footerWidth)
         val footerHeight = actionMetrics.height
         fun constrainAction(view: View) {
@@ -66,16 +62,15 @@ internal class ReferenceHomeScene(
                 view.ellipsize = android.text.TextUtils.TruncateAt.END
             } else if (view is ViewGroup) for (index in 0 until view.childCount) constrainAction(view.getChildAt(index))
         }
-        listOf(primary, usb, settings).forEach(::constrainAction)
+        listOf(usb, settings).forEach(::constrainAction)
         for (view in listOf(usb, settings)) view.measure(exact(footerWidth), exact(footerHeight))
-        primary.layoutParams = (primary.layoutParams as FrameLayout.LayoutParams).apply {
-            width = footerWidth; height = footerHeight
+        brand.visibility = if (landscape) View.VISIBLE else View.GONE
+        if (landscape) {
+            val brandWidth = (w - footerWidth * 2 - dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP * 2)).coerceAtLeast(0)
+            brand.measure(exact(brandWidth), MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
         }
-        val brandWidth = if (landscape) (w - footerWidth * 2 - dp(ReferenceHomeMetrics.BRAND_ACTION_GAP_DP * 2)).coerceAtLeast(0) else w
-        brand.measure(exact(brandWidth), MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED))
         wantedHeight = (fullHeight - reservedHeight).coerceAtLeast(1)
-        footerStackHeight = if (landscape) maxOf(footerHeight, brand.measuredHeight)
-            else footerHeight + brand.measuredHeight + dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)
+        footerStackHeight = if (landscape) maxOf(footerHeight, brand.measuredHeight) else footerHeight
         val bodyHeight = (wantedHeight - footerStackHeight - dp(ReferenceHomeMetrics.HERO_FOOTER_GAP_DP)).coerceAtLeast(1)
         val heroWidth = ConnectionPageLayout.contentWidth(fullWidth, bodyHeight, landscape, density)
         hero.actionHeight = footerHeight
@@ -87,9 +82,10 @@ internal class ReferenceHomeScene(
         val footerTop = height-footerStackHeight
         usb.layout(0,footerTop,usb.measuredWidth,footerTop+usb.measuredHeight)
         settings.layout(width-settings.measuredWidth,footerTop,width,footerTop+settings.measuredHeight)
-        val brandY=if (landscape) footerTop+(footerStackHeight-brand.measuredHeight)/2 else height-brand.measuredHeight
-        brand.layout((width-brand.measuredWidth)/2,brandY,(width+brand.measuredWidth)/2,brandY+brand.measuredHeight)
-        hero.touchDelegate=TouchDelegate(Rect(phone.left,phone.top-dp(4),phone.right,phone.bottom+dp(4)),phone)
+        if (landscape) {
+            val brandY=footerTop+(footerStackHeight-brand.measuredHeight)/2
+            brand.layout((width-brand.measuredWidth)/2,brandY,(width+brand.measuredWidth)/2,brandY+brand.measuredHeight)
+        } else brand.layout(0, 0, 0, 0)
     }
     private fun exact(size: Int) = MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY)
 }

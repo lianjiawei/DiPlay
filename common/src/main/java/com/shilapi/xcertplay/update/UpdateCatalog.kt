@@ -18,12 +18,13 @@ internal object UpdateCatalog {
     internal fun parse(json: String): UpdateRelease? = parseAll(json).firstOrNull()
 
     /** Returns every published release that can be downloaded and verified, newest first. */
-    internal fun parseAll(json: String): List<UpdateRelease> {
+    internal fun parseAll(json: String, includePrereleases: Boolean = true): List<UpdateRelease> {
         val releases = JSONArray(json)
         val parsed = mutableListOf<UpdateRelease>()
         for (index in 0 until releases.length()) {
             val release = releases.optJSONObject(index) ?: continue
             if (release.optBoolean("draft")) continue
+            if (!includePrereleases && release.optBoolean("prerelease")) continue
             val assets = release.optJSONArray("assets") ?: continue
             var apkName = ""
             var apkUrl = ""

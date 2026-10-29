@@ -255,6 +255,81 @@ class AdaptiveSettingsUiTest {
         assertTrue(texts(screen).any { it.text.startsWith(screen.getString(R.string.frame_rate) + " · ") })
     }
 
+    @Test fun chineseSearchRecognizesEverydaySynonymsWithoutChangingTheDestination() {
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        val index = ReflectionHelpers.callInstanceMethod<List<DiPlayActivity.SettingsSearchResult>>(screen, "buildSettingsSearchIndex")
+        for ((query, target) in listOf(
+            "仪表投屏" to R.string.settings_lincoln_cluster_navigation,
+            "开机不弹出" to R.string.settings_background_start,
+            "开机 不弹出" to R.string.settings_background_start,
+            "车型" to R.string.settings_home_brand,
+            "壁纸" to R.string.settings_vehicle_model,
+            "导航 音量" to R.string.settings_navigation_ducking,
+        )) {
+            val results = ReflectionHelpers.callInstanceMethod<List<DiPlayActivity.SettingsSearchResult>>(screen, "searchSettings",
+                ReflectionHelpers.ClassParameter(List::class.java, index),
+                ReflectionHelpers.ClassParameter(String::class.java, query))
+            assertTrue("Missing $query", results.any { it.title == screen.getString(target) })
+        }
+    }
+
+    @Test fun duckingDetailsCanBeOpenedWhileDisabledWithoutChangingSavedTuning() {
+        AirPlayPersistence.saveNavigationDuckingMedia(context, false)
+        AirPlayPersistence.saveNavigationDuckDb(context, -12)
+        val screen = openSettings()
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        fun detailButton() = descendants(screen.window.decorView).filterIsInstance<Button>().single {
+            it.text.startsWith(screen.getString(R.string.settings_navigation_duck_amount) + " · ")
+        }
+        fun sectionVisibility() = ((detailButton().parent as View).parent as View).visibility
+        assertEquals(View.GONE, sectionVisibility())
+        texts(screen).filterIsInstance<Button>().single {
+            it.text.startsWith(screen.getString(R.string.settings_duck_details) + " · ")
+        }.performClick()
+        assertEquals(View.VISIBLE, sectionVisibility())
+        assertFalse(AirPlayPersistence.loadNavigationDuckingMedia(context))
+        assertEquals(-12, AirPlayPersistence.loadNavigationDuckDb(context))
+    }
+
+    @Test fun searchingForFoldedDuckingControlExpandsItsSection() {
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        val index = ReflectionHelpers.callInstanceMethod<List<DiPlayActivity.SettingsSearchResult>>(screen, "buildSettingsSearchIndex")
+        val target = index.single { it.title == screen.getString(R.string.settings_navigation_duck_amount) }
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "openSearchResult",
+            ReflectionHelpers.ClassParameter(target.javaClass, target))
+        assertEquals(SettingsCategory.AUDIO, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
+        val button = texts(screen).filterIsInstance<Button>().single {
+            it.text.startsWith(screen.getString(R.string.settings_navigation_duck_amount) + " · ")
+        }
+        assertEquals(View.VISIBLE, ((button.parent as View).parent as View).visibility)
+    }
+
+    @Test fun connectionSubpageUsesSettingsTypographyAndChangingWirelessModeDoesNotStartAConnection() {
+        AirPlayPersistence.saveWirelessEnabled(context, false)
+        AirPlayPersistence.saveWirelessHotspotMode(context, WirelessHotspotMode.MANUAL)
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.CONNECTION)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        val settingsTitleSize = texts(screen).single { it.text == screen.getString(R.string.connection) }.textSize
+        ReflectionHelpers.setField(screen, "page", "connection")
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        val title = texts(screen).single { it.text == screen.getString(R.string.connection_setup) }
+        assertEquals(settingsTitleSize, title.textSize, .01f)
+        assertFalse(texts(screen).any {
+            it.text == screen.getString(R.string.set_up_once_your_details_stay_saved_for_the_next_drive_cha)
+        })
+        var starts = 0
+        screen.projectionStarter = { starts++; true }
+        val direct = texts(screen).filterIsInstance<Button>().single { it.text == screen.getString(R.string.wifi_direct) }
+        assertEquals((FidelitySettingsMetrics.ACTION_HEIGHT_DP * screen.resources.displayMetrics.density).toInt(),
+            direct.minHeight)
+        direct.performClick()
+        assertEquals(WirelessHotspotMode.WIFI_P2P, AirPlayPersistence.loadWirelessHotspotMode(context))
+        assertFalse(AirPlayPersistence.loadWirelessEnabled(context))
+        assertEquals(0, starts)
+    }
+
     // Android 7.1 and 9 too: the result list once called a PopupWindow method that Android 10 added.
     @Test
     @Config(sdk = [25, 28, 29])

@@ -11,4 +11,16 @@
     <string name="ui_connection_hint_retry">Retry, or open Connection help.</string>
     <string name="ui_connection_waiting_network">Waiting for iPhone to join CarPlay…</string>
     <string name="ui_connection_network_timeout">iPhone did not join CarPlay in time</string>
+    <string name="ui_connection_wifi_off">Turn on Wi-Fi on the head unit, then retry.</string>
+    <string name="ui_connection_bluetooth_off">Turn on Bluetooth on the head unit, then retry.</string>
+    <string name="ui_connection_usb_permission">iPhone USB access was not granted. Allow it on the head unit.</string>
+    <string name="ui_connection_usb_transition_timeout">USB switching timed out. Check the cable and unlock iPhone.</string>
+    <string name="ui_connection_timeout_same_wifi">Connection timed out. Check both devices use the same Wi-Fi.</string>
+    <string name="ui_connection_timeout_hotspot">Connection timed out. Check the hotspot and iPhone Wi-Fi.</string>
+    <string name="ui_connection_timeout_wireless">Connection timed out. Check Wi-Fi and Bluetooth.</string>
+    <string name="ui_connection_stage_bluetooth">Connecting to iPhone Bluetooth…</string>
+    <string name="ui_connection_stage_usb_permission">Getting USB access. Allow it on the head unit if prompted.</string>
+    <string name="ui_connection_stage_usb_transition">Switching USB connection. Keep the cable connected.</string>
+    <string name="ui_connection_stage_usb_data">Opening USB data connection…</string>
+    <string name="ui_connection_stage_pairing">Pairing iPhone. Unlock and confirm if prompted.</string>
 </resources>

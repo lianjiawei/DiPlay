@@ -163,6 +163,78 @@ class UpdateCheckUiTest {
         assertEquals(screen.getString(R.string.update_no_network), field<String>(screen, "historyMessage"))
     }
 
+    @Test fun testChannelIsOffByDefaultAndHasItsOwnManualEntry() {
+        UpdateAvailability.clearAllForTest(app)
+        val screen = screen(online = false)
+        assertFalse(UpdateAvailability.testReleasesEnabled(app))
+        assertFalse(descendants(field<View>(screen, "rootScroll")).filterIsInstance<TextView>()
+            .any { it.text == screen.getString(R.string.update_test_versions) })
+        UpdateAvailability.saveTestReleasesEnabled(app, true)
+        call(screen, "render")
+        assertTrue(descendants(field<View>(screen, "rootScroll")).filterIsInstance<TextView>()
+            .any { it.text == screen.getString(R.string.update_test_versions) })
+        assertFalse(descendants(field<View>(screen, "rootScroll")).filterIsInstance<TextView>()
+            .any { it.text.toString() in setOf("在后台检查更新", "Check for updates in the background") })
+    }
+
+    @Test fun testAndHistoryActionsRemainVisibleAndShowTheActiveOperation() {
+        val screen = screen(online = true)
+        UpdateAvailability.saveTestReleasesEnabled(app, true)
+        ReflectionHelpers.setField(screen, "historyCheckingTests", true)
+        val stage = DiPlayActivity::class.java.getDeclaredField("historyStage").apply { isAccessible = true }
+        for (name in listOf("CHECKING", "DOWNLOADING", "VERIFYING")) {
+            stage.set(screen, stage.type.enumConstants.single { (it as Enum<*>).name == name })
+            ReflectionHelpers.setField(screen, "historyProgress", 35)
+            call(screen, "render")
+            val history = field<TextView>(screen, "historyActionButton")
+            val test = field<TextView>(screen, "testActionButton")
+            assertEquals(screen.getString(R.string.update_history_download), history.text)
+            assertEquals(when (name) {
+                "CHECKING" -> screen.getString(R.string.update_history_checking)
+                "DOWNLOADING" -> screen.getString(R.string.update_history_downloading, 35)
+                else -> screen.getString(R.string.update_history_verifying)
+            }, test.text.toString())
+            assertFalse(history.isEnabled)
+            assertFalse(test.isEnabled)
+            if (name == "DOWNLOADING") {
+                UpdateAvailability.saveTestReleasesEnabled(app, false)
+                call(screen, "render")
+                assertEquals(screen.getString(R.string.update_history_downloading, 35),
+                    field<TextView>(screen, "testActionButton").text.toString())
+                UpdateAvailability.saveTestReleasesEnabled(app, true)
+            }
+        }
+        stage.set(screen, stage.type.enumConstants.single { (it as Enum<*>).name == "IDLE" })
+        call(screen, "render")
+        assertTrue(field<TextView>(screen, "historyActionButton").isEnabled)
+        assertTrue(field<TextView>(screen, "testActionButton").isEnabled)
+    }
+
+    @Test fun testDownloadUpdatesTheSameActionsAndRemovesOptedOutEntryAfterCompletion() {
+        UpdateAvailability.saveTestReleasesEnabled(app, true)
+        val screen = screen(online = true)
+        val history = field<TextView>(screen, "historyActionButton")
+        val test = field<TextView>(screen, "testActionButton")
+        ReflectionHelpers.setField(screen, "historyCheckingTests", true)
+        val stage = DiPlayActivity::class.java.getDeclaredField("historyStage").apply { isAccessible = true }
+        fun refresh(name: String) {
+            stage.set(screen, stage.type.enumConstants.single { (it as Enum<*>).name == name })
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "refreshUpdateRow",
+                ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType!!, false))
+        }
+        for (name in listOf("CHECKING", "DOWNLOADING", "VERIFYING", "IDLE")) {
+            refresh(name)
+            assertSame(history, field<TextView>(screen, "historyActionButton"))
+            assertSame(test, field<TextView>(screen, "testActionButton"))
+        }
+        refresh("DOWNLOADING")
+        UpdateAvailability.saveTestReleasesEnabled(app, false)
+        call(screen, "render")
+        assertNotNull(field<TextView?>(screen, "testActionButton"))
+        refresh("IDLE")
+        assertNull(field<TextView?>(screen, "testActionButton"))
+    }
+
     @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun compactChineseLargeFontScreenshot() = capture("compact-zh")

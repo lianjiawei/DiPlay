@@ -79,6 +79,23 @@ class ChooseIphoneBluetoothDialogTest {
         assertEquals(screen.getString(R.string.open_bluetooth), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text.toString())
     }
 
+    @Test fun firstWirelessConnectionStillGuidesTheUserToSelectAnIphone() {
+        DiPlayPreferences.saveAutoConnect(context, false)
+        DiPlayPreferences.saveDefaultConnectionMode(context, DefaultConnectionMode.WIRELESS)
+        AirPlayPersistence.saveWirelessHotspotMode(context, com.shilapi.xcertplay.orchestration.WirelessHotspotMode.WIFI_P2P)
+        shadowOf(BluetoothAdapter.getDefaultAdapter()).setEnabled(false)
+        val screen = open()
+        ReflectionHelpers.setField(screen, "setupError", null)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        val phone = ReflectionHelpers.getField<TextView>(screen, "homePhoneName")
+        assertEquals(screen.getString(R.string.home_iphone_not_selected), phone.text.toString())
+        assertFalse(phone.isClickable)
+        ReflectionHelpers.getField<View>(screen, "homeConnectionRing").performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(ReflectionHelpers.getField<Boolean>(screen, "pendingWireless"))
+        assertTrue(texts(ShadowAlertDialog.getLatestAlertDialog()).contains(screen.getString(R.string.turn_on_bluetooth)))
+    }
+
     // Issue 581's head unit: the switch in Android's settings turns itself off again.
     @Test fun bluetoothStillOffAfterAVisitToItsSettingsGetsTheHint() {
         shadowOf(BluetoothAdapter.getDefaultAdapter()).setEnabled(false)

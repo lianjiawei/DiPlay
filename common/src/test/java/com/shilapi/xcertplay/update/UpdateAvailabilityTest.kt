@@ -58,7 +58,7 @@ class UpdateAvailabilityTest {
 
     @Test fun reportShowsStateWithRelativeAges() {
         assertEquals(
-            "Update check: background=on; lastSuccess=never; cachedRelease=none; lastResult=none (never); lastInstall=none (never)",
+            "Update check: background=off; lastSuccess=never; cachedRelease=none; lastResult=none (never); lastInstall=none (never)",
             UpdateAvailability.report(context, 10_000_000L),
         )
         UpdateAvailability.save(context, release("v0.2.16"))

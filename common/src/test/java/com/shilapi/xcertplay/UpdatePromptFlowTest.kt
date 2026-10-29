@@ -464,6 +464,60 @@ class UpdatePromptFlowTest {
         assertEquals(listOf(published.checksumsUrl, published.apkUrl), requests.takeLast(2))
     }
 
+    @Test fun testCatalogSelectionDownloadsChecksAndOpensInstaller() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        val published = serveUpdate(validChecksum = { true })
+        val tag = "test-20261028045539-8db690b6"
+        val base = "https://weclaw-agent.cloud/diplay-updates/test-channel/builds/$tag"
+        val json = """[{"tag_name":"$tag","prerelease":true,"body":"Test notes","assets":[
+            {"name":"${published.apkName}","browser_download_url":"$base/${published.apkName}"},
+            {"name":"SHA256SUMS.txt","browser_download_url":"$base/SHA256SUMS.txt"}]}]"""
+        server!!.createContext("/test-catalog") { exchange ->
+            val bytes = json.toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        UpdateAvailability.saveTestReleasesEnabled(app, true)
+        val c = screen()
+        val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+        c.get().updateConnection = { url ->
+            requests += url.toString()
+            when (url.toString()) {
+                com.shilapi.xcertplay.update.UpdateClient.TEST_RELEASES_URL ->
+                    java.net.URL(published.apkUrl.replace("/apk", "/test-catalog")).openConnection()
+                "$base/${published.apkName}" -> java.net.URL(published.apkUrl).openConnection()
+                "$base/SHA256SUMS.txt" -> java.net.URL(published.checksumsUrl).openConnection()
+                else -> error("Unexpected update source: $url")
+            }
+        }
+        val connectivity = shadowOf(app.getSystemService(ConnectivityManager::class.java))
+        val network = ShadowNetwork.newInstance(99)
+        connectivity.addNetwork(network, mock(NetworkInfo::class.java))
+        val capabilities = mock(NetworkCapabilities::class.java)
+        `when`(capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).thenReturn(true)
+        connectivity.setNetworkCapabilities(network, capabilities)
+        call(c.get(), "loadTestReleases")
+        awaitHistory(c.get())
+        val picker = ReflectionHelpers.getField<AlertDialog>(c.get(), "updateHistoryDialog")
+        val id = descendants(picker.window!!.decorView).filterIsInstance<TextView>().single { it.text.toString() == "8db690b6" }
+        (id.parent as View).performClick()
+        val confirm = ReflectionHelpers.getField<AlertDialog>(c.get(), "updateHistoryDialog")
+        confirm.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        idle()
+        awaitHistory(c.get())
+        assertEquals(listOf(com.shilapi.xcertplay.update.UpdateClient.TEST_RELEASES_URL,
+            "$base/SHA256SUMS.txt", "$base/${published.apkName}"), requests)
+        c.get().updateInstallWorker = { it.run() }
+        c.get().updateInstallerUri = { android.net.Uri.parse("content://${c.get().packageName}.update-apks/test.apk") }
+        var launched: Intent? = null
+        c.get().updateInstallerLauncher = { launched = it }
+        ReflectionHelpers.getField<AlertDialog>(c.get(), "updateHistoryDialog")
+            .getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        idle()
+        assertEquals(Intent.ACTION_VIEW, launched?.action)
+        assertEquals("application/vnd.android.package-archive", launched?.type)
+    }
+
     private fun awaitHistory(screen: DiPlayActivity) {
         val deadline = System.nanoTime() + 5_000_000_000L
         while (ReflectionHelpers.getField<Any>(screen, "historyStage").toString() != "IDLE" &&

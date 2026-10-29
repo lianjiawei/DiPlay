@@ -162,7 +162,7 @@ class ConnectionScreenPresentationTest {
                 val fullHelp = host.getString(R.string.connection_help_existing_wifi)
                 assertFalse("Detailed troubleshooting stays off the waiting screen", visibleText.any { it.text.toString() == fullHelp })
                 val hint = ReflectionHelpers.getField<TextView>(host, "connectionHelpView")
-                assertEquals(host.getString(R.string.ui_connection_hint_same_wifi), hint.text.toString())
+                assertEquals(host.getString(R.string.ui_connection_timeout_same_wifi), hint.text.toString())
                 assertEquals(fullHelp, ReflectionHelpers.getField<String>(host, "connectionHelpDetail"))
                 assertEquals(View.GONE, ReflectionHelpers.getField<View>(host, "settingsGestureHint").visibility)
                 val row = descendants(panel).filterIsInstance<GlassActionRow>().single()

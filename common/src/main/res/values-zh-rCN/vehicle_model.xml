@@ -8,7 +8,7 @@
     <string name="settings_wallpaper_replace">更换图片</string>
     <string name="settings_wallpaper_use_default">恢复默认</string>
     <string name="settings_wallpaper_import_failed">无法使用这张图片，请选择其他图片。</string>
-    <string name="settings_home_brand">车型选择</string>
+    <string name="settings_home_brand">品牌标识</string>
     <string name="settings_home_brand_lincoln">林肯</string>
     <string name="settings_home_brand_ford">福特</string>
 </resources>

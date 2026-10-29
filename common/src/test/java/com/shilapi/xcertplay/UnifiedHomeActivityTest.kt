@@ -33,6 +33,8 @@ import org.robolectric.annotation.LooperMode
 import org.robolectric.util.ReflectionHelpers
 import org.robolectric.util.ReflectionHelpers.ClassParameter
 import org.robolectric.android.util.concurrent.PausedExecutorService
+import org.robolectric.shadows.ShadowAlertDialog
+import java.time.Duration
 
 /** UI and lifecycle tests simulate controller events, without supplying any CarPlay credentials. */
 @RunWith(RobolectricTestRunner::class)
@@ -80,7 +82,7 @@ class UnifiedHomeActivityTest {
 
     @Test fun idleConnectionAndRecoveryStatesUseExactlyTheSameHomeAndControls() {
         val title = field<View>("homeHeadline")
-        val primary = field<View>("connectButton")
+        val primary = field<View>("homeConnectionRing")
         assertTrue(descendants(engine).none { it is ConnectionPreparationLayout })
         repeat(3) {
             set("unifiedConnectionRequested", true)
@@ -89,23 +91,108 @@ class UnifiedHomeActivityTest {
             assertFalse(primary.isEnabled)
             set("startupRetryStopped", true)
             call<Unit>("onProjectionStateChanged")
-            assertEquals(activity.getString(R.string.retry_carplay_connection), (primary as TextView).text.toString())
+            assertEquals(activity.getString(R.string.home_ring_retry_hint), field<TextView>("homeActionHint").text.toString())
             assertTrue(primary.isEnabled)
             set("unifiedConnectionRequested", false)
             set("startupRetryStopped", false)
             call<Unit>("onProjectionStateChanged")
             assertSame(home, field<View>("unifiedHomeContent"))
-            assertSame(primary, field<View>("connectButton"))
+            assertSame(primary, field<View>("homeConnectionRing"))
             assertSame(title, field<View>("homeHeadline"))
             assertNull(shadowOf(activity).nextStartedActivity)
         }
+    }
+
+    @Test fun authenticationFailureNeverOffersAnUnavailableRetryAction() {
+        set("setupError", "test authentication failure")
+        set("unifiedConnectionRequested", true)
+        set("startupRetryStopped", true)
+        call<Unit>("onProjectionStateChanged")
+        val ring = field<View>("homeConnectionRing")
+        assertFalse(ring.isEnabled)
+        assertEquals(activity.getString(R.string.home_connection_help_hint), field<TextView>("homeActionHint").text.toString())
+        assertEquals(activity.getString(R.string.setup_needs_attention), ring.contentDescription.toString())
+        var starts = 0
+        activity.projectionStarter = { starts++; true }
+        ring.performClick()
+        assertEquals(0, starts)
+        field<View>("homeActionHint").performClick()
+        assertTrue(ShadowAlertDialog.getLatestAlertDialog().isShowing)
+    }
+
+    @Test fun failedConnectionRetainsActionableReasonWithoutAnActiveSessionAndCancelClearsIt() {
+        set("connectionFailureSummary", "Check the USB cable")
+        set("connectionHelpDetail", "Use a data cable and unlock the iPhone")
+        set("unifiedConnectionRequested", false)
+        call<Unit>("onProjectionStateChanged")
+        assertEquals(activity.getString(R.string.ui_glass_connection_incomplete), field<TextView>("homeHeadline").text)
+        assertEquals("Check the USB cable", field<TextView>("status").text)
+        field<View>("homeActionHint").performClick()
+        assertTrue(ShadowAlertDialog.getLatestAlertDialog().isShowing)
+        ShadowAlertDialog.getLatestAlertDialog().dismiss()
+        val completion: () -> Unit = {}
+        call<Unit>("stopUnifiedProjection", ClassParameter.from(kotlin.jvm.functions.Function0::class.java, completion))
+        assertNotEquals("Check the USB cable", field<TextView>("status").text)
+    }
+
+    @Test fun retryAndFailureHavePriorityOverOrdinaryStages() {
+        set("unifiedConnectionRequested", true)
+        set("connectionFailureSummary", "Check the cable")
+        set("connectionHelpDetail", "Try another data cable")
+        set("reconnectScheduled", true)
+        call<Unit>("onProjectionStateChanged")
+        assertEquals(activity.getString(R.string.home_reconnecting), field<TextView>("homeHeadline").text)
+        assertEquals("Check the cable", field<TextView>("status").text)
+        set("startupRetryStopped", true)
+        call<Unit>("onProjectionStateChanged")
+        assertEquals(activity.getString(R.string.ui_glass_connection_incomplete), field<TextView>("homeHeadline").text)
+        assertEquals(activity.getString(R.string.home_retry_and_help_hint), field<TextView>("homeActionHint").text)
+    }
+
+    @Test fun fastStagesCoalesceButFailureIsImmediateAndCannotBeOverwrittenByTimer() {
+        set("unifiedConnectionRequested", true)
+        val stage = field<TextView>("stageStatusView")
+        stage.text = "First stage"
+        call<Unit>("onProjectionStateChanged")
+        assertEquals("First stage", field<TextView>("status").text)
+        stage.text = "Second stage"
+        call<Unit>("onProjectionStateChanged")
+        assertEquals("First stage", field<TextView>("status").text)
+        set("connectionFailureSummary", "Permission denied")
+        call<Unit>("onProjectionStateChanged")
+        assertEquals("Permission denied", field<TextView>("status").text)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(700))
+        assertEquals("Permission denied", field<TextView>("status").text)
+    }
+
+    @Test fun latestOrdinaryStageAppearsAfterDelayAndPermissionIsImmediate() {
+        set("unifiedConnectionRequested", true)
+        val stage = field<TextView>("stageStatusView")
+        stage.text = "First stage"
+        call<Unit>("onProjectionStateChanged")
+        assertFalse(field<View>("homeActionHint").isClickable)
+        stage.text = "Second stage"
+        call<Unit>("onProjectionStateChanged")
+        stage.text = "Latest stage"
+        call<Unit>("onProjectionStateChanged")
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(700))
+        assertEquals("Latest stage", field<TextView>("status").text)
+        stage.text = activity.getString(R.string.ui_connection_stage_usb_permission)
+        call<Unit>("onProjectionStateChanged")
+        assertEquals(stage.text, field<TextView>("status").text)
     }
 
     @Test fun openingProjectionAndBackingOutOnlyChangeVisibilityOfTheSameHome() {
         store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java))
         CarPlayBackgroundSession.active = true
         CarPlayBackgroundSession.mainPictureReady = true
-        call<Unit>("showUnifiedProjection")
+        call<Unit>("onProjectionStateChanged")
+        val ring = field<View>("homeConnectionRing")
+        assertTrue(ring.isEnabled)
+        assertTrue(ring.isClickable && ring.isFocusable)
+        assertEquals(android.widget.Button::class.java.name, ring.accessibilityClassName)
+        assertEquals(activity.getString(R.string.home_ring_open_hint), field<TextView>("homeActionHint").text.toString())
+        ring.performClick()
         assertEquals(View.GONE, home.visibility)
         activity.onBackPressedDispatcher.onBackPressed()
         assertEquals(View.VISIBLE, home.visibility)
@@ -162,7 +249,7 @@ class UnifiedHomeActivityTest {
         assertFalse(field<Boolean>("unifiedProjectionVisible"))
         assertFalse(call<Boolean>("showUnifiedProjection"))
         assertEquals(activity.getString(R.string.ui_glass_connection_incomplete), field<TextView>("homeHeadline").text)
-        assertTrue(field<View>("connectButton").isEnabled)
+        assertTrue(field<View>("homeConnectionRing").isEnabled)
         assertSame(home, field<View>("unifiedHomeContent"))
     }
 
@@ -250,7 +337,7 @@ class UnifiedHomeActivityTest {
         assertTrue(field<Boolean>("openProjectionWhenReady"))
         assertEquals(activity.getString(R.string.ui_glass_connecting_title),
             field<TextView>("homeHeadline").text.toString())
-        assertFalse(field<View>("connectButton").isEnabled)
+        assertFalse(field<View>("homeConnectionRing").isEnabled)
         assertFalse(field<Boolean>("unifiedProjectionVisible"))
 
         store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java))
@@ -334,12 +421,12 @@ class UnifiedHomeActivityTest {
         set("unifiedConnectionRequested", true)
         call<Unit>("requestVpnConsent")
         call<Unit>("onVpnConsentResult", ClassParameter.from(Int::class.javaPrimitiveType, Activity.RESULT_CANCELED))
-        val primary = field<TextView>("connectButton")
-        assertEquals(activity.getString(R.string.retry_carplay_connection), primary.text.toString())
+        val primary = field<View>("homeConnectionRing")
+        assertEquals(activity.getString(R.string.home_ring_retry_hint), field<TextView>("homeActionHint").text.toString())
         assertTrue(primary.isEnabled)
         primary.performClick()
         assertEquals(2, requests)
-        assertSame(primary, field<TextView>("connectButton"))
+        assertSame(primary, field<View>("homeConnectionRing"))
         field<View>("disconnectButton").performClick()
         call<Unit>("onVpnConsentResult", ClassParameter.from(Int::class.javaPrimitiveType, Activity.RESULT_OK))
         assertFalse(field<Boolean>("unifiedConnectionRequested"))

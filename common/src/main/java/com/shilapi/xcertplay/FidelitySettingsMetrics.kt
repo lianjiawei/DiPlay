@@ -18,6 +18,8 @@ internal object FidelitySettingsMetrics {
     const val ABOUT_COMPACT_ICON_DP=64
     const val ABOUT_ICON_DP=88
     const val SETTING_ROW_DP=52
+    const val QUICK_ROW_DP=48
+    const val QUICK_ROW_VERTICAL_DP=4
     const val ROW_GAP_DP=12
     const val HEADER_DP=52
     const val RAIL_ROW_DP=56

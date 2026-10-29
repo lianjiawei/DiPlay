@@ -14,12 +14,13 @@ import com.shilapi.xcertplay.update.UpdateReleaseNotes
 internal class HistoryReleaseDialog(
     private val context: Context,
     private val release: UpdateRelease,
+    displayName: String? = null,
     onDownload: () -> Unit,
 ) {
     internal val messageView = TextView(context.appDialogContext()).apply {
         textSize = UiTypography.BODY_SP.toFloat()
         setTextColor(DiPlayPalette.DARK.secondaryText)
-        text = VehicleBranding.text(context, R.string.update_history_confirm, release.apkName) +
+        text = VehicleBranding.text(context, R.string.update_history_confirm, displayName ?: release.apkName) +
             "\n\n" + VehicleBranding.text(context, R.string.update_history_notes_title) + "\n" +
             UpdateReleaseNotes.plainText(release.releaseNotes)
                 .ifBlank { VehicleBranding.text(context, R.string.update_history_notes_missing) }
@@ -41,7 +42,7 @@ internal class HistoryReleaseDialog(
         addView(messageScroll, LinearLayout.LayoutParams(-1, -2))
     }
     internal val dialog: AlertDialog = context.appDialogBuilder()
-        .setTitle(release.tagName)
+        .setTitle(displayName ?: release.tagName)
         .setView(content)
         .setNegativeButton(android.R.string.cancel, null)
         .setPositiveButton(R.string.update_history_action) { _, _ -> onDownload() }

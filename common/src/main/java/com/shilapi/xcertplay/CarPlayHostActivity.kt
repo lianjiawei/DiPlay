@@ -155,13 +155,18 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var unifiedProjectionVisible = false
     private var unifiedHomeContent: View? = null
     private var connectionFailureSummary: String? = null
+    private var lastConnectionFailure: CarPlayStatus.Failed? = null
     private var connectionWifiResetRequired = false
     protected val projectionIsVisible: Boolean get() = unifiedProjectionVisible
     protected val projectionIsStarting: Boolean get() = unifiedConnectionRequested && !shuttingDown.get()
+    protected val projectionUsesWireless: Boolean get() = wirelessEnabled
     protected val projectionNeedsRetry: Boolean get() = startupRetryStopped
     protected val projectionNeedsWifiReset: Boolean get() = connectionWifiResetRequired
+    protected val projectionFailureSummary: CharSequence? get() = connectionFailureSummary
+    protected val projectionRetryScheduled: Boolean get() = reconnectScheduled
     protected val projectionStatus: CharSequence? get() = connectionFailureSummary ?: stageStatusView?.text
     protected val projectionStatusDetails: CharSequence? get() = connectionHelpDetail ?: stageStatusView?.contentDescription
+    protected fun clearProjectionFailure() = showConnectionHelp(null)
     protected open fun onProjectionStateChanged() = Unit
     protected open fun applyHomeWindowAppearance() = Unit
     protected fun applyProjectionWindowAppearance() = applyFullscreenMode()
@@ -244,7 +249,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (shuttingDown.get() || handshakeResetInProgress) return
         if (controller == null) {
             startupRetryStopped = false
-            connectionFailureSummary = null
+            showConnectionHelp(null)
             requestUnifiedProjection()
             return
         }
@@ -252,6 +257,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         startupRetryBudget.manualRetry()
         startupRetryStopped = false
         reconnectAttempts = 0
+        showConnectionHelp(null)
         restartCarPlay(brandString(R.string.connecting_to_your_iphone))
     }
 
@@ -261,9 +267,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop(completion)
         else {
             startupRetryStopped = false
-            connectionFailureSummary = null
-            connectionHelpDetail = null
-            connectionWifiResetRequired = false
+            showConnectionHelp(null)
             stageStatusView?.text = ""
             stageStatusView?.contentDescription = null
             onProjectionStateChanged()
@@ -5488,9 +5492,15 @@ open class CarPlayHostActivity : ComponentActivity() {
             return@report
         }
         updateHotspotStatus(status)
+        lastConnectionFailure?.let { failure ->
+            if (ConnectionFailureGuidance.recovered(failure, wirelessEnabled, status)) showConnectionHelp(null)
+        }
         val description = status.describe()
         val englishDescription = status.describe(englishResources)
         setConnectionStage(description, englishDescription)
+        ConnectionFailureGuidance.stage(status, wirelessEnabled)?.let {
+            stageStatusView?.apply { text = brandString(it); contentDescription = text }
+        }
         // A running Bluetooth control loop does not mean that the iPhone has reached AirPlay.
         if (status == CarPlayStatus.RunningWireless) {
             stageStatusView?.text = brandString(R.string.ui_connection_waiting_network)
@@ -6598,9 +6608,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                     activeAirPlaySession = null
                     activeScreenStreamTypes.clear()
                     startupRetryStopped = false
-                    connectionFailureSummary = null
-                    connectionHelpDetail = null
-                    connectionWifiResetRequired = false
+                    showConnectionHelp(null)
                     stageStatusView?.text = ""
                     stageStatusView?.contentDescription = null
                     reconnectScheduled = false
@@ -6971,6 +6979,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(brandString(stringId), englishResources.getString(stringId))
 
     private fun showConnectionHelp(failure: CarPlayStatus.Failed?) {
+        lastConnectionFailure = failure
         if (failure == null) connectionWifiResetRequired = false
         connectionFailureSummary = failure?.let { brandString(ConnectionFailureGuidance.summary(it, wirelessEnabled, wirelessHotspotMode)) }
         connectionHelpDetail = failure?.let {

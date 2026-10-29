@@ -134,8 +134,7 @@ class GlassUiRegressionTest {
             call(screen, "render")
             screenshot(screen, "$name-home")
             val texts = descendants(screen.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }.toList()
-            for (id in listOf(R.string.ui_glass_connect_carplay, R.string.choose_iphone, R.string.home_connection_mode_usb_short, R.string.settings)) {
-                if(paired && id==R.string.choose_iphone)continue
+            for (id in listOf(R.string.home_ring_connect_hint, R.string.home_connection_mode_usb_short, R.string.settings)) {
                 val label = screen.getString(id)
                 val action = descendants(screen.window.decorView).filterIsInstance<TextView>()
                     .firstOrNull { it.text.toString() == label || it.contentDescription?.toString() == label }
@@ -148,6 +147,9 @@ class GlassUiRegressionTest {
                     assertTrue("Home action cannot be clipped", bounds.height() >= action.height - 1)
                 }
             }
+            val phone = ReflectionHelpers.getField<TextView>(screen, "homePhoneName")
+            assertFalse("The home device label is informational", phone.isClickable)
+            assertTrue("The device label is visible", phone.text.isNotBlank())
             if(paired) {
                 fun landmarks(): List<Pair<Int, Int>> {
                     val scene = descendants(screen.window.decorView).filterIsInstance<ReferenceHomeScene>().single()

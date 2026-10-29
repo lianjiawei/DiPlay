@@ -70,6 +70,7 @@ class HomeFooterLayoutTest {
                 root.layout(0, 0, width, height)
                 root.viewTreeObserver.dispatchOnPreDraw()
                 capture(root, "api${android.os.Build.VERSION.SDK_INT}-$name")
+                assertEquals("$name footer decoration follows the current window", dims[0] > dims[1] * 1.3f, brand.visibility == View.VISIBLE)
                 assertEquals("$name footer must use this traversal's window height", 12*density,
                     (height-root.paddingBottom-maxOf(bottom(settings), bottom(brand))).toFloat(), 1f)
                 assertTrue("$name no extra scrolling", root.getChildAt(0).height <= height-root.paddingBottom)
@@ -81,7 +82,7 @@ class HomeFooterLayoutTest {
                 }
                 assertTrue("$name normal window keeps the phone below the ring",
                     hero.getChildAt(2).top >= hero.getChildAt(1).bottom)
-                val primary = ReflectionHelpers.getField<TextView>(screen, "connectButton")
+                val primary = ReflectionHelpers.getField<TextView>(screen, "homeActionHint")
                 val footerTop = bottom(settings)-settings.height
                 assertTrue("$name primary clears the footer", bottom(primary) <= footerTop)
                 if (name == "bars-hidden") {
@@ -114,7 +115,8 @@ class HomeFooterLayoutTest {
                 "phone-landscape" to "zh-rCN-w880dp-h400dp-land-xxhdpi",
                 "lincoln-head-unit-large" to "zh-rCN-w960dp-h540dp-land-xhdpi",
                 "full-large" to "zh-rCN-w1280dp-h720dp-land-mdpi",
-                "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi")) {
+                "portrait-large" to "zh-rCN-w400dp-h840dp-port-xhdpi",
+                "portrait-en-large" to "en-w400dp-h840dp-port-xhdpi")) {
                 RuntimeEnvironment.setQualifiers(qualifiers)
                 RuntimeEnvironment.setFontScale(if (name.endsWith("large")) 1.3f else 1f)
                 app.getSharedPreferences("diplay", 0).edit().clear().commit()
@@ -146,22 +148,33 @@ class HomeFooterLayoutTest {
                     // Inject already-resolved insets: Robolectric's platform dispatch reports no system bars.
                     resolvedInsets = true
                     layout()
-                    val primary = ReflectionHelpers.getField<TextView>(activity, "connectButton")
+                    val primary = ReflectionHelpers.getField<TextView>(activity, "homeActionHint")
                     val connectionMode = ReflectionHelpers.getField<TextView>(activity, "homeConnectionFooter")
                     val disconnect = ReflectionHelpers.getField<TextView>(activity, "disconnectButton")
                     val settings = descendants(root).filterIsInstance<TextView>().single { it.text.toString() == activity.getString(R.string.settings) }
                     val brand = descendants(root).filterIsInstance<HomeBrandView>().single()
+                    assertEquals("$name footer decoration follows the current window", width > height * 1.3f, brand.visibility == View.VISIBLE)
                     val ring = descendants(root).filterIsInstance<ConnectionRingView>().single()
                     val headline = ReflectionHelpers.getField<TextView>(activity, "homeHeadline")
                     val status = ReflectionHelpers.getField<TextView>(activity, "status")
                     fun rect(view: View) = Rect(0, 0, view.width, view.height).also { root.offsetDescendantRectToMyCoords(view, it) }
                     fun geometry() = listOf(headline, ring, status, primary, settings, brand).map(::rect)
                     val original = geometry()
-                    for (state in listOf("ready", "connecting", "connected", "disconnected")) {
+                    for (state in listOf("ready", "connecting", "failure", "connected", "disconnected")) {
                         when (state) {
                             "connecting" -> CarPlayBackgroundSession.store(mock(CarPlayController::class.java), mock(AndroidMediaSink::class.java),
                                 width, height, Any(), CarPlaySessionDisplay(width, height, Surface.ROTATION_0, false, false, width, height)) {}
-                            "connected" -> { CarPlayBackgroundSession.active = true; CarPlayBackgroundSession.mainPictureReady = true }
+                            "failure" -> {
+                                ReflectionHelpers.setField(activity, "connectionFailureSummary", activity.getString(R.string.ui_connection_usb_transition_timeout))
+                                ReflectionHelpers.setField(activity, "connectionHelpDetail", activity.getString(R.string.connection_help_usb))
+                                ReflectionHelpers.setField(activity, "startupRetryStopped", true)
+                            }
+                            "connected" -> {
+                                ReflectionHelpers.setField(activity, "connectionFailureSummary", null)
+                                ReflectionHelpers.setField(activity, "connectionHelpDetail", null)
+                                ReflectionHelpers.setField(activity, "startupRetryStopped", false)
+                                CarPlayBackgroundSession.active = true; CarPlayBackgroundSession.mainPictureReady = true
+                            }
                             "disconnected" -> CarPlayBackgroundSession.clear()
                         }
                         ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
@@ -175,12 +188,9 @@ class HomeFooterLayoutTest {
                         val footerBottom = maxOf(rect(settings).bottom, rect(brand).bottom)
                         assertEquals("$name/$state footer hugs safe bottom", 12*density,
                             (height-root.paddingBottom-footerBottom).toFloat(), 1f)
-                        assertEquals("$name/$state primary matches footer width", settings.width, primary.width)
-                        assertEquals("$name/$state primary matches footer height", settings.height, primary.height)
-                        assertEquals(settings.textSize, primary.textSize, .01f)
                         assertTrue("$name/$state no home scrolling", root.getChildAt(0).height <= height-root.paddingTop-root.paddingBottom)
                         assertTrue(rect(primary).bottom <= rect(settings).top)
-                        assertTrue(primary.height >= 48*density)
+                        assertTrue("$name/$state ring remains an action", ring.isClickable && ring.isFocusable)
                         for (label in listOf(primary, settings, connectionMode, disconnect).filter { it.isShown }) {
                             assertTrue("$name/$state label fits: ${label.text}; layout=${label.layout.height}, height=${label.height}, " +
                                 "padding=${label.compoundPaddingTop}+${label.compoundPaddingBottom}, lines=${label.layout.lineCount}",
@@ -192,9 +202,22 @@ class HomeFooterLayoutTest {
                         }
                         when (state) {
                             "connecting" -> assertEquals(activity.getString(R.string.home_cancel_connection), disconnect.text.toString())
-                            "connected" -> assertEquals(activity.getString(R.string.home_disconnect_carplay), disconnect.text.toString())
+                            "connected" -> {
+                                assertEquals(activity.getString(R.string.home_disconnect_carplay), disconnect.text.toString())
+                                assertEquals("$name connected action stays on one line", 1, disconnect.layout.lineCount)
+                                assertEquals("$name connected action is not truncated", 0, disconnect.layout.getEllipsisCount(0))
+                                for (button in listOf(disconnect, settings)) {
+                                    assertTrue("$name footer icon and text are drawn as a centered group",
+                                        ReflectionHelpers.getField<Boolean>(button, "centeredIconGroup"))
+                                    val icon = button.compoundDrawablesRelative[0]
+                                    assertNotNull(icon)
+                                    val groupWidth = icon.bounds.width() + button.compoundDrawablePadding +
+                                        kotlin.math.ceil(button.paint.measureText(button.text.toString()).toDouble()).toInt() + 1
+                                    assertTrue("$name centered group fits inside button", groupWidth <= button.width - button.paddingLeft - button.paddingRight)
+                                }
+                            }
                         }
-                        if (state == "ready" || state == "connected") capture(root, "$name-$state")
+                        if (state == "ready" || state == "connected" || state == "failure") capture(root, "$name-$state")
                     }
                     comparePreparation(activity, root, width, height, name, headline, ring, status, settings, brand)
                 } finally { CarPlayBackgroundSession.clear(); controller.pause().stop().destroy() }
@@ -231,12 +254,15 @@ class HomeFooterLayoutTest {
                 assertEquals(settings.textSize, (actions.getChildAt(index) as TextView).textSize, .01f)
             }
             val waitingBrand = descendants(viewport).filterIsInstance<HomeBrandView>().single()
-            assertEquals("$name same wordmark position", rect(homeRoot, brand), rect(root, waitingBrand))
-            val word = waitingBrand.getChildAt(1) as TextView
-            assertEquals("$name wordmark must not scroll", 0, word.scrollX)
-            assertEquals(host.getString(R.string.app_name), word.text.toString())
-            assertTrue("$name wordmark visible: ${word.text}, measured=${word.measuredWidth}x${word.measuredHeight}, bounds=${rect(root, word)}, textHeight=${word.layout?.height}",
-                word.height > 0 && word.layout != null && word.height >= word.layout.height)
+            assertEquals("$name same footer decoration visibility", brand.visibility, waitingBrand.visibility)
+            if (waitingBrand.visibility == View.VISIBLE) {
+                assertEquals("$name same wordmark position", rect(homeRoot, brand), rect(root, waitingBrand))
+                val word = waitingBrand.getChildAt(1) as TextView
+                assertEquals("$name wordmark must not scroll", 0, word.scrollX)
+                assertEquals(host.getString(R.string.app_name), word.text.toString())
+                assertTrue("$name wordmark visible: ${word.text}, measured=${word.measuredWidth}x${word.measuredHeight}, bounds=${rect(root, word)}, textHeight=${word.layout?.height}",
+                    word.height > 0 && word.layout != null && word.height >= word.layout.height)
+            }
             capture(root, "$name-preparation")
         } finally {
             ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicBoolean>(host, "shuttingDown").set(true)

@@ -14,7 +14,7 @@ import android.view.animation.LinearInterpolator
 import androidx.core.content.ContextCompat
 import com.shilapi.xcertplay.host.R
 
-/** A decorative status indicator. It observes UI state and never starts or retries a connection. */
+/** Status indicator; the home screen may attach an accessible click action. */
 internal class ConnectionRingView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val arc = RectF()
@@ -38,6 +38,8 @@ internal class ConnectionRingView(context: Context) : View(context) {
     }
 
     override fun onAttachedToWindow() { super.onAttachedToWindow(); syncAnimation() }
+    override fun getAccessibilityClassName(): CharSequence =
+        if (isClickable) android.widget.Button::class.java.name else super.getAccessibilityClassName()
     override fun onDetachedFromWindow() { animator?.cancel(); animator = null; super.onDetachedFromWindow() }
     override fun onWindowVisibilityChanged(visibility: Int) { super.onWindowVisibilityChanged(visibility); syncAnimation() }
     override fun onVisibilityChanged(changedView: View, visibility: Int) { super.onVisibilityChanged(changedView, visibility); syncAnimation() }

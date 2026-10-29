@@ -60,7 +60,7 @@ class UnifiedHomeScreenshotsTest {
             val width = (a.resources.configuration.screenWidthDp * density).toInt()
             val height = (a.resources.configuration.screenHeightDp * density).toInt()
             fun field(name: String): View = ReflectionHelpers.getField(a, name)
-            val primary = field("connectButton") as TextView
+            val primary = field("homeActionHint") as TextView
             val settings = descendants(root).filterIsInstance<TextView>().single { it.text == a.getString(R.string.settings) }
             val points = listOf(field("homeHeadline"), field("homeConnectionRing"), field("status"), primary, settings,
                 descendants(root).filterIsInstance<HomeBrandView>().single())
@@ -85,7 +85,7 @@ class UnifiedHomeScreenshotsTest {
                 }
                 root.viewTreeObserver.dispatchOnPreDraw()
                 assertSame("Connection state changes keep the original home", root, a.findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
-                assertSame(primary, field("connectButton"))
+                assertSame(primary, field("homeActionHint"))
                 val positions = points.map(::rect)
                 if (baseline == null) baseline = positions else assertEquals("$name/$state no position changes", baseline, positions)
                 for (button in listOf(primary, settings)) {

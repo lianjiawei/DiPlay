@@ -44,6 +44,18 @@ class CarPlayStageTextTest {
 
     @Test @Config(qualifiers = "en") fun englishStages() = stagesFollowTheConnection()
 
+    @Test @Config(qualifiers = "zh-rCN") fun concreteFailureIsShownUntilAConfirmedRecovery() {
+        ReflectionHelpers.setField(activity, "wirelessEnabled", true)
+        val reporter = ReflectionHelpers.callInstanceMethod<(CarPlayStatus) -> Unit>(activity, "createStatusReporter",
+            ClassParameter.from(Int::class.javaPrimitiveType, ReflectionHelpers.getField<Int>(activity, "restartGeneration")))
+        reporter(CarPlayStatus.Failed("Could not establish WIFI_P2P hotspot: Turn on Wi-Fi in the head unit's settings, then reconnect"))
+        assertEquals(activity.getString(R.string.ui_connection_wifi_off), ReflectionHelpers.getField<String>(activity, "connectionFailureSummary"))
+        reporter(CarPlayStatus.StartingHotspot)
+        assertEquals(activity.getString(R.string.ui_connection_wifi_off), ReflectionHelpers.getField<String>(activity, "connectionFailureSummary"))
+        reporter(CarPlayStatus.HotspotReady("", "", 0, "", "", ""))
+        assertEquals(null, ReflectionHelpers.getField<String?>(activity, "connectionFailureSummary"))
+    }
+
     @Test @Config(qualifiers = "zh-rCN") fun chineseStages() {
         assertNotEquals("Connection interrupted. Retrying…", activity.getString(R.string.connection_interrupted_retrying))
         stagesFollowTheConnection()
@@ -85,14 +97,16 @@ class CarPlayStageTextTest {
         assertStage(R.string.ui_connection_hint_usb,
             CarPlayStatus.Failed("CarPlay configuration request transferred -1 of 1 bytes"))
         assertStage(R.string.connect_your_iphone_with_a_usb_cable, CarPlayStatus.WaitingForIphone)
-        assertStage(R.string.allow_the_connection_permission_to_continue, CarPlayStatus.RequestingIphonePermission)
+        assertStage(R.string.ui_connection_stage_usb_permission, CarPlayStatus.RequestingIphonePermission)
         assertStage(R.string.looking_for_your_paired_iphone, CarPlayStatus.WaitingForPairedIphone)
         assertStage(R.string.getting_carplay_ready, CarPlayStatus.ConnectingBluetooth)
         assertStage(R.string.ui_connection_waiting_network, CarPlayStatus.RunningWireless)
         assertStage(R.string.opening_carplay, CarPlayStatus.RunningControl)
         assertStage(R.string.reconnecting_to_your_iphone, CarPlayStatus.ControlEnded)
         assertStage(R.string.waiting_for_mfi_coprocessor, CarPlayStatus.WaitingForMfi)
-        assertStage(R.string.getting_carplay_ready, CarPlayStatus.OpeningDataPaths)
+        assertStage(R.string.ui_connection_stage_usb_data, CarPlayStatus.OpeningDataPaths)
+        assertStage(R.string.ui_connection_stage_usb_transition, CarPlayStatus.WaitingForReenumeration)
+        assertStage(R.string.ui_connection_stage_pairing, CarPlayStatus.Pairing)
         assertStage(R.string.ui_connection_network_timeout, CarPlayStatus.Failed(
             "No AirPlay TCP after CarPlay StartSession", startupFailure = WirelessStartupFailure.FIRST_TCP_TIMEOUT))
     }

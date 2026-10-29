@@ -2,8 +2,21 @@
 <resources>
     <string name="home_connection_mode_wireless">Connection mode · Wireless</string>
     <string name="home_connection_mode_usb">Connection mode · USB</string>
-    <string name="home_connection_mode_wireless_short">Wireless</string>
-    <string name="home_connection_mode_usb_short">USB</string>
-    <string name="home_cancel_connection">Cancel connection</string>
-    <string name="home_disconnect_carplay">Disconnect CarPlay</string>
+    <string name="home_connection_mode_wireless_short">Wi-Fi setup</string>
+    <string name="home_connection_mode_usb_short">USB setup</string>
+    <string name="home_cancel_connection">Cancel</string>
+    <string name="home_cancel_connection_accessible">Cancel connection</string>
+    <string name="home_disconnect_carplay">Disconnect</string>
+    <string name="home_iphone_generic">iPhone</string>
+    <string name="home_iphone_not_selected">No iPhone selected</string>
+    <string name="home_iphone_selected">Selected: %1$s</string>
+    <string name="home_ring_connect_hint">Tap the circle to connect CarPlay</string>
+    <string name="home_ring_open_hint">Tap the circle to open CarPlay</string>
+    <string name="home_ring_retry_hint">Tap the circle to retry</string>
+    <string name="home_ring_reset_hint">Tap the circle to reset CarPlay Wi-Fi</string>
+    <string name="home_reconnecting">Reconnecting</string>
+    <string name="home_authentication_unavailable">CarPlay authentication could not be loaded. See connection help.</string>
+    <string name="home_connection_help_hint">View connection help</string>
+    <string name="home_retry_and_help_hint">Tap the circle to retry · Connection help</string>
+    <string name="home_reset_and_help_hint">Tap the circle to reset Wi-Fi · Connection help</string>
 </resources>

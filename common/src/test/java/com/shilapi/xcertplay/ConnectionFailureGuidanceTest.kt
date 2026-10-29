@@ -42,6 +42,29 @@ class ConnectionFailureGuidanceTest {
         assertEquals(R.string.connection_help_general, guide("Bluetooth error", wireless = false))
     }
 
+    @Test fun confirmedFailuresAndTimeoutsHaveSpecificReadableSummaries() {
+        fun summary(text: String, wireless: Boolean, mode: WirelessHotspotMode = WirelessHotspotMode.WIFI_P2P,
+            startup: WirelessStartupFailure? = null) = ConnectionFailureGuidance.summary(CarPlayStatus.Failed(text, startupFailure = startup), wireless, mode)
+        assertEquals(R.string.ui_connection_wifi_off, summary("Could not establish WIFI_P2P hotspot: Turn on Wi-Fi in the head unit's settings, then reconnect", true))
+        assertEquals(R.string.ui_connection_bluetooth_off, summary("Turn on Bluetooth in the head unit's settings, then reconnect", true))
+        assertEquals(R.string.ui_connection_usb_permission, summary("iPhone USB permission was denied", false))
+        assertEquals(R.string.ui_connection_usb_transition_timeout, summary("iPhone CarPlay USB re-enumeration timed out", false))
+        assertEquals(R.string.ui_connection_timeout_same_wifi, summary("unknown", true, WirelessHotspotMode.EXISTING_WIFI, WirelessStartupFailure.FIRST_TCP_TIMEOUT))
+        assertEquals(R.string.ui_connection_timeout_hotspot, summary("unknown", true, WirelessHotspotMode.MANUAL, WirelessStartupFailure.FIRST_TCP_TIMEOUT))
+        assertEquals(R.string.ui_connection_hint_retry, summary("opaque error", false))
+    }
+
+    @Test fun oldSpecificFailureClearsOnlyAfterEvidenceOfRecovery() {
+        val wifi = CarPlayStatus.Failed("Turn on Wi-Fi in the head unit's settings, then reconnect")
+        assertFalse(ConnectionFailureGuidance.recovered(wifi, true, CarPlayStatus.StartingHotspot))
+        assertTrue(ConnectionFailureGuidance.recovered(wifi, true,
+            CarPlayStatus.HotspotReady("", "", 0, "", "", "")))
+        val usb = CarPlayStatus.Failed("iPhone USB permission was denied")
+        assertFalse(ConnectionFailureGuidance.recovered(usb, false, CarPlayStatus.WaitingForIphone))
+        assertTrue(ConnectionFailureGuidance.recovered(usb, false, CarPlayStatus.OpeningDataPaths))
+        assertFalse(ConnectionFailureGuidance.recovered(CarPlayStatus.Failed("opaque error"), false, CarPlayStatus.OpeningDataPaths))
+    }
+
     @Test fun onlyTheCarHotspotAsksTheDriverToJoinANetworkOnTheIphone() {
         for (mode in listOf(WirelessHotspotMode.WIFI_P2P, WirelessHotspotMode.LOCAL_ONLY_HOTSPOT)) {
             assertEquals(R.string.connection_help_wifi_direct,

@@ -35,6 +35,8 @@ class HomeCompactLayoutTest {
         CarPlayBackgroundSession.clear()
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java).setup().visible()
         val activity = controller.get()
+        ReflectionHelpers.setField(activity, "setupError", null)
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "refreshStatus")
         val root = activity.window.decorView
         val metrics = activity.resources.displayMetrics
         val config = activity.resources.configuration
@@ -47,7 +49,7 @@ class HomeCompactLayoutTest {
         }
         fun text(id: Int) = descendants(root).filterIsInstance<TextView>()
             .single { it.visibility == View.VISIBLE && it.text.toString() == activity.getString(id) }
-        val connect = text(R.string.ui_glass_connect_carplay)
+        val connect = text(R.string.home_ring_connect_hint)
         val connectionMode = text(R.string.home_connection_mode_usb_short)
         val connectPosition = IntArray(2).also(connect::getLocationOnScreen)
         val connectionModePosition = IntArray(2).also(connectionMode::getLocationOnScreen)
