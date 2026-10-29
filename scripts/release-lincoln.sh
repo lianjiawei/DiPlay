@@ -220,10 +220,19 @@ release_kind_args=()
 if [[ "$next_version" =~ -rc[0-9]+$ ]]; then
   release_kind_args=(--prerelease)
 fi
-gh release create "$TAG" \
-  "$RELEASE_DIR/$APK_NAME" "$RELEASE_DIR/SHA256SUMS.txt" \
-  --repo "$FORK_SLUG" --target "$TARGET_SHA" \
-  --title "CarPlay $next_version" "${release_kind_args[@]}" "${notes_args[@]}"
+if [ "${#release_kind_args[@]}" -gt 0 ]; then
+  gh release create "$TAG" \
+    "$RELEASE_DIR/$APK_NAME" "$RELEASE_DIR/SHA256SUMS.txt" \
+    --repo "$FORK_SLUG" --target "$TARGET_SHA" \
+    --title "CarPlay $next_version" "${release_kind_args[@]}" "${notes_args[@]}"
+else
+  # macOS still ships Bash 3.2; with `set -u`, expanding an empty array there raises
+  # "unbound variable" instead of producing zero arguments.
+  gh release create "$TAG" \
+    "$RELEASE_DIR/$APK_NAME" "$RELEASE_DIR/SHA256SUMS.txt" \
+    --repo "$FORK_SLUG" --target "$TARGET_SHA" \
+    --title "CarPlay $next_version" "${notes_args[@]}"
+fi
 
 step "Done"
 cat <<EOF
