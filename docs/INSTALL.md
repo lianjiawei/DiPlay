@@ -21,7 +21,7 @@ Connect the iPhone to a USB **data** port with a data-capable cable and choose *
 
 ## Settings
 
-The first-launch DiLink setup guide can be skipped or reopened from Settings. DiPlay checks for official releases once a day through its update mirror, with GitHub as a fallback. Update notices and downloads are confined to **Settings → About**, where background checks can also be disabled. Android handles APK installation. DiPlay uses its dark appearance throughout; CarPlay day/night mode remains a separate setting. Choose a vehicle background or a custom image in **Settings → Vehicle → Vehicle background**; changing the CarPlay icon does not hide that setting or discard the selected background.
+Check for official releases manually in **Settings → About**, using the update mirror with GitHub as a fallback. The optional test-build switch is off by default and exposes a separate list of recent test APKs. Android handles APK installation. DiPlay uses its dark appearance throughout; CarPlay day/night mode remains a separate setting. Choose a vehicle background or a custom image in **Settings → Vehicle → Vehicle background**.
 
 Choose **Settings → Vehicle → Home brand** to show the Lincoln or Ford logo on Home. Saving this choice takes effect immediately and keeps the selected background.
 

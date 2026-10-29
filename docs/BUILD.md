@@ -231,8 +231,20 @@ picker) and install it over the existing app. Once upgraded, normal product-vers
 An in-place install keeps settings when the package name and signing certificate match.
 The first move from the old personal signing key to `precision.10` requires a manual
 uninstall and reinstall, rather than the in-app update flow.
-The driver updates from Settings -> About -> Check for updates. Daily background checks
-cache release information; their offer is shown only while that update page is open.
+The driver checks official updates manually from Settings -> About. A separate opt-in
+test channel lists up to five test APKs; it does not alter the stable release feed.
+Previously scheduled background update workers are cancelled and no longer check online.
+
+To publish a locally built, release-signed test APK from the Mac, run:
+
+```sh
+python3 scripts/upload_test_apk.py path/to/test.apk --notes "Changes to test"
+```
+
+The uploader verifies the package and signing certificate before uploading directly to
+evox1. The test channel is public to anyone with its address, but the app only lists it
+when the driver enables test versions. It retains the five newest test builds separately
+from the three official releases.
 
 ## Home and projection lifecycle
 
@@ -242,7 +254,7 @@ Use `CarPlayEntry.intent(context)` for current projection entry points. The old 
 
 Normal disconnects leave the same home and reusable runtime executors. A connection requested during teardown must wait for teardown completion; cancellation must cancel that pending request. Preserve answered permission decisions and pending permission state across recreation.
 
-Home contains only the connection scene and its normal actions. Do not append update or readiness cards there. Update checks may cache metadata in the background, but update UI belongs only to Settings → About. Download, history lookup, history download, permission and installer callbacks must not rebuild home or show update dialogs after the driver leaves that page. `UpdateHomeAvailabilityTest`, `UpdatePromptFlowTest`, `UnifiedHomeActivityTest` and `UnifiedHomeScreenshotsTest` protect these rules.
+Home contains only the connection scene and its normal actions. Do not append update or readiness cards there. Update UI belongs only to Settings → About. Download, history lookup, history download, permission and installer callbacks must not rebuild home or show update dialogs after the driver leaves that page. `UpdateHomeAvailabilityTest`, `UpdatePromptFlowTest`, `UnifiedHomeActivityTest` and `UnifiedHomeScreenshotsTest` protect these rules.
 
 Settings → Vehicle → Vehicle background is always available, including after selecting a custom CarPlay icon or migrating a custom OEM name. A saved model or custom wallpaper is independent of the CarPlay brand preset. Brands other than Lincoln keep a neutral default until a background is explicitly selected. `VehicleModelUiTest` covers entry visibility, persistence and large-font screenshots.
 
