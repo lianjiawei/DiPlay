@@ -73,14 +73,14 @@ class CarPlayNightModeControllerTest {
         assertEquals(listOf(true), f.output)
     }
 
-    @Test fun equalitySelectsDayAndBothSidesUseTheDelay() {
+    @Test fun hysteresisEdgesKeepThePreviousStateAndBothSidesUseTheDelay() {
         val f = Fixture(true)
-        f.light.emit(50f)
+        f.light.emit(55f)
         f.clock.advance(4_999)
         assertTrue(f.controller.night)
         f.clock.advance(1)
         assertFalse(f.controller.night)
-        f.light.emit(49f)
+        f.light.emit(44f)
         f.clock.advance(4_999)
         assertFalse(f.controller.night)
         f.clock.advance(1)
@@ -88,7 +88,7 @@ class CarPlayNightModeControllerTest {
     }
 
     @Test fun interruptedOrInvalidReadingRequiresANewFullInterval() {
-        for (reset in listOf(50f, 100f, 200f, -1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+        for (reset in listOf(50f, 55f, 100f, 200f, -1f, Float.NaN, Float.POSITIVE_INFINITY)) {
             val f = Fixture()
             f.light.emit(1f)
             f.clock.advance(4_000)
@@ -163,7 +163,7 @@ class CarPlayNightModeControllerTest {
         assertTrue(f.controller.night)
         f.controller.pause()
         f.controller.resume(false)
-        f.light.emit(49f)
+        f.light.emit(50f)
         f.clock.advance(10_000)
         assertTrue(f.controller.night)
     }
@@ -193,15 +193,31 @@ class CarPlayNightModeControllerTest {
         assertFalse(f.controller.night)
     }
 
-    @Test fun customThresholdControlsBothDirectionsWithoutADeadBand() {
+    @Test fun customThresholdUsesFivePercentHysteresisInBothDirections() {
         val f = Fixture()
         f.controller.configure(CarPlayNightMode.AMBIENT, false, AmbientLightThreshold(200), 5)
-        f.light.emit(150f)
-        f.clock.advance(5_000)
-        assertTrue(f.controller.night)
-        f.light.emit(200f)
+        f.light.emit(195f)
         f.clock.advance(5_000)
         assertFalse(f.controller.night)
+        f.light.emit(189f)
+        f.clock.advance(5_000)
+        assertTrue(f.controller.night)
+        f.light.emit(205f)
+        f.clock.advance(5_000)
+        assertTrue(f.controller.night)
+        f.light.emit(210f)
+        f.clock.advance(5_000)
+        assertFalse(f.controller.night)
+    }
+
+    @Test fun hysteresisIsClampedForVeryLowAndVeryHighThresholds() {
+        assertEquals(0.5f, AmbientLightThreshold(1).hysteresisLux)
+        assertEquals(2.5f, AmbientLightThreshold(5).hysteresisLux)
+        assertEquals(5f, AmbientLightThreshold(75).hysteresisLux)
+        assertEquals(17.5f, AmbientLightThreshold(350).hysteresisLux)
+        assertEquals(50f, AmbientLightThreshold(2_000).hysteresisLux)
+        assertEquals(0.5f, AmbientLightThreshold(1).enterNightLux)
+        assertEquals(1.5f, AmbientLightThreshold(1).enterDayLux)
     }
 
     @Test fun changingThresholdCancelsTheOldPendingTransition() {
@@ -211,7 +227,7 @@ class CarPlayNightModeControllerTest {
         f.controller.configure(CarPlayNightMode.AMBIENT, false, AmbientLightThreshold(5), 5)
         f.clock.advance(2_000)
         assertFalse(f.controller.night)
-        f.light.emit(4f)
+        f.light.emit(0f)
         f.clock.advance(4_999)
         assertFalse(f.controller.night)
         f.clock.advance(1)
@@ -226,12 +242,18 @@ class CarPlayNightModeControllerTest {
     @Test fun defaultThresholdAndDelayApplyInBothDirections() {
         val f = Fixture()
         f.controller.configure(CarPlayNightMode.AMBIENT, false)
-        f.light.emit(349f)
+        f.light.emit(340f)
+        f.clock.advance(1_000)
+        assertFalse(f.controller.night)
+        f.light.emit(332f)
         f.clock.advance(999)
         assertFalse(f.controller.night)
         f.clock.advance(1)
         assertTrue(f.controller.night)
-        f.light.emit(350f)
+        f.light.emit(360f)
+        f.clock.advance(1_000)
+        assertTrue(f.controller.night)
+        f.light.emit(368f)
         f.clock.advance(999)
         assertTrue(f.controller.night)
         f.clock.advance(1)

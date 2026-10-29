@@ -146,8 +146,8 @@ internal class CarPlayNightModeController(
         if (!resumed || !listening || mode != CarPlayNightMode.AMBIENT) return
         val target = when {
             !lux.isFinite() || lux < 0f -> null
-            !night && lux < threshold.lux.toFloat() -> true
-            night && lux >= threshold.lux.toFloat() -> false
+            !night && lux < threshold.enterNightLux -> true
+            night && lux >= threshold.enterDayLux -> false
             else -> null
         }
         if (target == pending) return
