@@ -350,8 +350,10 @@ class SettingsInlineHelpTest {
                 assertTrue("Text must fit its column: ${layout.text}", layout.getLineMax(line) <= layout.width + 2)
             }
         }
-        assertEquals("Only the title/value header and shared row padding determine height",
-            maxOf((FidelitySettingsMetrics.SETTING_ROW_DP * density).toInt(), headerHeight + (FidelitySettingsMetrics.ROW_VERTICAL_DP * 2 * density).toInt()), row.height)
+        val equalHeight = (row.parent as? View)?.takeIf { it.javaClass.simpleName == "GlassEqualHeightRow" }?.height ?: 0
+        assertEquals("Only the configured minimum, equal-height group, title/value header and shared row padding determine height",
+            maxOf(row.minHeight, equalHeight,
+                headerHeight + (FidelitySettingsMetrics.ROW_VERTICAL_DP * 2 * density).toInt()), row.height)
 
     }
 

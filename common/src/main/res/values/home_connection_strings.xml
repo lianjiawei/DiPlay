@@ -3,7 +3,7 @@
     <string name="home_connection_mode_wireless">Connection mode · Wireless</string>
     <string name="home_connection_mode_usb">Connection mode · USB</string>
     <string name="home_connection_mode_wireless_short">Wi-Fi setup</string>
-    <string name="home_connection_mode_usb_short">USB setup</string>
+    <string name="home_connection_mode_usb_short">USB</string>
     <string name="home_cancel_connection">Cancel</string>
     <string name="home_cancel_connection_accessible">Cancel connection</string>
     <string name="home_disconnect_carplay">Disconnect</string>

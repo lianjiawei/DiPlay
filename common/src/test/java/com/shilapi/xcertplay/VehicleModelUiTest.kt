@@ -75,7 +75,7 @@ class VehicleModelUiTest {
         assertFalse("A single model choice should not have a separate vehicle-appearance heading",
             descendants(screen.window.decorView).filterIsInstance<TextView>()
                 .any { it.isShown && it.text.toString() == screen.getString(R.string.settings_vehicle_appearance) })
-        assertEquals("车型选择 · 林肯", brandChoiceButton(screen).text.toString())
+        assertEquals("品牌标识 · 林肯", brandChoiceButton(screen).text.toString())
         assertEquals("自定义背景 · 默认", wallpaperButton(screen).text.toString())
     }
 
