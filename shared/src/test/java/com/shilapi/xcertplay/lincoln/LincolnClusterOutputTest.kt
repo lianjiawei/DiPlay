@@ -197,6 +197,12 @@ class LincolnClusterOutputTest {
         assertEquals(expected, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
     }
 
+    @Test fun nullRoadPlaceholderNeverReachesTheInstrumentBroadcast() {
+        send(guidance().copy(road = "null"))
+
+        assertEquals("", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+    }
+
     @Test fun receiverCalculatesProgressAcrossUpdatesQuietFramesAndNextManeuver() {
         val receiver = FactoryNavigationReceiver()
         send(guidance().copy(maneuverIndex = 7, distanceMeters = 400))

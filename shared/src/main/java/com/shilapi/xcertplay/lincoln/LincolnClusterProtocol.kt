@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.lincoln
 
 import com.shilapi.xcertplay.hud.BydAppleManeuver
 import com.shilapi.xcertplay.hud.BydClusterFrame
+import com.shilapi.xcertplay.hud.normalizeRouteRoadName
 import java.text.BreakIterator
 import java.util.Locale
 import java.util.UUID
@@ -189,9 +190,11 @@ object LincolnClusterProtocol {
         }
     }
 
-    fun sanitizeRoadName(text: String?): String? = sanitizeText(text, MAX_ROAD_NAME_CHARS)
+    fun sanitizeRoadName(text: String?): String? =
+        normalizeRouteRoadName(text)?.let { sanitizeText(it, MAX_ROAD_NAME_CHARS) }
 
-    fun sanitizeTurnStreet(text: String?): String = sanitizeText(text, MAX_TURN_STREET_CHARS).orEmpty()
+    fun sanitizeTurnStreet(text: String?): String =
+        normalizeRouteRoadName(text)?.let { sanitizeText(it, MAX_TURN_STREET_CHARS) }.orEmpty()
 
     fun sanitizeMediaText(text: String?): String? = sanitizeText(text, MAX_MEDIA_TEXT_CHARS)
 

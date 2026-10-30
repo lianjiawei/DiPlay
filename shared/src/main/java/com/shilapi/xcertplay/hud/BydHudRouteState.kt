@@ -28,6 +28,24 @@ internal enum class BydHudRouteChange {
     CLEAR,
 }
 
+/**
+ * Normalize the optional road-name strings supplied by iPhone navigation apps.
+ *
+ * Some apps send an Objective-C/JSON null description as ordinary UTF-8 text instead of omitting
+ * the optional field. Treat only those complete sentinel values as missing; a real name such as
+ * "Nullarbor Road" must remain untouched.
+ */
+internal fun normalizeRouteRoadName(value: String?): String? {
+    val road = value ?: return null
+    val candidate = road.trim()
+    if (candidate.isEmpty()) return null
+    return road.takeUnless {
+        candidate.equals("null", ignoreCase = true) ||
+            candidate.equals("(null)", ignoreCase = true) ||
+            candidate.equals("<null>", ignoreCase = true)
+    }
+}
+
 /** Decodes the iAP2 route-guidance subset needed by the BYD windshield HUD and cluster. */
 internal class BydHudRouteState(
     private val nanoTime: () -> Long = System::nanoTime,
@@ -191,8 +209,12 @@ internal class BydHudRouteState(
         return maneuvers[activeIndex]
     }
 
-    // The road the driver turns onto is what the next instruction is about; fall back to the current one.
-    private fun roadFor(maneuver: Maneuver): String = maneuver.afterRoad.ifEmpty { currentRoad }
+    // The road the driver turns onto is what the next instruction is about; an app-supplied null
+    // sentinel is missing data, so it must not prevent the valid current-road fallback.
+    private fun roadFor(maneuver: Maneuver): String =
+        normalizeRouteRoadName(maneuver.afterRoad)
+            ?: normalizeRouteRoadName(currentRoad)
+            ?: ""
 
     private fun parseRouteUpdate(data: ByteArray): BydHudRouteChange {
         var state: Int? = null

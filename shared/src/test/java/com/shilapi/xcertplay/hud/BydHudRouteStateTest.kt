@@ -173,6 +173,46 @@ class BydHudRouteStateTest {
     }
 
     @Test
+    fun `literal null after-road falls back to the current road`() {
+        val state = BydHudRouteState()
+        state.accept(
+            BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE,
+            tlvs(tlv(0x01, 0, 0), tlv(0x03, 1), tlv(0x04, *utf8z("null"))),
+        )
+        state.accept(
+            BydHudRouteState.ROUTE_GUIDANCE_UPDATE,
+            tlvs(tlv(0x01, 1), tlv(0x03, *utf8z("Hauptstraße")), tlv(0x0d, 0, 0)),
+        )
+
+        assertEquals("Hauptstraße", state.current()!!.road)
+    }
+
+    @Test
+    fun `road-name null sentinels become empty without matching real names`() {
+        val missing = BydHudRouteState()
+        missing.accept(
+            BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE,
+            tlvs(tlv(0x01, 0, 0), tlv(0x03, 1), tlv(0x04, *utf8z("(null)"))),
+        )
+        missing.accept(
+            BydHudRouteState.ROUTE_GUIDANCE_UPDATE,
+            tlvs(tlv(0x01, 1), tlv(0x03, *utf8z("<NULL>")), tlv(0x0d, 0, 0)),
+        )
+        assertEquals("", missing.current()!!.road)
+
+        val real = BydHudRouteState()
+        real.accept(
+            BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE,
+            tlvs(tlv(0x01, 0, 0), tlv(0x03, 1), tlv(0x04, *utf8z("Nullarbor Road"))),
+        )
+        real.accept(
+            BydHudRouteState.ROUTE_GUIDANCE_UPDATE,
+            tlvs(tlv(0x01, 1), tlv(0x0d, 0, 0)),
+        )
+        assertEquals("Nullarbor Road", real.current()!!.road)
+    }
+
+    @Test
     fun `roundabout exit has blank arrow and exit icon`() {
         val state = BydHudRouteState()
         state.accept(BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE, tlvs(tlv(0x01, 0, 0), tlv(0x03, 29)))
