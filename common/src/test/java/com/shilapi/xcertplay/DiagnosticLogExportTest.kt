@@ -4,6 +4,7 @@ import android.content.Context
 import com.shilapi.xcertplay.glance.CarPlayGlance
 import com.shilapi.xcertplay.iap2.message.Iap2Messages
 import com.shilapi.xcertplay.lincoln.LincolnClusterOutput
+import com.shilapi.xcertplay.lincoln.LincolnClusterProtocol
 import com.shilapi.xcertplay.lincoln.LincolnClusterSettings
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -21,8 +22,10 @@ import org.robolectric.annotation.Config
 class DiagnosticLogExportTest {
     @Test fun aReportIncludesSanitizedNavigationFrames() {
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
+        val previousPackage = LincolnClusterSettings.clusterPackage(activity)
         LincolnClusterOutput.detach()
         CarPlayGlance.setConnected(false)
+        LincolnClusterSettings.setClusterPackage(activity, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         LincolnClusterSettings.setNavigation(activity, true)
         try {
             LincolnClusterOutput.attach(activity)
@@ -31,6 +34,8 @@ class DiagnosticLogExportTest {
                 u16(1, 45789); u8(3, 2); string(4, "private-test-street")
             })
             val report = report(activity)
+            assertTrue(report.contains("Lincoln cluster package: com.baidu.xiaoduos.instrumentcluster"))
+            assertTrue(report.contains("Lincoln cluster output: navSent="))
             assertTrue(report.contains("Lincoln navigation frames v1"))
             val frame = report.lineSequence().first { it.startsWith("frame ") && it.contains("maneuverIndex=45789") }
             assertTrue(frame.contains("maneuverType=2"))
@@ -39,6 +44,7 @@ class DiagnosticLogExportTest {
             LincolnClusterOutput.detach()
             CarPlayGlance.setConnected(false)
             LincolnClusterSettings.setNavigation(activity, false)
+            LincolnClusterSettings.setClusterPackage(activity, previousPackage)
         }
     }
     @Test(timeout = 8_000) fun aReportIncludesRecordsAcceptedBeforeExport() = export(blockUntilTimeout = false)

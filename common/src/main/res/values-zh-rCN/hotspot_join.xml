@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="hotspot_join_title">自动加入热点（实验性）</string>
+    <string name="hotspot_join_title">自动加入热点</string>
     <string name="hotspot_join_description">适用于 Android 13 及以上、支持相关固件且仅使用 5 GHz 的车载热点。检查只准备私有恢复备份，不更改热点。需要已授权的 localhost:5555 本地 ADB；不支持 TLS 无线调试配对。</string>
     <string name="hotspot_join_check">检查热点修复</string>
     <string name="hotspot_join_apply">添加自动加入信息</string>

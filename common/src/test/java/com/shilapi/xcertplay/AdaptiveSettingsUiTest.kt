@@ -827,8 +827,14 @@ class AdaptiveSettingsUiTest {
     fun clusterCompatibilityScreenshotHuaweiPhone() =
         captureClusterCompatibility("huawei-2640x1200-zh", AppLocale.SIMPLIFIED_CHINESE, 1f)
 
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w960dp-h540dp-land-xhdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun clusterSettingsScreenshotLincolnChinese() =
+        captureClusterCompatibility("lincoln-1920x1080-zh", AppLocale.SIMPLIFIED_CHINESE)
+
     private fun captureClusterCompatibility(name: String, language: String, fontScale: Float = 1.3f) {
         RuntimeEnvironment.setFontScale(fontScale)
+        com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setRotateRoad(context, false)
         val screen = openSettings(language)
         ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.NAVIGATION)
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
@@ -838,6 +844,9 @@ class AdaptiveSettingsUiTest {
         val layout = requireNotNull(switch.layout)
         assertTrue((0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 })
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.settings_lincoln_cluster_navigation) })
+        val road = texts(screen).single { it.text == screen.getString(R.string.settings_lincoln_rotate_road) }
+        assertFalse(texts(screen).any { it.text.toString().contains("navSent=") })
+        assertFalse(texts(screen).any { it.text.toString().contains("com.baidu.xiaoduos.instrumentcluster") })
         val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
         val content = scroll.getChildAt(0)
         val bitmap = Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888)
@@ -849,6 +858,72 @@ class AdaptiveSettingsUiTest {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
             }
         } finally { bitmap.recycle() }
+        val card = road.parent.parent.parent as View
+        val cardImage = Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888)
+        try {
+            card.draw(Canvas(cardImage))
+            val output = Paths.get("build/reports/lincoln-cluster-ui/$name-card.png")
+            Files.createDirectories(output.parent)
+            Files.newOutputStream(output).use { stream ->
+                assertTrue(cardImage.compress(Bitmap.CompressFormat.PNG, 100, stream))
+            }
+        } finally { cardImage.recycle() }
+    }
+
+    @Test fun clusterSettingsShowControlsWithoutDiagnosticCounters() {
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.NAVIGATION)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        for (id in listOf(R.string.settings_lincoln_cluster_navigation, R.string.settings_lincoln_rotate_road,
+            R.string.settings_lincoln_cluster_enhanced_navigation, R.string.settings_lincoln_cluster_music,
+            R.string.settings_lincoln_cluster_remaining)) {
+            assertTrue("Missing cluster control ${screen.getString(id)}", texts(screen).any { it.text == screen.getString(id) })
+        }
+        assertFalse(texts(screen).any { it.text.toString().contains("navSent=") })
+        assertFalse(texts(screen).any { it.text.toString().contains("com.baidu.xiaoduos.instrumentcluster") })
+    }
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w960dp-h540dp-land-xhdpi")
+    fun simplifiedChineseSettingsUseCleanTitles() = verifyCleanSettingsTitles(
+        AppLocale.SIMPLIFIED_CHINESE, "独立音乐窗口", "独立音乐窗口字号",
+        "长路名分段显示", "仪表剩余里程/时间",
+    )
+
+    @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
+    fun englishSettingsUseCleanTitles() = verifyCleanSettingsTitles(
+        AppLocale.ENGLISH, "Independent music window", "Independent music window text size",
+        "Rotate long road names", "Cluster remaining distance/time",
+    )
+
+    private fun verifyCleanSettingsTitles(
+        language: String, music: String, musicSize: String, road: String, remaining: String,
+    ) {
+        val screen = openSettings(language)
+        val unwantedSuffix = Regex("(?:（[^）]*实验性[^）]*）|\\([^)]*experimental[^)]*\\))$", RegexOption.IGNORE_CASE)
+        val genericRemark = Regex("实验性|\\bexperimental\\b", RegexOption.IGNORE_CASE)
+        for (category in SettingsCategory.entries) {
+            ReflectionHelpers.setField(screen, "settingsCategory", category)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            descendants(screen.window.decorView).forEach { view ->
+                listOf((view as? TextView)?.text, view.contentDescription).filterNotNull().forEach { label ->
+                    assertFalse("Unexpected experimental suffix in $category: $label", unwantedSuffix.containsMatchIn(label))
+                    if (category != SettingsCategory.ABOUT) {
+                        assertFalse("Unexpected generic remark in $category: $label", genericRemark.containsMatchIn(label))
+                    }
+                }
+            }
+        }
+
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.NAVIGATION)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        assertTrue(texts(screen).any { it.text.toString() == road })
+        assertTrue(texts(screen).any { it.text.toString() == remaining })
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.ADVANCED)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        assertTrue(texts(screen).any { it.text.toString() == music })
+        assertTrue(texts(screen).any { it.text.toString().startsWith("$musicSize · ") })
+        val index = ReflectionHelpers.callInstanceMethod<List<DiPlayActivity.SettingsSearchResult>>(screen, "buildSettingsSearchIndex")
+        assertTrue(index.any { it.title == music && it.category == SettingsCategory.ADVANCED })
     }
 
     @Test fun longRoadRotationIsAnIndependentImmediatelySavedClusterSetting() {

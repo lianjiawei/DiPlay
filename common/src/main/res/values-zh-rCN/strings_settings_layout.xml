@@ -8,10 +8,10 @@
     <string name="settings_vehicle">车辆</string>
     <string name="settings_advanced">高级</string>
     <string name="settings_more">更多</string>
-    <string name="settings_swipe_advanced">高级（实验性）</string>
-    <string name="settings_advanced_subtitle">面向有经验用户的实验性及车型专用设置</string>
+    <string name="settings_swipe_advanced">高级</string>
+    <string name="settings_advanced_subtitle">车型专用及需要谨慎调整的设置</string>
     <string name="settings_advanced_caution_title">请谨慎更改</string>
-    <string name="settings_advanced_caution_description">这些功能可能取决于车辆固件、ADB 权限或 CarPlay 的实验性行为。日常设置位于上方各类别中。</string>
+    <string name="settings_advanced_caution_description">这些功能可能取决于车辆固件、ADB 权限或 CarPlay 兼容性。日常设置位于上方各类别中。</string>
     <string name="settings_search">搜索</string>
     <string name="settings_open_category">打开%1$s设置</string>
     <string name="settings_connection_summary">手机、有线、无线及自动连接</string>
@@ -21,10 +21,10 @@
     <string name="settings_vehicle_summary">驾驶侧、方向盘按键、车辆按钮和 CarPlay 手势</string>
     <string name="settings_advanced_media">视频与音频</string>
     <string name="settings_wheel_keys">方向盘按键</string>
-    <string name="settings_experimental_display">显示（实验性）</string>
+    <string name="settings_experimental_display">显示</string>
     <string name="settings_diagnostics_summary">排查连接问题时保存本地报告</string>
     <string name="settings_full_screen_description">在 Lincoln 与 CarPlay 中隐藏状态栏及导航栏。</string>
-    <string name="settings_vehicle_description">车辆和仪表盘功能因车型和固件而异。启用实验性设置前，请先在高级设置中查看。</string>
+    <string name="settings_vehicle_description">车辆和仪表盘功能因车型和固件而异。请在高级设置中查看相关选项。</string>
     <string name="settings_open_advanced">打开高级设置</string>
     <string name="settings_reconnect_pending">更改将在重新连接后生效</string>
     <string name="settings_reconnect_now">重新连接</string>

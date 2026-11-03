@@ -5329,9 +5329,6 @@ class DiPlayActivity : CarPlayHostActivity() {
             com.shilapi.xcertplay.lincoln.LincolnClusterSettings.remaining(this)) {
             com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setRemaining(this, it)
         }
-        card.addView(label(brandString(R.string.settings_lincoln_cluster_status,
-            com.shilapi.xcertplay.lincoln.LincolnClusterSettings.clusterPackage(this),
-            com.shilapi.xcertplay.lincoln.LincolnClusterOutput.statusLine()), 14, MUTED))
     }
 
     /** The 0.2.9 Dashboard song setting, shown once: in the BYD navigation card, or under Advanced vehicle data. */
@@ -6973,6 +6970,8 @@ class DiPlayActivity : CarPlayHostActivity() {
         appendLine()
         appendLine("--- Current cluster display diagnostics (even when disabled) ---")
         appendLine(ClusterMapPresentation.diagnosticReport(appContext))
+        appendLine("Lincoln cluster package: ${com.shilapi.xcertplay.lincoln.LincolnClusterSettings.clusterPackage(appContext)}")
+        appendLine("Lincoln cluster output: ${com.shilapi.xcertplay.lincoln.LincolnClusterOutput.statusLine()}")
         appendLine(com.shilapi.xcertplay.lincoln.LincolnNavigationDiagnostics.report())
         appendLine()
         appendLine("--- ADB cluster activity routing ---")

@@ -22,6 +22,25 @@ class SettingsTranslationsTest {
         }
     }
 
+    @Test fun settingsCopyDoesNotUseGenericExperimentalLabelsInEitherLanguage() {
+        // Some controls keep historical resource names without the settings_ prefix. Include
+        // vehicle-specific and dialog-only titles even when the current head unit hides them.
+        val otherTitles = setOf(
+            "hotspot_join_title", "platform21_cluster_mode", "carplay_map_on_instrument_cluster_experimental",
+            "boot_start_repair", "cluster_small_window_auto", "adb_cluster_activity_mode",
+            "carplay_call_controls_experimental", "side_panel", "main_buffered_audio",
+            "call_echo_cancellation", "call_voice_filter", "phone_audio_route", "phone_audio_route_apps",
+            "smooth_video",
+        )
+        val genericRemark = Regex("实验性|\\bexperimental\\b", RegexOption.IGNORE_CASE)
+        for (folderName in listOf("values", "values-zh-rCN")) {
+            val translations = strings(File(res, folderName))
+            assertEquals(folderName, emptySet<String>(), otherTitles - translations.keys)
+            val labels = translations.filterKeys { it.startsWith("settings_") || it in otherTitles }
+            assertEquals(folderName, emptySet<String>(), labels.filterValues { genericRemark.containsMatchIn(it) }.keys)
+        }
+    }
+
     private fun placeholders(text: String) = placeholder.findAll(text).map { it.value }.toSet()
 
     private fun strings(folder: File): Map<String, String> = folder.listFiles { file -> file.extension == "xml" }!!

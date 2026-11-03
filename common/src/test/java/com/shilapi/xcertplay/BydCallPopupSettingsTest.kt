@@ -35,7 +35,7 @@ class BydCallPopupSettingsTest {
         val content = LinearLayout(activity)
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "allSettingsSections",
             ReflectionHelpers.ClassParameter.from(LinearLayout::class.java, content))
-        val popup = switches(content).singleOrNull { it.contentDescription == "Hide BYD call popup (experimental)" }
+        val popup = switches(content).singleOrNull { it.contentDescription == "Hide BYD call popup" }
         assertNotNull("Android 12L must expose the opt-in popup control", popup)
         assertFalse(popup!!.isChecked)
         val before = prefs.all.toMap()

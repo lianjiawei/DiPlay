@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="hotspot_join_title">Automatic hotspot joining (experimental)</string>
+    <string name="hotspot_join_title">Automatic hotspot joining</string>
     <string name="hotspot_join_description">Optional repair for supported firmware with Android 13+ and a 5 GHz-only car hotspot. Check prepares a private rollback backup without changing the hotspot. Requires authorized local ADB on localhost:5555; TLS wireless-debugging pairing is not supported.</string>
     <string name="hotspot_join_check">Check hotspot repair</string>
     <string name="hotspot_join_apply">Add automatic-join information</string>
