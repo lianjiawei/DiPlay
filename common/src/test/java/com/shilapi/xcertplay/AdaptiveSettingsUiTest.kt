@@ -865,6 +865,76 @@ class AdaptiveSettingsUiTest {
         com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setRotateRoad(context, false)
     }
 
+    @Test fun musicWindowPreferenceWaitsForReconnectWithoutStoppingTheSession() {
+        MusicWindowSettings.setEnabled(context, false)
+        SidePanelSettings.setEnabled(context, false)
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        val session = mock(CarPlayController::class.java)
+        var stops = 0
+        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { stops++ }
+        CarPlayBackgroundSession.active = true
+        try {
+            PendingReconnect.clear()
+            ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.ADVANCED)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            val setting = descendants(screen.window.decorView).filterIsInstance<Switch>()
+                .single { it.contentDescription == screen.getString(R.string.settings_music_window) }
+            assertFalse(setting.isChecked)
+            setting.performClick()
+            assertTrue(MusicWindowSettings.enabled(context))
+            assertFalse(SidePanelSettings.enabled(context))
+            assertTrue(PendingReconnect.isPending(session))
+            assertEquals(0, stops)
+            assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
+        } finally {
+            MusicWindowSettings.setEnabled(context, false)
+            CarPlayBackgroundSession.clear()
+            PendingReconnect.clear()
+        }
+    }
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun musicWindowSettingsScreenshotCompactChineseLargeFont() =
+        captureMusicWindowSettings("compact-zh", AppLocale.SIMPLIFIED_CHINESE)
+
+    @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun musicWindowSettingsScreenshotExpandedEnglishLargeFont() =
+        captureMusicWindowSettings("expanded-en", AppLocale.ENGLISH)
+
+    @Test @Config(sdk = [29], qualifiers = "zh-rCN-w960dp-h540dp-land-xhdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun musicWindowSettingsScreenshotLincolnChinese() =
+        captureMusicWindowSettings("lincoln-1920x1080-zh", AppLocale.SIMPLIFIED_CHINESE)
+
+    private fun captureMusicWindowSettings(name: String, language: String) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        MusicWindowSettings.setEnabled(context, false)
+        MusicWindowSettings.setTextScaleStep(context, 2)
+        val screen = openSettings(language)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.ADVANCED)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        layoutRoot(screen)
+        val title = texts(screen).single { it.text == screen.getString(R.string.settings_music_window) }
+        val layout = requireNotNull(title.layout)
+        assertTrue((0 until layout.lineCount).all { layout.getEllipsisCount(it) == 0 })
+        assertTrue(texts(screen).any { it.text.startsWith(screen.getString(R.string.settings_music_window_text_size) + " · ") })
+        val row = title.parent.parent as View
+        val card = row.parent as View
+        val content = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll").getChildAt(0)
+        for ((suffix, view) in listOf("page" to content, "control" to row, "card" to card)) {
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            try {
+                view.draw(Canvas(bitmap))
+                val output = Paths.get("build/reports/music-window-settings-ui/$name-$suffix.png")
+                Files.createDirectories(output.parent)
+                Files.newOutputStream(output).use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            } finally { bitmap.recycle() }
+        }
+    }
+
     @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun cornerRadiusScreenshotCompactLargeFont() =

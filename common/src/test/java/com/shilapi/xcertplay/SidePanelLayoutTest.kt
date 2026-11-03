@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.os.Handler
+import android.os.Looper
 import android.content.pm.ApplicationInfo
 import android.view.Surface
 import android.view.TextureView
@@ -9,6 +10,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.media.AndroidMediaSink
+import com.shilapi.xcertplay.airplay.AirPlaySession
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.ExecutorService
 import org.junit.After
 import org.junit.Assert.*
@@ -16,8 +19,13 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.anyInt
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
@@ -43,11 +51,67 @@ class SidePanelLayoutTest {
     }
 
     @After fun cleanup() {
+        MusicWindowSettings.setEnabled(activity, false)
         (get("mainHandler") as Handler).removeCallbacksAndMessages(null)
         (get("teardownExecutor") as ExecutorService).shutdownNow()
         (get("airPlayCommandExecutor") as ExecutorService).shutdownNow()
         CarPlayBackgroundSession.clear()
         sink.close()
+    }
+
+    @Test fun musicContentFollowsTheDeclaredSessionRatherThanAChangedPreference() {
+        val built = activity.javaClass.getDeclaredMethod("buildSidePanel")
+            .apply { isAccessible = true }.invoke(activity) as LinearLayout
+        set("sidePanel", built)
+        val display = CarPlaySessionDisplay(1920, 1080, Surface.ROTATION_0, true, true,
+            1920, 1080, musicWindowEnabled = true)
+        set("sessionDisplay", display)
+        fun apply() = activity.javaClass.getDeclaredMethod("applySidePanelContent")
+            .apply { isAccessible = true }.invoke(activity)
+        apply()
+        val card = get("musicWindow") as CarPlayMusicWindow
+        assertEquals(View.VISIBLE, card.visibility)
+        assertEquals(View.GONE, (get("sidePanelInfo") as View).visibility)
+
+        MusicWindowSettings.setEnabled(activity, false)
+        apply()
+        assertSame(card, get("musicWindow"))
+        assertEquals(View.VISIBLE, card.visibility)
+
+        set("sessionDisplay", display.copy(musicWindowEnabled = false))
+        apply()
+        assertNull(get("musicWindow"))
+        assertEquals(View.VISIBLE, (get("sidePanelInfo") as View).visibility)
+    }
+
+    @Test fun musicWindowAutoShowIgnoresAnEndedSession() {
+        val areas = CarPlayViewAreas.build(1920, 1080, CarPlayDock.AUTOMATIC, null, sidePanel = true)!!
+        val display = CarPlaySessionDisplay(1920, 1080, Surface.ROTATION_0, true, true,
+            1920, 1080, areas, musicWindowEnabled = true)
+        val controller = mock(CarPlayController::class.java)
+        val session = mock(AirPlaySession::class.java)
+        `when`(controller.showViewArea(anyInt())).thenReturn(true)
+        video.layout(0, 0, 1920, 1080)
+        set("sessionDisplay", display)
+        set("controller", controller)
+        set("sidePanelShown", false)
+        panel.visibility = View.GONE
+        CarPlayBackgroundSession.store(controller, sink, 1920, 1080, activity, display) {}
+        val generation = get("restartGeneration") as Int
+        fun schedule() = activity.javaClass.getDeclaredMethod("autoShowMusicWindow", Int::class.javaPrimitiveType,
+            AirPlaySession::class.java).apply { isAccessible = true }.invoke(activity, generation, session)
+
+        set("activeAirPlaySession", session)
+        schedule()
+        set("activeAirPlaySession", null)
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+        verify(controller, never()).showViewArea(anyInt())
+
+        set("activeAirPlaySession", session)
+        schedule()
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+        verify(controller).showViewArea(anyInt())
+        assertEquals(true, get("sidePanelShown"))
     }
 
     @Test fun letterboxedPanelKeepsItsPhysicalPassengerSide() {

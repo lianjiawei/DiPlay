@@ -2245,6 +2245,15 @@ class DiPlayActivity : CarPlayHostActivity() {
                 SidePanelSettings.setEnabled(this, it)
                 markReconnectNeeded()
             }
+            toggle(card, brandString(R.string.settings_music_window), brandString(R.string.settings_music_window_description),
+                MusicWindowSettings.enabled(this)) {
+                MusicWindowSettings.setEnabled(this, it)
+                markReconnectNeeded()
+            }
+            choice(card, brandString(R.string.settings_music_window_text_size), (1..5).map(Int::toString),
+                MusicWindowSettings.textScaleStep(this) - 1, reconnects = false) {
+                MusicWindowSettings.setTextScaleStep(this, it + 1)
+            }
             if (CarPlayRotation.enabled(this)) {
                 val pictures = CarPlayRotation.Picture.entries
                 choice(card, brandString(R.string.carplay_rotation_picture), listOf(

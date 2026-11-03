@@ -664,6 +664,15 @@ internal object CarPlayMediaKeys {
         effectivePlayingLocked()
     }
 
+    /** Read-only display state for the optional side panel; this does not change audio focus. */
+    internal fun musicProgress(): MusicProgress? = synchronized(this) {
+        val duration = nowPlaying.durationMillis ?: return null
+        val elapsed = nowPlaying.elapsedMillis ?: return null
+        if (duration <= 0L || elapsed < 0L) return null
+        MusicProgress(elapsed.coerceAtMost(duration), duration, effectivePlayingLocked(),
+            elapsedUpdatedAt.takeIf { it > 0L } ?: SystemClock.elapsedRealtime())
+    }
+
     /**
      * The iPhone's playback state is authoritative once it has sent metadata. The media audio
      * stream can remain open briefly after pause, especially when the car's own player takes focus.
@@ -706,6 +715,9 @@ internal object CarPlayMediaKeys {
     /** Next track from the launcher's CarPlay card. */
     internal fun onHomeCardNext(): Boolean =
         send(com.shilapi.xcertplay.airplay.CarPlayMediaButton.NEXT, "home-card-next")
+
+    internal fun onHomeCardPrevious(): Boolean =
+        send(com.shilapi.xcertplay.airplay.CarPlayMediaButton.PREVIOUS, "music-window-previous")
 
     /**
      * A media key routed to the deprecated receiver used by older head units. This outranks the

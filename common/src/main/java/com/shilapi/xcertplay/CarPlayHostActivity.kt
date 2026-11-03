@@ -622,6 +622,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var carPlayDock = CarPlayDock.AUTOMATIC
     /** The view areas the next session declares (see createAirPlayConfig). */
     private var pendingViewAreas: CarPlayViewAreas? = null
+    private var pendingMusicWindowEnabled = false
     /** The dock the running session declared; null before the first connection. */
     private var sessionDock: CarPlayDock? = null
     private var hideTopBar = true
@@ -732,6 +733,8 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var sidePanel: LinearLayout? = null
     // Everything on the panel's card, in one layout so the resize blur covers it as a whole.
     private var sidePanelContents: LinearLayout? = null
+    private var sidePanelInfo: LinearLayout? = null
+    private var musicWindow: CarPlayMusicWindow? = null
     private var sidePanelBattery: TextView? = null
     // The side panel's tyres (TPMS), front left, front right, rear left, rear right; hidden without a reading.
     private var sidePanelTyres: LinearLayout? = null
@@ -790,6 +793,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
     }
     private var sidePanelShown = false
+    private var sidePanelActionRevision = 0L
     private val sidePanelTick = object : Runnable {
         override fun run() {
             refreshSidePanel()
@@ -1298,6 +1302,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private fun hostResumed() {
         WheelKeyService.restoreIfNeeded(this)
         hostAppearanceResumed = true
+        musicWindow?.reloadTextScale()
         updateDebugOverlays()
         updateCallPopupGuard()
         val savedNightMode = AirPlayPersistence.loadCarPlayNightMode(this)
@@ -2296,11 +2301,17 @@ open class CarPlayHostActivity : ComponentActivity() {
         val contents = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(24), dp(24), dp(24), dp(24))
         }
         sidePanelContents = contents
         panel.addView(contents, LinearLayout.LayoutParams(-1, -1))
-        contents.addView(android.widget.TextClock(this).apply {
+        val info = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+        }
+        sidePanelInfo = info
+        contents.addView(info, LinearLayout.LayoutParams(-1, -1))
+        info.addView(android.widget.TextClock(this).apply {
             format24Hour = "HH:mm"
             format12Hour = "h:mm"
             textSize = 72f
@@ -2313,13 +2324,37 @@ open class CarPlayHostActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(24), 0, dp(32))
         }
-        contents.addView(sidePanelBattery)
-        contents.addView(buildSidePanelTyres())
+        info.addView(sidePanelBattery)
+        info.addView(buildSidePanelTyres())
         return panel
+    }
+
+    /** The content belongs to the declared session, not a preference changed mid-session. */
+    private fun applySidePanelContent() {
+        val contents = sidePanelContents ?: return
+        val music = sessionDisplay?.musicWindowEnabled == true
+        if (music && musicWindow == null) {
+            musicWindow = CarPlayMusicWindow(this).apply {
+                setCornerRadiusDp(carPlayCornerRadiusDp.coerceAtLeast(0))
+                setGripEdge(sidePanelEdge)
+                setGripAlpha(sidePanelGripAlpha)
+                applyPalette(overlayPalette)
+            }.also { contents.addView(it, LinearLayout.LayoutParams(-1, -1)) }
+        } else if (!music) {
+            musicWindow?.let(contents::removeView)
+            musicWindow = null
+        }
+        sidePanelInfo?.visibility = if (music) View.GONE else View.VISIBLE
+        musicWindow?.visibility = if (music) View.VISIBLE else View.GONE
+        sidePanel?.background = sidePanelBackground()
     }
 
     // A rounded card like CarPlay's, with a grip on the edge that faces CarPlay.
     private fun sidePanelBackground(): Drawable {
+        if (sessionDisplay?.musicWindowEnabled == true && musicWindow != null) {
+            sidePanelGrip = null
+            return GradientDrawable().apply { setColor(Color.BLACK) }
+        }
         val card = GradientDrawable().apply {
             setColor(SIDE_PANEL_CARD)
             cornerRadius = dp(28).toFloat()
@@ -2369,6 +2404,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                     else -> event.x
                 }
                 if (distance > dp(56)) return false
+                sidePanelActionRevision++
                 showSidePanelGripHint()
                 val edge = when (sidePanelEdge) {
                     Gravity.TOP -> params.topMargin.toFloat()
@@ -2434,6 +2470,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             addUpdateListener {
                 sidePanelGripAlpha = it.animatedValue as Int
                 sidePanelGrip?.alpha = sidePanelGripAlpha
+                musicWindow?.setGripAlpha(sidePanelGripAlpha)
             }
             start()
         }
@@ -2506,6 +2543,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             strip.originX > screen.originX -> Gravity.START
             else -> Gravity.END
         }
+        musicWindow?.setGripEdge(sidePanelEdge)
         panel.background = sidePanelBackground()
     }
 
@@ -2596,6 +2634,7 @@ open class CarPlayHostActivity : ComponentActivity() {
      */
     private fun onSidePanelTabTouch(tab: View, event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            sidePanelActionRevision++
             sidePanelTabToCarPlay = false
             dropHeldSidePanelTabTouch()
         }
@@ -2795,6 +2834,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun showSidePanel(show: Boolean) {
+        sidePanelActionRevision++
         val areas = sessionDisplay?.viewAreas ?: return
         val view = videoView ?: return
         val split = isMultiWindowActive()
@@ -2807,10 +2847,22 @@ open class CarPlayHostActivity : ComponentActivity() {
         sidePanelShown = show
         sidePanel?.visibility = if (show) View.VISIBLE else View.GONE
         mainHandler.removeCallbacks(sidePanelTick)
-        if (show) startSidePanelTyres() else com.shilapi.xcertplay.hud.BydTyreStatus.stop()
-        if (show) sidePanelTick.run()
+        if (show && sessionDisplay?.musicWindowEnabled != true) startSidePanelTyres()
+        else com.shilapi.xcertplay.hud.BydTyreStatus.stop()
+        if (show && sessionDisplay?.musicWindowEnabled != true) sidePanelTick.run()
         if (show) showSidePanelGripHint()
         updateVideoLayout(view.width, view.height)
+    }
+
+    private fun autoShowMusicWindow(generation: Int, session: AirPlaySession) {
+        if (sessionDisplay?.musicWindowEnabled != true || sidePanelShown) return
+        val revision = sidePanelActionRevision
+        mainHandler.postDelayed({
+            if (generation != restartGeneration || activeAirPlaySession !== session || shuttingDown.get() ||
+                !CarPlayBackgroundSession.isOwner(this) || isDestroyed || menuOpen || sidePanelShown ||
+                sidePanelActionRevision != revision || sessionDisplay?.musicWindowEnabled != true) return@postDelayed
+            if (sessionDisplay?.viewAreas?.sidePanel() != null) showSidePanel(true)
+        }, MUSIC_WINDOW_AUTO_SHOW_MILLIS)
     }
 
     private fun resetSidePanel() {
@@ -2856,6 +2908,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     // The battery shows only where DiPlay already reads it for the iPhone.
     private fun refreshSidePanel() {
+        if (sessionDisplay?.musicWindowEnabled == true) return
         val battery = if (com.shilapi.xcertplay.hud.BydOutputSettings.batteryToIphoneActive(this)) {
             com.shilapi.xcertplay.hud.BydNavigationOutputs.batteryStatus(applicationContext).snapshot()
         } else null
@@ -5057,18 +5110,20 @@ open class CarPlayHostActivity : ComponentActivity() {
             display.copy(widthPixels = square, heightPixels = square, widthPhysicalMm = squareMm,
                 heightPhysicalMm = squareMm, viewArea = null, safeArea = null)
         }
+        pendingMusicWindowEnabled = MusicWindowSettings.enabled(this)
+        val needsSidePanel = MusicWindowSettings.needsStrip(this, pendingMusicWindowEnabled)
         val viewAreas = if (square == null) {
             CarPlayViewAreas.build(display.widthPixels, display.heightPixels, listOf(
                 CarPlayViewAreas.Screen(display.widthPixels, display.heightPixels, portrait = display.heightPixels > display.widthPixels),
             ), dock, splitWindow, startPortrait = display.heightPixels > display.widthPixels,
-                sidePanel = SidePanelSettings.enabled(this), rightHandDrive = rightHandDrive)
+                sidePanel = needsSidePanel, rightHandDrive = rightHandDrive)
         } else {
             val (landscape, portrait) = CarPlayRotation.turningAreas(square, size.width, size.height,
                 screen.widthPixels, screen.heightPixels)
             CarPlayViewAreas.build(square, square, listOf(
                 CarPlayViewAreas.Screen(landscape.first, landscape.second, portrait = false),
                 CarPlayViewAreas.Screen(portrait.first, portrait.second, portrait = true),
-            ), dock, splitWindow, startPortrait = size.height > size.width, sidePanel = SidePanelSettings.enabled(this),
+            ), dock, splitWindow, startPortrait = size.height > size.width, sidePanel = needsSidePanel,
                 rightHandDrive = rightHandDrive)
         }
         pendingViewAreas = viewAreas
@@ -5379,6 +5434,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                     callPopupSessionReady = true
                     updateCallPopupGuard()
                     reconnectAttempts = 0
+                    autoShowMusicWindow(controllerGeneration, session)
                     logThemeState(ThemeModeDiagnostics.Source.SESSION_ACTIVE, resources.configuration)
                     syncAirPlayDarkMode(ThemeModeDiagnostics.Source.SESSION_ACTIVE)
                     applyClusterTurnOverlay()
@@ -5551,14 +5607,17 @@ open class CarPlayHostActivity : ComponentActivity() {
         updateClusterMapShown()
         sink = snapshot.sink
         sessionDisplay = snapshot.display
+        applySidePanelContent()
         resetSidePanel()
         if (snapshot.display.viewAreas?.let { it.kindOf(it.current) == CarPlayViewAreas.Kind.SIDE_PANEL } == true) {
             // The live stream can outlast its Activity. Restore the Android view covering its
             // unused strip instead of leaving a blank third when a new host adopts the session.
             sidePanelShown = true
             sidePanel?.visibility = View.VISIBLE
-            startSidePanelTyres()
-            sidePanelTick.run()
+            if (!snapshot.display.musicWindowEnabled) {
+                startSidePanelTyres()
+                sidePanelTick.run()
+            }
             showSidePanelGripHint()
         }
         MapMirrors.reapply()
@@ -5735,8 +5794,10 @@ open class CarPlayHostActivity : ComponentActivity() {
             displayRotation(), hideTopBar, hideBottomBar, effectiveSize.width, effectiveSize.height,
             viewAreas = pendingViewAreas,
             statusBarShown = statusBarShown(),
+            musicWindowEnabled = pendingMusicWindowEnabled,
         )
         sessionDisplay = display
+        applySidePanelContent()
         videoView?.let { updateVideoLayout(it.width, it.height) }
         CarPlayBackgroundSession.store(next, renderer, size.width, size.height, this, display) { completion ->
             runOnUiThread {
@@ -6186,6 +6247,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun applyCarPlayCornerStyle() {
+        musicWindow?.setCornerRadiusDp(carPlayCornerRadiusDp.coerceAtLeast(0))
         carPlayCornerMask?.apply {
             setCornerRadiusDp(carPlayCornerRadiusDp)
             setSurroundColor(carPlaySurroundColor())
@@ -7187,6 +7249,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         const val CLUSTER_SMALL_WINDOW_ON = 1
         const val CLUSTER_SMALL_WINDOW_AUTO = 2
         const val SIDE_PANEL_REFRESH_MILLIS = 5_000L
+        const val MUSIC_WINDOW_AUTO_SHOW_MILLIS = 800L
         /** CarPlay's share past which letting go of the panel edge closes the panel: halfway from two thirds to all. */
         const val SIDE_PANEL_CLOSE_SHARE = 5f / 6f
         /** How long the last picture may stand in for the video after returning, and the wait to copy it. */
@@ -7256,6 +7319,8 @@ internal data class CarPlaySessionDisplay(
     val viewAreas: CarPlayViewAreas? = null,
     /** Whether the status bar was on screen when the session started, or null when unknown. */
     val statusBarShown: Boolean? = null,
+    /** Side-panel content captured when the session's view areas were declared. */
+    val musicWindowEnabled: Boolean = false,
 )
 
 /**

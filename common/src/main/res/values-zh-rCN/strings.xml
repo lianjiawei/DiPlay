@@ -996,6 +996,14 @@
     <string name="settings_lincoln_cluster_navigation_description">向仪表应用发送下一转向箭头、距离和道路名。立即生效。</string>
     <string name="settings_lincoln_rotate_road">长路名分段显示</string>
     <string name="settings_lincoln_rotate_road_description">在林肯/福特仪表上轮流显示较长的道路名，导航中生效；不改变歌词文字。</string>
+    <string name="settings_music_window">独立音乐窗口</string>
+    <string name="settings_music_window_description">在 CarPlay 旁的侧栏显示音乐。更改将在下次连接时生效，不会断开当前连接。</string>
+    <string name="settings_music_window_text_size">独立音乐窗口字号</string>
+    <string name="music_window_nothing_playing">未在播放</string>
+    <string name="music_window_previous">上一首</string>
+    <string name="music_window_play">播放</string>
+    <string name="music_window_pause">暂停</string>
+    <string name="music_window_next">下一首</string>
     <string name="settings_lincoln_cluster_enhanced_navigation">仪表兼容</string>
     <string name="settings_lincoln_cluster_enhanced_navigation_description">额外发送原车导航广播与 HUD Socket，供基础仪表导航不显示的林肯／福特车型使用。开启后立即生效。</string>
     <string name="settings_lincoln_cluster_music">仪表歌曲文字</string>

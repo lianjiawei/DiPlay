@@ -32,10 +32,25 @@ class CarPlayHostResolutionTest {
     }
 
     @After fun tearDown() {
+        MusicWindowSettings.setEnabled(activity, false)
+        SidePanelSettings.setEnabled(activity, false)
         (get("mainHandler") as Handler).removeCallbacksAndMessages(null)
         (get("teardownExecutor") as ExecutorService).shutdownNow()
         (get("airPlayCommandExecutor") as ExecutorService).shutdownNow()
         ShadowMediaCodecList.reset()
+    }
+
+    @Test fun musicWindowAndClockPanelDeclareTheStripIndependently() {
+        decoder(maxWidth = 3840, maxHeight = 2160)
+        for (panel in listOf(false, true)) for (music in listOf(false, true)) {
+            SidePanelSettings.setEnabled(activity, panel)
+            MusicWindowSettings.setEnabled(activity, music)
+            config(100)
+            val areas = get("pendingViewAreas") as CarPlayViewAreas?
+            assertEquals("panel=$panel music=$music", panel || music, areas?.sidePanel() != null)
+            assertEquals("panel=$panel music=$music", music, get("pendingMusicWindowEnabled"))
+            assertEquals(panel, SidePanelSettings.enabled(activity))
+        }
     }
 
     @Test fun unsupportedEnlargedResolutionFallsBackBeforeAdvertisingItToThePhone() {

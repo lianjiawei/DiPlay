@@ -420,6 +420,14 @@
     <string name="settings_advanced_media">Video and audio</string>
     <string name="settings_wheel_keys">Wheel keys</string>
     <string name="settings_experimental_display">Display (experimental)</string>
+    <string name="settings_music_window">Independent music window</string>
+    <string name="settings_music_window_description">Show music in the side panel beside CarPlay. Changes take effect on the next connection; a running session is not disconnected.</string>
+    <string name="settings_music_window_text_size">Independent music window text size</string>
+    <string name="music_window_nothing_playing">Nothing playing</string>
+    <string name="music_window_previous">Previous track</string>
+    <string name="music_window_play">Play</string>
+    <string name="music_window_pause">Pause</string>
+    <string name="music_window_next">Next track</string>
     <string name="settings_diagnostics_summary">Save a local report when troubleshooting a connection</string>
     <string name="settings_full_screen_description">Hide the status and navigation bars in Lincoln and CarPlay.</string>
     <string name="settings_vehicle_description">Vehicle and dashboard features vary by model and firmware. Review them in Advanced settings before enabling experimental controls.</string>
