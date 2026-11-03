@@ -1028,6 +1028,8 @@
     <string name="settings_lincoln_cluster_description">Forward CarPlay guidance and song text to the verified Lincoln/Ford instrument-cluster app. Off by default; remove the standalone bridge first and do not run the car\'s own navigation at the same time.</string>
     <string name="settings_lincoln_cluster_navigation">Cluster navigation</string>
     <string name="settings_lincoln_cluster_navigation_description">Send the next turn arrow, distance and road to the cluster app. Takes effect at once.</string>
+    <string name="settings_lincoln_rotate_road">Rotate long road names</string>
+    <string name="settings_lincoln_rotate_road_description">Show long road names in pieces on the Lincoln/Ford cluster. Takes effect during navigation; song text is unchanged.</string>
     <string name="settings_lincoln_cluster_enhanced_navigation">Cluster compatibility</string>
     <string name="settings_lincoln_cluster_enhanced_navigation_description">Also send the factory navigation broadcasts and HUD socket used by other Lincoln/Ford clusters. Enable only if the normal cluster navigation does not appear. Takes effect at once.</string>
     <string name="settings_lincoln_cluster_music">Cluster song text</string>

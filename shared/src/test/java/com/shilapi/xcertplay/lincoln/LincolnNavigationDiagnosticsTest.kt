@@ -6,6 +6,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LincolnNavigationDiagnosticsTest {
+    @Test fun selectedAndSentRoadCategoriesDoNotExposeTheirText() {
+        val snapshot = CarPlayGlance.Snapshot(connected = true, routeActive = true,
+            maneuverIndex = 321, maneuverType = 2, road = "Secret Street")
+        LincolnNavigationDiagnostics.observe(snapshot, true, false)
+        LincolnNavigationDiagnostics.navigationSent(snapshot, "turn_right", 200, false, "name-evidence", true, " ")
+        val report = LincolnNavigationDiagnostics.report()
+        assertTrue(report.contains("selectedRoad=text"))
+        assertTrue(report.contains("name-evidence:road=space"))
+        assertTrue(report.contains("sentRoad=space"))
+        assertFalse(report.contains("Secret Street"))
+    }
+
     @Test fun zeroEventsAndSendCountersRemainSanitized() {
         val snapshot = CarPlayGlance.Snapshot(connected = true, routeActive = true,
             maneuverIndex = 27, selectedManeuverIndex = 27, maneuverType = 2,
@@ -18,8 +30,8 @@ class LincolnNavigationDiagnosticsTest {
             LincolnNavigationDiagnostics.zeroDecision("started", snapshot)
             now += 1_000_000_000L
             LincolnNavigationDiagnostics.zeroCancelled("distance-recovered", 27, 19)
-            LincolnNavigationDiagnostics.navigationSent(snapshot, "turn_right", 800, false, "test", true)
-            LincolnNavigationDiagnostics.navigationRepeated()
+            LincolnNavigationDiagnostics.navigationSent(snapshot, "turn_right", 800, false, "test", true, "private-road")
+            LincolnNavigationDiagnostics.navigationRepeated("private-road")
             val report = LincolnNavigationDiagnostics.report()
             assertTrue(report.contains("zero-candidate started index=27"))
             assertTrue(report.contains("cancelled=distance-recovered index=27"))

@@ -36,6 +36,7 @@ class LincolnClusterOutputTest {
         LincolnClusterSettings.setClusterPackage(app, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         LincolnClusterSettings.setNavigation(app, true)
         LincolnClusterSettings.setEnhancedNavigation(app, false)
+        LincolnClusterSettings.setRotateRoad(app, false)
         LincolnClusterSettings.setMusic(app, false)
         LincolnClusterSettings.setRemaining(app, false)
         LincolnClusterOutput.nanoTime = { now }
@@ -50,6 +51,7 @@ class LincolnClusterOutputTest {
         LincolnClusterOutput.hudSocket = LincolnHudSocketServer
         LincolnClusterSettings.setNavigation(app, false)
         LincolnClusterSettings.setEnhancedNavigation(app, false)
+        LincolnClusterSettings.setRotateRoad(app, false)
         LincolnClusterSettings.setClusterPackage(app, LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE)
         CarPlayGlance.setConnected(false)
         shadowOf(app).clearBroadcastIntents()
@@ -197,10 +199,111 @@ class LincolnClusterOutputTest {
         assertEquals(expected, infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
     }
 
-    @Test fun nullRoadPlaceholderNeverReachesTheInstrumentBroadcast() {
-        send(guidance().copy(road = "null"))
+    @Test fun roadRotationUsesTheUntruncatedRoadAndKeepsProgressAndLyricsIndependent() {
+        LincolnClusterSettings.setRotateRoad(app, true)
+        LincolnClusterSettings.setMusic(app, true)
+        val road = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸"
+        val lyric = "词".repeat(17) + "🎵" + "继续唱"
+        val first = guidance().copy(maneuverIndex = 7, distanceMeters = 400, road = road,
+            songTitle = lyric, song = lyric, playing = true)
+        val receiver = FactoryNavigationReceiver()
+        send(first)
+        val initialToken = token(infos().last())
+        assertEquals(256, receiver.receive(infos().last()))
+        assertEquals("一二三四五六七...", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        val media = shadowOf(app).broadcastIntents.last { it.action == LincolnClusterProtocol.ACTION_MEDIA_INFO }
+        assertEquals("词".repeat(17) + "🎵", media.getStringExtra(LincolnClusterProtocol.EXTRA_TITLE))
 
+        now += 2_000_000_000L
+        send(first.copy(distanceMeters = 200))
+        assertEquals("八九十甲乙丙丁...", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(initialToken, token(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
+
+        // A quiet route must keep rotating the last complete name, including past unit 19.
+        now += 2_000_000_000L
+        send(quiet())
+        assertEquals("戊己庚辛壬癸", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(initialToken, token(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
+
+        LincolnClusterSettings.setRotateRoad(app, false)
+        now += 1_000_000_000L
+        send(first.copy(distanceMeters = 200))
+        assertEquals(road.take(19), infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(initialToken, token(infos().last()))
+        assertEquals("词".repeat(17) + "🎵", shadowOf(app).broadcastIntents
+            .last { it.action == LincolnClusterProtocol.ACTION_MEDIA_INFO }
+            .getStringExtra(LincolnClusterProtocol.EXTRA_TITLE))
+    }
+
+    @Test fun customReceiverDoesNotReceiveTheFactoryRoadRotation() {
+        LincolnClusterSettings.setClusterPackage(app, "example.custom.cluster")
+        LincolnClusterSettings.setRotateRoad(app, true)
+        val road = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸"
+        send(guidance().copy(road = road))
+        now += 2_000_000_000L
+        send(quiet())
+        assertEquals(road.take(19), infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+    }
+
+    @Test fun rotatingTheHeldRoadDoesNotLeakAnUnconfirmedZeroDistance() {
+        LincolnClusterSettings.setRotateRoad(app, true)
+        LincolnClusterSettings.setEnhancedNavigation(app, true)
+        val road = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸"
+        val first = guidance().copy(maneuverIndex = 7, distanceMeters = 400, road = road)
+        send(first)
+        val originalToken = token(infos().last())
+        now += 2_000_000_000L
+        send(first.copy(distanceMeters = 0, road = "不应提前显示的新道路"))
+        assertEquals(400, infos().last().getIntExtra(LincolnClusterProtocol.EXTRA_DISTANCE, -1))
+        assertEquals("八九十甲乙丙丁...", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(originalToken, token(infos().last()))
+        assertEquals(400, hud.turns.last().metres)
+
+        now += 1_000_000_000L
+        send(first.copy(distanceMeters = 300))
+        assertEquals(300, infos().last().getIntExtra(LincolnClusterProtocol.EXTRA_DISTANCE, -1))
+        assertEquals(originalToken, token(infos().last()))
+    }
+
+    @Test fun missingRoadUsesASpaceOnTheFactoryChannelWithoutChangingProgress() {
+        val receiver = FactoryNavigationReceiver()
+        val first = guidance().copy(maneuverIndex = 7, distanceMeters = 400, road = "Existing Road")
+        send(first)
+        val firstToken = token(infos().last())
+        assertEquals(256, receiver.receive(infos().last()))
+
+        // The normalizer removes these values, but the factory receiver must receive a nonempty
+        // blank. Repeated frames and quiet-route keepalives must use the same representation.
+        for (missing in listOf("", "   ", "null", "(NULL)", "<null>")) {
+            send(first.copy(road = missing, distanceMeters = 300))
+            assertEquals(" ", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+            assertEquals(firstToken, token(infos().last()))
+        }
+        assertEquals(192, receiver.receive(infos().last()))
+        now += 1_000_000_000L
+        send(quiet())
+        assertEquals(" ", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(firstToken, token(infos().last()))
+
+        send(first.copy(road = "Recovered Road", distanceMeters = 200))
+        assertEquals("Recovered Road", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+        assertEquals(firstToken, token(infos().last()))
+        assertEquals(128, receiver.receive(infos().last()))
+    }
+
+    @Test fun missingRoadKeepsTheExistingEmptyValueForCustomReceivers() {
+        LincolnClusterSettings.setClusterPackage(app, "example.custom.cluster")
+        send(guidance().copy(road = "null"))
         assertEquals("", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
+    }
+
+    @Test fun nullNextRoadStillFallsBackToTheActualCurrentRoad() {
+        CarPlayGlance.setConnected(true)
+        frame(0x5201) { u8(1, 1); string(3, "Current Road"); u16List(0x0d, listOf(7)); u32(0x0a, 400) }
+        frame(0x5202) { u16(1, 7); u8(3, 2); string(4, "null") }
+        assertEquals("Current Road", infos().last().getStringExtra(LincolnClusterProtocol.EXTRA_ROAD))
     }
 
     @Test fun receiverCalculatesProgressAcrossUpdatesQuietFramesAndNextManeuver() {

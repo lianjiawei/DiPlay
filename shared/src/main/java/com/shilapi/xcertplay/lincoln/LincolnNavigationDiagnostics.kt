@@ -14,6 +14,7 @@ object LincolnNavigationDiagnostics {
     private var lastDistanceNs = 0L
     private var lastRevision = 0L
     private var latestInput = "none"
+    private var latestRoadOutput = "none"
     private var windowNs = 0L
     private var windowCount = 0
     private var omitted = 0L
@@ -41,7 +42,8 @@ object LincolnNavigationDiagnostics {
             " active=${s.routeActive} ended=${s.routeEnded} endPending=${s.routeEndPending}" +
             " selected=${s.maneuverIndex} type=${s.maneuverType}" +
             " routeIndex=${s.selectedManeuverIndex}" +
-            " generation=${s.routeProgressGeneration} pending=${s.routeProgressPending}"
+            " generation=${s.routeProgressGeneration} pending=${s.routeProgressPending}" +
+            " selectedRoad=${LincolnRoadNameEvidence.kind(s.road)}"
         val detail = "$shape distance=${if (s.maneuverType != null) s.distanceMeters else "missing"}" +
             " revision=${s.distanceRevision} remaining=${s.remainingMeters}"
         synchronized(lock) {
@@ -56,9 +58,11 @@ object LincolnNavigationDiagnostics {
     }
 
     /** Identity change is logged as a boolean; coordinates and street names are never recorded. */
-    internal fun navigationSent(s: CarPlayGlance.Snapshot, turn: String, distance: Int, identityChanged: Boolean, reason: String, changed: Boolean) {
-        val key = "turn:$turn:${s.maneuverIndex}:$distance:$identityChanged:$reason"
+    internal fun navigationSent(s: CarPlayGlance.Snapshot, turn: String, distance: Int, identityChanged: Boolean,
+        reason: String, changed: Boolean, wireRoad: String?) {
+        val key = "turn:$turn:${s.maneuverIndex}:$distance:$identityChanged:$reason:road=${LincolnRoadNameEvidence.wireKind(wireRoad)}"
         synchronized(lock) {
+            latestRoadOutput = LincolnRoadNameEvidence.wireKind(wireRoad)
             if (changed) changedSends++ else keepaliveSends++
             if (key == lastDecision) return
             lastDecision = key
@@ -66,7 +70,10 @@ object LincolnNavigationDiagnostics {
         }
     }
 
-    internal fun navigationRepeated() = synchronized(lock) { keepaliveSends++ }
+    internal fun navigationRepeated(wireRoad: String?) = synchronized(lock) {
+        latestRoadOutput = LincolnRoadNameEvidence.wireKind(wireRoad)
+        keepaliveSends++
+    }
 
     internal fun zeroDecision(decision: String, snapshot: CarPlayGlance.Snapshot) = synchronized(lock) {
         recordLocked(nanoTime(), "zero-candidate $decision index=${snapshot.maneuverIndex}" +
@@ -108,7 +115,7 @@ object LincolnNavigationDiagnostics {
 
     fun report(): String {
         val (copy, skipped, latest) = synchronized(lock) {
-            Triple(entries.toList(), omitted, "$latestInput; sends changed=$changedSends keepalive=$keepaliveSends")
+            Triple(entries.toList(), omitted, "$latestInput; sentRoad=$latestRoadOutput sends changed=$changedSends keepalive=$keepaliveSends")
         }
         return buildString {
             appendLine("Lincoln navigation: in-memory, bounded; omitted=$skipped")

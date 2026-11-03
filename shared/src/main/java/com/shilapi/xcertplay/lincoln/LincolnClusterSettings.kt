@@ -11,6 +11,7 @@ object LincolnClusterSettings {
     private const val PREFS = "diplay_lincoln_cluster"
     private const val KEY_NAVIGATION = "navigation"
     private const val KEY_ENHANCED_NAVIGATION = "enhanced_navigation"
+    private const val KEY_ROTATE_ROAD = "rotate_road"
     private const val KEY_MUSIC = "music"
     private const val KEY_REMAINING = "remaining"
     private const val KEY_CLUSTER_PACKAGE = "cluster_package"
@@ -28,6 +29,12 @@ object LincolnClusterSettings {
 
     fun setEnhancedNavigation(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean(KEY_ENHANCED_NAVIGATION, enabled).apply()
+
+    /** Opt-in only: rotating a road name must not change the existing single-line default. */
+    fun rotateRoad(context: Context): Boolean = prefs(context).getBoolean(KEY_ROTATE_ROAD, false)
+
+    fun setRotateRoad(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_ROTATE_ROAD, enabled).apply()
 
     fun music(context: Context): Boolean =
         prefs(context).getBoolean(KEY_MUSIC, LincolnVehicle.isHardware())

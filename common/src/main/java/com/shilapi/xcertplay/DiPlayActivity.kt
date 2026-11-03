@@ -5298,6 +5298,11 @@ class DiPlayActivity : CarPlayHostActivity() {
             com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setNavigation(this, it)
             if (it) com.shilapi.xcertplay.lincoln.LincolnClusterOutput.attach(applicationContext)
         }
+        toggle(card, brandString(R.string.settings_lincoln_rotate_road),
+            brandString(R.string.settings_lincoln_rotate_road_description),
+            com.shilapi.xcertplay.lincoln.LincolnClusterSettings.rotateRoad(this)) {
+            com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setRotateRoad(this, it)
+        }
         toggle(card, brandString(R.string.settings_lincoln_cluster_enhanced_navigation),
             brandString(R.string.settings_lincoln_cluster_enhanced_navigation_description),
             com.shilapi.xcertplay.lincoln.LincolnClusterSettings.enhancedNavigation(this)) {

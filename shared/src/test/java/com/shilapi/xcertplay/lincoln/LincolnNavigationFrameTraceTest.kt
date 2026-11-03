@@ -8,6 +8,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LincolnNavigationFrameTraceTest {
+    @Test fun roadFieldsAreClassifiedWithoutRetainingTheirContents() {
+        val trace = LincolnNavigationFrameTrace({ 1_000_000_000L })
+        fun add(id: Int, block: com.shilapi.xcertplay.iap2.body.Iap2BodyBuilder.() -> Unit) =
+            trace.record(id, Iap2Messages.buildRaw(id, block).payload, 1, true, 0, 0)
+        add(0x5201) { u8(1, 1) }
+        add(0x5201) { string(3, "  ") }
+        add(0x5201) { string(3, " (NULL) ") }
+        add(0x5201) { string(3, "私人道路名称") }
+        add(0x5202) { string(4, "<null>") }
+        add(0x5202) { string(2, "private direction"); string(4, "Nullarbor Road") }
+        add(0x5202) { string(4, "a".repeat(1025)) }
+        val report = trace.report()
+        val lines = report.lines().filter { it.startsWith("frame ") }
+        val expected = listOf("-", "empty", "null_literal", "text", "null_literal", "text", "oversized")
+        expected.forEachIndexed { index, kind -> assertTrue(lines[index], lines[index].contains("roadKind=$kind")) }
+        assertFalse(report.contains("私人道路名称"))
+        assertFalse(report.contains("Nullarbor Road"))
+        assertFalse(report.contains("private direction"))
+        assertFalse(report.contains("a".repeat(1025)))
+    }
+
     @Test fun separateAndCombinedFramesRemainDistinguishableWithoutPrivateStrings() {
         var now = 1_000_000_000L
         val trace = LincolnNavigationFrameTrace({ now })

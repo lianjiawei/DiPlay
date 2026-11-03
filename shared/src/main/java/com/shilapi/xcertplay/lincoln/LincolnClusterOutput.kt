@@ -51,6 +51,9 @@ object LincolnClusterOutput {
     private var staleClearNeedsStart = false
     private var lastNavDistance: Int? = null
     private var lastNavRoad: String = ""
+    private var lastNavRawRoad: String = ""
+    private var lastNavDisplayedRoad: String? = null
+    private val roadRotation = LincolnRoadRotation()
     // Identity for the next held packet; renewed after an ambiguous data-send failure.
     private var lastNavManeuverToken: LincolnManeuverToken? = null
     private val maneuverTracker = LincolnManeuverTracker()
@@ -169,6 +172,9 @@ object LincolnClusterOutput {
             staleClearNeedsStart = false
             lastNavDistance = null
             lastNavRoad = ""
+            lastNavRawRoad = ""
+            lastNavDisplayedRoad = null
+            roadRotation.clear()
             lastNavManeuverToken = null
             maneuverTracker.reset("detached")
             lastNavSentNs = 0L
@@ -378,6 +384,7 @@ object LincolnClusterOutput {
             stabilize = LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE,
         )
         val distance = maneuverTracker.distanceMeters
+        val displayedRoad = displayRoadLocked(app, snapshot.road, road, maneuverToken)
         if (distance != formattedDistance && snapshot.distanceRevision != lastFilteredRevision) {
             Log.i(TAG, "nav distance held raw=${snapshot.distanceMeters} formatted=$formattedDistance " +
                 "sent=$distance samples=${maneuverTracker.pendingRiseSamples} index=${snapshot.maneuverIndex}")
@@ -398,16 +405,17 @@ object LincolnClusterOutput {
         } else {
             "$turn|$distance|$road|$maneuverToken|${snapshot.remainingMeters}|${snapshot.remainingSeconds}"
         }
-        val changed = key != lastNavKey
+        val changed = key != lastNavKey || displayedRoad != lastNavDisplayedRoad
         // Repeat the current card at least once a second even when nothing changed: the cluster hides
         // a nav card it has not heard about within a few seconds, so a long leg or a red light made it
         // blink out and back. The standalone bridge that this firmware ships with re-sent every second.
         val due = nanoTime() - lastNavSentNs >= REPEAT_NAV_NS
         if (changed || due) {
-            val info = navigationIntent(app, turn, distance, road, maneuverToken)
+            val info = navigationIntent(app, turn, distance, displayedRoad, maneuverToken)
             if (broadcast(app, info)) {
                 runCatching { LincolnNavigationDiagnostics.navigationSent(snapshot, turn, distance,
-                    maneuverToken != lastNavManeuverToken, maneuverTracker.resetReason, changed) }
+                    maneuverToken != lastNavManeuverToken, maneuverTracker.resetReason, changed,
+                    info.getStringExtra(LincolnClusterProtocol.EXTRA_ROAD)) }
                 lastNavKey = key
                 lastNavTurn = turn
                 lastNavManeuverIndex = snapshot.maneuverIndex.takeIf { it >= 0 }
@@ -416,6 +424,8 @@ object LincolnClusterOutput {
                 lastNavUsableForZero = true
                 lastNavDistance = distance
                 lastNavRoad = road
+                lastNavRawRoad = snapshot.road
+                lastNavDisplayedRoad = displayedRoad
                 lastNavManeuverToken = maneuverToken
                 lastNavSentNs = nanoTime()
                 navSent++
@@ -515,14 +525,22 @@ object LincolnClusterOutput {
         val distance = lastNavDistance ?: return
         if (nanoTime() - lastNavSentNs < REPEAT_NAV_NS) return
         val token = lastNavManeuverToken ?: return
-        val info = navigationIntent(app, turn, distance, lastNavRoad, token)
+        val displayedRoad = displayRoadLocked(app, lastNavRawRoad, lastNavRoad, token)
+        val info = navigationIntent(app, turn, distance, displayedRoad, token)
         if (broadcast(app, info)) {
-            runCatching { LincolnNavigationDiagnostics.navigationRepeated() }
+            runCatching { LincolnNavigationDiagnostics.navigationRepeated(info.getStringExtra(LincolnClusterProtocol.EXTRA_ROAD)) }
             lastNavSentNs = nanoTime()
+            lastNavDisplayedRoad = displayedRoad
             navSent++
             repeatAuxiliaryNavLocked(app, distance, token)
         }
     }
+
+    private fun displayRoadLocked(app: Context, rawRoad: String, fallback: String, token: LincolnManeuverToken): String =
+        roadRotation.select(rawRoad, fallback,
+            LincolnClusterSettings.rotateRoad(app) &&
+                LincolnClusterSettings.clusterPackage(app) == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE,
+            token, nanoTime())
 
     private fun navigationIntent(
         app: Context, turn: String, distance: Int, road: String, token: LincolnManeuverToken,
@@ -532,7 +550,11 @@ object LincolnClusterOutput {
             .setPackage(targetPackage)
             .putExtra(LincolnClusterProtocol.EXTRA_NAME, turn)
             .putExtra(LincolnClusterProtocol.EXTRA_DISTANCE, distance)
-            .putExtra(LincolnClusterProtocol.EXTRA_ROAD, road)
+            // The inspected Lincoln receiver may draw an empty road field as the literal "null".
+            // A space is an experimental blank for that receiver only; keep custom receivers' wire
+            // contract unchanged and never use the placeholder as the maneuver's identity.
+            .putExtra(LincolnClusterProtocol.EXTRA_ROAD,
+                if (targetPackage == LincolnClusterProtocol.DEFAULT_CLUSTER_PACKAGE && road.isEmpty()) " " else road)
             .apply {
                 // Only this inspected adapter is known to use the coordinate slots as identity,
                 // not location. Keep the checked target even if settings change before dispatch.
@@ -682,6 +704,7 @@ object LincolnClusterOutput {
     private fun clearNavLocked(app: Context) {
         cancelPendingZero("navigation-cleared")
         maneuverTracker.reset("navigation-cleared")
+        roadRotation.clear()
         endAuxiliaryNavLocked(app)
         // Send OFF whenever the cluster was told ON, even if a later snapshot already dropped the
         // owned flag, so a finished route cannot leave "arrived" on the cluster.
@@ -699,6 +722,8 @@ object LincolnClusterOutput {
             staleClearNeedsStart = false
             lastNavDistance = null
             lastNavRoad = ""
+            lastNavRawRoad = ""
+            lastNavDisplayedRoad = null
             lastNavManeuverToken = null
             lastNavSentNs = 0L
             firstManeuverNs = 0L

@@ -31,9 +31,9 @@ internal enum class BydHudRouteChange {
 /**
  * Normalize the optional road-name strings supplied by iPhone navigation apps.
  *
- * Some apps send an Objective-C/JSON null description as ordinary UTF-8 text instead of omitting
- * the optional field. Treat only those complete sentinel values as missing; a real name such as
- * "Nullarbor Road" must remain untouched.
+ * A field may contain an Objective-C/JSON null description as ordinary text. Treat only those
+ * complete sentinel values as missing; a real name such as "Nullarbor Road" must remain untouched.
+ * This normalization does not establish whether a particular phone sent the placeholder.
  */
 internal fun normalizeRouteRoadName(value: String?): String? {
     val road = value ?: return null

@@ -198,6 +198,29 @@ object LincolnClusterProtocol {
 
     fun sanitizeMediaText(text: String?): String? = sanitizeText(text, MAX_MEDIA_TEXT_CHARS)
 
+    /** Split the original road before the ordinary 19-unit broadcast limit is applied. */
+    internal fun roadSegments(text: String?): List<String> {
+        val printable = normalizeRouteRoadName(text)?.let { sanitizeText(it, Int.MAX_VALUE) }
+            ?.trimEnd() ?: return emptyList()
+        val pieces = ArrayList<String>(3)
+        var rest = printable
+        while (rest.isNotEmpty() && pieces.size < 3) {
+            if (rest.length <= 10) {
+                pieces.add(rest)
+                break
+            }
+            val cut = sanitizeText(rest, 7) ?: break
+            val space = cut.lastIndexOf(' ')
+            val keep = if (space >= 3) space else cut.length
+            val head = cut.substring(0, keep).trimEnd().trimEnd('.')
+            if (head.isEmpty()) break
+            pieces.add(head + "...")
+            if (pieces.size == 3) break
+            rest = rest.substring(keep).trimStart()
+        }
+        return pieces
+    }
+
     /**
      * Bound factory-cluster text without sending half a character. The receiver measures Java
      * UTF-16 units and otherwise uses `substring(0, 19)`, which can split a supplementary or

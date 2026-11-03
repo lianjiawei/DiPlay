@@ -1,7 +1,7 @@
 package com.shilapi.xcertplay.lincoln
 
 /**
- * A bounded, numeric-only observation of individual iAP2 messages. No payload or string is kept.
+ * A bounded observation of numeric fields and road-name categories. No payload or road text is kept.
  * This is diagnostic evidence, not a decoder for making navigation decisions.
  */
 internal class LincolnNavigationFrameTrace(
@@ -14,7 +14,7 @@ internal class LincolnNavigationFrameTrace(
         val valid: Boolean, val limited: Boolean, val present: Int, val invalid: Int, val duplicate: Int,
         val state: Int?, val maneuverState: Int?, val distance: Long?, val remaining: Long?,
         val indices: List<Int>?, val indexCount: Int?, val maneuverIndex: Int?, val maneuverType: Int?,
-        val betweenDistance: Long?,
+        val betweenDistance: Long?, val roadKind: String?,
     ) {
         fun line(): String = "frame seq=$sequence ms=$timeMs session=$session connected=$connected" +
             " id=${if (messageId == 0) "connection" else messageId.toString(16)} generation=$generation revision=$revision" +
@@ -24,7 +24,7 @@ internal class LincolnNavigationFrameTrace(
             " distance=${distance ?: "-"} remaining=${remaining ?: "-"}" +
             " listCount=${indexCount ?: "-"} indices=${indices?.let { if (it.isEmpty()) "empty" else it.joinToString(",") } ?: "-"}" +
             " maneuverIndex=${maneuverIndex ?: "-"} maneuverType=${maneuverType ?: "-"}" +
-            " between=${betweenDistance ?: "-"}"
+            " between=${betweenDistance ?: "-"} roadKind=${roadKind ?: "-"}"
     }
 
     private val lock = Any()
@@ -54,7 +54,7 @@ internal class LincolnNavigationFrameTrace(
         val now = nanoTime()
         synchronized(lock) {
             val event = Entry(++sequence, now / 1_000_000, session, connected, 0, generation, revision,
-                true, false, 0, 0, 0, null, null, null, null, null, null, null, null, null)
+                true, false, 0, 0, 0, null, null, null, null, null, null, null, null, null, null)
             addLocked(event)
         }
     }
@@ -85,7 +85,8 @@ internal class LincolnNavigationFrameTrace(
             val event = Entry(seq, now / 1_000_000, session, connected, id, generation, revision,
                 parsed.valid, parsed.limited, parsed.present, parsed.invalid, parsed.duplicate,
                 parsed.state, parsed.maneuverState, parsed.distance, parsed.remaining,
-                parsed.indices, parsed.indexCount, parsed.maneuverIndex, parsed.maneuverType, parsed.between)
+                parsed.indices, parsed.indexCount, parsed.maneuverIndex, parsed.maneuverType, parsed.between,
+                parsed.roadKind)
             addLocked(event)
         }
     }
@@ -98,7 +99,7 @@ internal class LincolnNavigationFrameTrace(
     fun report(): String {
         val (copy, dropped, overwritten) = synchronized(lock) { Triple(entries.toList(), rateDropped, evicted) }
         return buildString {
-            appendLine("Lincoln navigation frames v1: numeric-only; partial replay; rateDropped=$dropped evicted=$overwritten")
+            appendLine("Lincoln navigation frames v1: numeric and road categories only; partial replay; rateDropped=$dropped evicted=$overwritten")
             copy.forEach { appendLine(it.line()) }
         }.trimEnd()
     }
@@ -110,6 +111,7 @@ internal class LincolnNavigationFrameTrace(
         var distance: Long? = null, var remaining: Long? = null,
         var indices: List<Int>? = null, var indexCount: Int? = null,
         var maneuverIndex: Int? = null, var maneuverType: Int? = null, var between: Long? = null,
+        var roadKind: String? = null,
     )
 
     private fun parse(id: Int, bytes: ByteArray): Parsed {
@@ -131,6 +133,11 @@ internal class LincolnNavigationFrameTrace(
                 val bit = 1 shl field
                 if (out.present and bit != 0) out.duplicate = out.duplicate or bit
                 out.present = out.present or bit
+                // 0x5201/3 is current road; 0x5202/4 is the road after the maneuver.
+                // Store only a fixed category, not the decoded string or the raw bytes.
+                if ((id == 0x5201 && field == 3) || (id == 0x5202 && field == 4)) {
+                    out.roadKind = LincolnRoadNameEvidence.frameKind(bytes, value, size)
+                }
                 val needed = when {
                     id == 0x5201 && field == 13 -> 0
                     id == 0x5201 && (field == 3 || field == 4) -> 0 // string presence only

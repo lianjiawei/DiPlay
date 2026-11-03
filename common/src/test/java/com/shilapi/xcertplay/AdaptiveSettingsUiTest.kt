@@ -851,6 +851,20 @@ class AdaptiveSettingsUiTest {
         } finally { bitmap.recycle() }
     }
 
+    @Test fun longRoadRotationIsAnIndependentImmediatelySavedClusterSetting() {
+        com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setRotateRoad(context, false)
+        val screen = openSettings(AppLocale.SIMPLIFIED_CHINESE)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.NAVIGATION)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        val setting = descendants(screen.window.decorView).filterIsInstance<Switch>()
+            .single { it.contentDescription == screen.getString(R.string.settings_lincoln_rotate_road) }
+        assertFalse(setting.isChecked)
+        setting.performClick()
+        assertTrue(com.shilapi.xcertplay.lincoln.LincolnClusterSettings.rotateRoad(context))
+        assertFalse(com.shilapi.xcertplay.lincoln.LincolnClusterSettings.enhancedNavigation(context))
+        com.shilapi.xcertplay.lincoln.LincolnClusterSettings.setRotateRoad(context, false)
+    }
+
     @Test @Config(sdk = [29], qualifiers = "zh-rCN-w320dp-h600dp")
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun cornerRadiusScreenshotCompactLargeFont() =
