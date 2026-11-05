@@ -782,7 +782,7 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
             contentGeneration++
             if (isLaidOut) requestLayout()
         }
-        val cover = snapshot.artwork?.takeUnless { it.isRecycled }
+        val cover = snapshot.windowArtwork?.takeUnless { it.isRecycled }
         if (cover !== shownCover) {
             // setImageBitmap builds a fresh drawable and asks for a layout each time, so it is only
             // worth doing for a cover that actually changed.

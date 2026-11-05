@@ -168,12 +168,16 @@ internal object CarPlayMediaKeys {
                 val previousArtwork = artwork
                 if (albumTrackChanged(nowPlaying, update)) {
                     val previousId = nowPlaying.artworkTransferId
+                    val sourceChanged = previous.sourceApp != null && previous.sourceApp != update.sourceApp
                     if (previousId != null) {
                         ambientColorCache.remove(previousId)
-                        artworkCache.remove(previousId)
+                        // Artwork often arrives before corrected metadata with the same reference.
+                        // Keep it for that source; an actual source change must not reuse it.
+                        if (previousId != update.artworkTransferId || sourceChanged) artworkCache.remove(previousId)
                     }
                     if (previousId == update.artworkTransferId) {
-                        artworkOwner = artworkQueue.newSession()
+                        // Do not discard a same-source cover still decoding when metadata arrives.
+                        if (sourceChanged) artworkOwner = artworkQueue.newSession()
                         initialAlbumRecovery = InitialAlbumRecovery()
                     }
                     com.shilapi.xcertplay.media.AmbientMusicController.albumColorChanged(expected,
@@ -187,7 +191,8 @@ internal object CarPlayMediaKeys {
                     WheelKeyLog.note("CarPlay playback playing=${update.playing} " +
                         "source=${diagnosticSource(update.sourceApp)} mediaActive=$mediaAudioActive")
                 }
-                if (metadataChanged) ClusterMusicState.publish(update, update.artworkTransferId?.let { artworkCache[it] })
+                if (metadataChanged) ClusterMusicState.publish(update, update.artworkTransferId?.let { artworkCache[it] },
+                    retainWindowArtworkForSameReference = true)
                 updateInitialAlbumRecovery(expected)
                 // The iPhone repeats NowPlayingUpdate about twice a second for the position alone.
                 // Republishing the metadata each time sent a copy of the artwork through system_server
