@@ -511,6 +511,8 @@ open class CarPlayHostActivity : ComponentActivity() {
     // until they have released their codecs, so a destroyed surface is detached from them too. A restart
     // and a shutdown can overlap, so this is a set.
     private val retiringSinks = java.util.concurrent.CopyOnWriteArraySet<AndroidMediaSink>()
+    // Main-thread owned: a restart can still be releasing USB/VPN when shutdown begins.
+    private val retiringControllers = mutableSetOf<CarPlayController>()
     internal var sinkReleaseWaitMillis = SINK_RELEASE_WAIT_MILLIS
     private var videoSurfaceProbe: ViewTreeObserver.OnPreDrawListener? = null
     private var pictureBinding: CarPlayPicture.Binding? = null
@@ -6431,6 +6433,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         CarPlayMediaKeys.detach(oldController)
         CarPlayBackgroundSession.clear(oldController, keepOwner = true)
         controller = null
+        oldController?.let(retiringControllers::add)
         oldSink?.let(retiringSinks::add)
         sink = null
         sessionDisplay = null
@@ -6447,15 +6450,30 @@ open class CarPlayHostActivity : ComponentActivity() {
                     "elapsedMs=${((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(0)}",
             )
             oldSink?.let(::closeRetiringSink)
-            runOnUiThread {
-                if (!shuttingDown.get() && generation == restartGeneration) {
-                    handshakeResetInProgress = false
-                    // The display can rotate again while the old stack is closing. Use the
-                    // latest accepted size, and wait for any pending resize to settle first.
-                    maybeStartCarPlay()
-                }
-            }
+            runOnUiThread { finishRestartWhenClosed(generation) }
         }
+    }
+
+    private fun finishRestartWhenClosed(generation: Int) {
+        if (shuttingDown.get() || generation != restartGeneration) return
+        if (!retiringControllersClosed()) {
+            mainHandler.postDelayed({ finishRestartWhenClosed(generation) }, CONTROLLER_CLOSE_POLL_MILLIS)
+            return
+        }
+        handshakeResetInProgress = false
+        if (isDestroyed) {
+            // A replacement Activity cannot adopt a controller already being closed. Free the
+            // retained slot once teardown is safe so the replacement can start normally.
+            if (CarPlayBackgroundSession.isOwner(this)) {
+                applicationContext.stopService(Intent(applicationContext, DiPlaySessionService::class.java))
+                CarPlayBackgroundSession.clear()
+                airPlayCommandExecutor.shutdown()
+                teardownExecutor.shutdown()
+            }
+            return
+        }
+        // Use the latest accepted display size after the old stack has really stopped.
+        maybeStartCarPlay()
     }
 
     /** Waiting is already the home state. Back leaves the app instead of opening another home. */
@@ -6649,14 +6667,22 @@ open class CarPlayHostActivity : ComponentActivity() {
         CarPlayMediaKeys.detach(oldController)
         CarPlayBackgroundSession.clear(oldController)
         controller = null
+        oldController?.let(retiringControllers::add)
         oldSink?.let(retiringSinks::add)
         sink = null
         sessionDisplay = null
         discardLastPicture()
+        val diagnosticLog = sessionLog
+        val generation = restartGeneration
         Log.i(TAG, "shutdown reason=$reason terminateProcess=$terminateProcess")
         teardownExecutor.execute {
+            val started = System.nanoTime()
             oldController?.close()
             val clean = oldController?.awaitClosed(CONTROLLER_CLOSE_TIMEOUT_MILLIS) ?: true
+            AsyncDiagnosticLog.append(diagnosticLog,
+                "${CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX} generation=$generation " +
+                    "shutdown teardownWaitCompleted=$clean " +
+                    "elapsedMs=${((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(0)}")
             oldSink?.let(::closeRetiringSink)
             if (!unifiedHome || terminateProcess) airPlayCommandExecutor.shutdown()
             if (terminateProcess) {
@@ -6665,32 +6691,49 @@ open class CarPlayHostActivity : ComponentActivity() {
             Log.i(TAG, "shutdown complete clean=$clean")
             applicationContext.stopService(Intent(applicationContext, DiPlaySessionService::class.java))
             if (!unifiedHome || terminateProcess) teardownExecutor.shutdown()
-            mainHandler.post {
-                if (unifiedHome && !terminateProcess) {
-                    activeAirPlaySession = null
-                    activeScreenStreamTypes.clear()
-                    startupRetryStopped = false
-                    showConnectionHelp(null)
-                    stageStatusView?.text = ""
-                    stageStatusView?.contentDescription = null
-                    reconnectScheduled = false
-                    shuttingDown.set(false)
-                    unifiedProjectionVisible = false
-                    unifiedHomeContent?.visibility = View.VISIBLE
-                    onProjectionStateChanged()
-                }
-                val restart = unifiedHome && restartUnifiedAfterStop && unifiedConnectionRequested
-                restartUnifiedAfterStop = false
-                completion()
-                if (restart && !isDestroyed) mainHandler.post {
-                    if (unifiedConnectionRequested && !isDestroyed) requestUnifiedProjection()
-                }
-            }
+            mainHandler.post { finishShutdownWhenClosed(terminateProcess, completion) }
             if (terminateProcess) {
                 val drained = AsyncDiagnosticLog.flush(AsyncDiagnosticLog.FLUSH_TIMEOUT_MILLIS)
                 Log.i(TAG, "shutdown diagnostics pendingCompleted=$drained")
                 Process.killProcess(Process.myPid())
             }
+        }
+    }
+
+    private fun retiringControllersClosed(): Boolean {
+        retiringControllers.removeAll { it.awaitClosed(0) }
+        return retiringControllers.isEmpty()
+    }
+
+    private fun finishShutdownWhenClosed(terminateProcess: Boolean, completion: () -> Unit) {
+        // A timed-out wait does not mean USB/VPN teardown has completed. Keep the old session's
+        // stop pending so neither an automatic nor a manual connection races its late cleanup.
+        // A zero-time check keeps the main thread responsive and is immediate on the normal path.
+        if (!terminateProcess && !retiringControllersClosed()) {
+            mainHandler.postDelayed({ finishShutdownWhenClosed(false, completion) },
+                CONTROLLER_CLOSE_POLL_MILLIS)
+            return
+        }
+        if (unifiedHome && !terminateProcess) {
+            activeAirPlaySession = null
+            activeScreenStreamTypes.clear()
+            handshakeResetInProgress = false
+            startAfterHandshakeReset = false
+            startupRetryStopped = false
+            showConnectionHelp(null)
+            stageStatusView?.text = ""
+            stageStatusView?.contentDescription = null
+            reconnectScheduled = false
+            shuttingDown.set(false)
+            unifiedProjectionVisible = false
+            unifiedHomeContent?.visibility = View.VISIBLE
+            if (!isDestroyed) onProjectionStateChanged()
+        }
+        val restart = unifiedHome && restartUnifiedAfterStop && unifiedConnectionRequested
+        restartUnifiedAfterStop = false
+        completion()
+        if (restart && !isDestroyed) mainHandler.post {
+            if (unifiedConnectionRequested && !isDestroyed) requestUnifiedProjection()
         }
     }
 
@@ -7270,6 +7313,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         const val RECONNECT_DELAY_MILLIS = 2_000L
         const val IAP_TUNNEL_RECONNECT_DELAY_MILLIS = 15_000L
         const val CONTROLLER_CLOSE_TIMEOUT_MILLIS = 4_000L
+        const val CONTROLLER_CLOSE_POLL_MILLIS = 250L
         const val AUDIO_CAPTURE_MARKER = "audio-capture.enabled"
         const val AUDIO_CAPTURE_DIRECTORY = "audio-captures"
         const val PROTOCOL_TRACE_PREFIX = "TRACE "

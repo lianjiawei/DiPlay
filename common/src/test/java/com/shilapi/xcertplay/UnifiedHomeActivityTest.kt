@@ -7,6 +7,7 @@ import android.os.Looper
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
@@ -17,6 +18,7 @@ import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.media.LiveVideoCounters
 import com.shilapi.xcertplay.orchestration.CarPlayController
+import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import java.util.concurrent.ExecutorService
 import org.junit.After
 import org.junit.Assert.*
@@ -35,6 +37,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 import org.robolectric.android.util.concurrent.PausedExecutorService
 import org.robolectric.shadows.ShadowAlertDialog
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicInteger
 
 /** UI and lifecycle tests simulate controller events, without supplying any CarPlay credentials. */
 @RunWith(RobolectricTestRunner::class)
@@ -46,6 +49,7 @@ class UnifiedHomeActivityTest {
     private lateinit var activity: DiPlayActivity
     private lateinit var home: View
     private lateinit var engine: FrameLayout
+    private var destroyed = false
     private val teardown = PausedExecutorService()
     private val commands = PausedExecutorService()
 
@@ -72,11 +76,12 @@ class UnifiedHomeActivityTest {
 
     @After fun cleanup() {
         CarPlayBackgroundSession.clear()
+        PendingReconnect.clear()
         set("unifiedConnectionRequested", false)
         set("controller", null)
         set("sink", null)
         ReflectionHelpers.getField<Handler>(activity, "mainHandler").removeCallbacksAndMessages(null)
-        c.pause().stop().destroy()
+        if (!destroyed) c.pause().stop().destroy()
         teardown.shutdownNow(); commands.shutdownNow()
     }
 
@@ -390,6 +395,181 @@ class UnifiedHomeActivityTest {
         assertFalse(field<Boolean>("unifiedProjectionVisible"))
     }
 
+    @Test @Config(sdk = [25, 28, 29, 33])
+    fun settingReconnectWaitsUntilThePreviousControllerActuallyCloses() {
+        val vpnRequests = trackWiredStartupPrerequisites()
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        `when`(controller.awaitClosed(anyLong())).thenReturn(false)
+        PendingReconnect.mark(controller)
+        set("page", "settings")
+        call<Unit>("render")
+        descendants(field("reconnectBar")).filterIsInstance<Button>().single().performClick()
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("A timeout is not proof that the old USB resources are released", 0, vpnRequests.get())
+        assertTrue(CarPlayBackgroundSession.hasSession())
+        assertTrue(field<Boolean>("unifiedConnectionRequested"))
+
+        `when`(controller.awaitClosed(anyLong())).thenReturn(true)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        assertEquals(1, vpnRequests.get())
+        assertEquals("settings", field<String>("page"))
+        verify(controller).close()
+    }
+
+    @Test @Config(sdk = [29])
+    fun cancellingDuringASettingsReconnectDoesNotStartAnotherConnection() {
+        val vpnRequests = trackWiredStartupPrerequisites()
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        `when`(controller.awaitClosed(anyLong())).thenReturn(false)
+        PendingReconnect.mark(controller)
+        set("page", "settings")
+        call<Unit>("render")
+        descendants(field("reconnectBar")).filterIsInstance<Button>().single().performClick()
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        set("page", "home")
+        call<Unit>("render")
+        field<View>("disconnectButton").performClick()
+        `when`(controller.awaitClosed(anyLong())).thenReturn(true)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+
+        assertEquals(0, vpnRequests.get())
+        assertFalse(CarPlayBackgroundSession.hasSession())
+        assertFalse(field<Boolean>("unifiedConnectionRequested"))
+        verify(controller).close()
+    }
+
+    @Test @Config(sdk = [29])
+    fun aQueuedSettingsReconnectIsSavedAndCancellationClearsIt() {
+        val vpnRequests = trackWiredStartupPrerequisites()
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        PendingReconnect.mark(controller)
+        set("page", "settings")
+        call<Unit>("render")
+
+        descendants(field("reconnectBar")).filterIsInstance<Button>().single().performClick()
+        val queued = android.os.Bundle()
+        c.saveInstanceState(queued)
+        assertTrue(queued.getBoolean("unified_connection_requested"))
+        set("page", "home")
+        call<Unit>("render")
+        field<View>("disconnectButton").performClick()
+        val cancelled = android.os.Bundle()
+        c.saveInstanceState(cancelled)
+        assertFalse(cancelled.getBoolean("unified_connection_requested"))
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, vpnRequests.get())
+    }
+
+    @Test @Config(sdk = [29])
+    fun settingsReconnectAlsoWaitsForAnEarlierReplacementStillClosing() {
+        val vpnRequests = trackWiredStartupPrerequisites()
+        val sizeClass = Class.forName("com.shilapi.xcertplay.CarPlayHostActivity\$DisplaySize")
+        val size = sizeClass.getDeclaredConstructor(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }.newInstance(900, 600)
+        set("activeDisplaySize", size)
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        `when`(controller.awaitClosed(anyLong())).thenReturn(false)
+        set("page", "settings")
+        call<Unit>("restartCarPlay", ClassParameter.from(String::class.java, "test replacement"))
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        call<Unit>("connect", ClassParameter.from(Boolean::class.javaPrimitiveType, false))
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("The earlier controller still owns its resources", 0, vpnRequests.get())
+
+        `when`(controller.awaitClosed(anyLong())).thenReturn(true)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        assertFalse("A cancelled replacement must not block the next startup", field<Boolean>("handshakeResetInProgress"))
+        assertEquals("The normal wired startup prerequisites must run", 1, vpnRequests.get())
+        verify(controller).close()
+    }
+
+    @Test @Config(sdk = [29])
+    fun repeatedSettingsReconnectRequestsStartOnlyOnceWithoutAForcedDelay() {
+        val vpnRequests = trackWiredStartupPrerequisites()
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        PendingReconnect.mark(controller)
+        set("page", "settings")
+        call<Unit>("render")
+        val action = descendants(field("reconnectBar")).filterIsInstance<Button>().single()
+        action.performClick()
+        action.performClick()
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(1, vpnRequests.get())
+        assertEquals("settings", field<String>("page"))
+        verify(controller).close()
+    }
+
+    @Test @Config(sdk = [33])
+    fun wirelessSettingsReconnectAlsoWaitsBeforeRequestingStartupPermissions() {
+        AirPlayPersistence.saveWirelessEnabled(activity, true)
+        AirPlayPersistence.saveLocationReportingEnabled(activity, false)
+        AirPlayPersistence.saveWirelessHotspotMode(activity, WirelessHotspotMode.EXISTING_WIFI)
+        AirPlayPersistence.saveExistingWifiCredentials(activity, "Router", "router-password")
+        DiPlayPreferences.savePhone(activity, "00:11:22:33:44:55", "Test phone")
+        activity.getSharedPreferences("diplay", Activity.MODE_PRIVATE).edit().putBoolean("notification_asked", true).commit()
+        shadowOf(app).denyPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+        set("microphonePermissionResolved", true)
+        val requests = AtomicInteger()
+        set("wirelessPermissions", object : ActivityResultLauncher<Array<String>>() {
+            override fun launch(input: Array<String>, options: ActivityOptionsCompat?) { requests.incrementAndGet() }
+            override fun unregister() = Unit
+            override fun getContract() = ActivityResultContracts.RequestMultiplePermissions()
+        })
+        activity.projectionStarter = { call("requestUnifiedProjection") }
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        `when`(controller.awaitClosed(anyLong())).thenReturn(false)
+        PendingReconnect.mark(controller)
+        set("page", "settings")
+        call<Unit>("render")
+
+        descendants(field("reconnectBar")).filterIsInstance<Button>().single().performClick()
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, requests.get())
+        `when`(controller.awaitClosed(anyLong())).thenReturn(true)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        assertEquals(1, requests.get())
+        assertTrue(AirPlayPersistence.loadWirelessEnabled(activity))
+    }
+
+    @Test @Config(sdk = [29])
+    fun aDestroyedHostReleasesItsSlotAfterThePreviousReplacementCloses() {
+        val sizeClass = Class.forName("com.shilapi.xcertplay.CarPlayHostActivity\$DisplaySize")
+        val size = sizeClass.getDeclaredConstructor(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }.newInstance(900, 600)
+        set("activeDisplaySize", size)
+        val controller = mock(CarPlayController::class.java)
+        store(controller, mock(AndroidMediaSink::class.java))
+        `when`(controller.awaitClosed(anyLong())).thenReturn(false)
+        call<Unit>("restartCarPlay", ClassParameter.from(String::class.java, "test replacement"))
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+        c.pause().stop().destroy()
+        destroyed = true
+        assertTrue(CarPlayBackgroundSession.hasSession())
+
+        `when`(controller.awaitClosed(anyLong())).thenReturn(true)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        assertFalse(CarPlayBackgroundSession.hasSession())
+        assertTrue(teardown.isShutdown)
+        assertTrue(commands.isShutdown)
+        assertTrue(generateSequence { shadowOf(app).nextStoppedService }
+            .any { it.component?.className == DiPlaySessionService::class.java.name })
+    }
+
     @Test fun repeatedDisconnectsKeepTheActivityHomeAndExecutorsReusable() {
         repeat(2) {
             val controller = mock(CarPlayController::class.java)
@@ -520,7 +700,25 @@ class UnifiedHomeActivityTest {
         assertSame("A forwarding Activity must not clear the live session callbacks", listener, AirPlayPersistence.overlaySettingsListener)
     }
 
+    private fun trackWiredStartupPrerequisites(): AtomicInteger {
+        AirPlayPersistence.saveWirelessEnabled(activity, false)
+        AirPlayPersistence.saveLocationReportingEnabled(activity, false)
+        activity.getSharedPreferences("diplay", Activity.MODE_PRIVATE).edit().putBoolean("notification_asked", true).commit()
+        set("wiredPermissionsResolved", true)
+        set("microphonePermissionResolved", true)
+        set("vpnReady", false)
+        val requests = AtomicInteger()
+        set("vpnConsent", object : ActivityResultLauncher<Intent>() {
+            override fun launch(input: Intent, options: ActivityOptionsCompat?) { requests.incrementAndGet() }
+            override fun unregister() = Unit
+            override fun getContract() = ActivityResultContracts.StartActivityForResult()
+        })
+        activity.projectionStarter = { call("requestUnifiedProjection") }
+        return requests
+    }
+
     private fun store(controller: CarPlayController, sink: AndroidMediaSink) {
+        `when`(controller.awaitClosed(anyLong())).thenReturn(true)
         set("controller", controller); set("sink", sink)
         CarPlayBackgroundSession.store(controller, sink, 900, 600, activity,
             CarPlaySessionDisplay(900, 600, Surface.ROTATION_0, false, false, 900, 600)) { complete ->

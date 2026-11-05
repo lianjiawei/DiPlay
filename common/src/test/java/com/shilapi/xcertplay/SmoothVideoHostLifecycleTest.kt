@@ -156,6 +156,7 @@ class SmoothVideoHostLifecycleTest {
         allowStartup()
         val controller = mock(CarPlayController::class.java)
         `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
+        `when`(controller.awaitClosed(org.mockito.Mockito.anyLong())).thenReturn(true)
         val sink = sink(pacingDelayMillis = 0)
         setField("controller", controller)
         setField("sink", sink)

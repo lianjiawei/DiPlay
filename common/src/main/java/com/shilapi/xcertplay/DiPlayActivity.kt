@@ -6617,8 +6617,10 @@ class DiPlayActivity : CarPlayHostActivity() {
             }
             openProjection()
         }
-        if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop { runOnUiThread { open() } }
-        else open()
+        // Queue the ordinary connection request while shutdown owns the old resources. The host
+        // coalesces requests, preserves them across recreation, and cancels them on Disconnect.
+        if (CarPlayBackgroundSession.hasSession()) stopUnifiedProjection {}
+        open()
     }
     private fun openProjection() {
         openProjectionWhenReady = true
