@@ -24,8 +24,8 @@ class CarPlayViewAreas private constructor(
     /** A full screen the canvas holds: its size and whether the screen is portrait then. */
     data class Screen(val width: Int, val height: Int, val portrait: Boolean)
 
-    /** One area's purpose; [sixths] is CarPlay's share of its screen beside the side panel, in sixths. */
-    private data class Slot(val kind: Kind, val portrait: Boolean, val sixths: Int = 6)
+    /** One area's purpose; [share] is CarPlay's share of the screen in [SHARE_UNITS]. */
+    private data class Slot(val kind: Kind, val portrait: Boolean, val share: Int = SHARE_UNITS)
 
     /** The area CarPlay uses now; shared by the session's host and its settings. */
     @Volatile var current: Int = initial
@@ -55,13 +55,13 @@ class CarPlayViewAreas private constructor(
     }
 
     /**
-     * The area beside DiPlay's side panel on the current (or given) screen with CarPlay's share in [sixths]
+     * The area beside DiPlay's side panel on the current (or given) screen with CarPlay's [share]
      * (another share when this session has no such area), or null without a side panel.
      */
-    fun sidePanel(portrait: Boolean = slots[current].portrait, sixths: Int = DEFAULT_SIDE_PANEL_SIXTHS): Int? {
+    fun sidePanel(portrait: Boolean = slots[current].portrait, share: Int = DEFAULT_SIDE_PANEL_SHARE): Int? {
         val edge = areas[current].dockEdge
         return areas.indices.firstOrNull {
-            slots[it].kind == Kind.SIDE_PANEL && slots[it].portrait == portrait && areas[it].dockEdge == edge && slots[it].sixths == sixths
+            slots[it].kind == Kind.SIDE_PANEL && slots[it].portrait == portrait && areas[it].dockEdge == edge && slots[it].share == share
         } ?: index(Kind.SIDE_PANEL, portrait, edge)
     }
 
@@ -93,7 +93,12 @@ class CarPlayViewAreas private constructor(
     }
 
     /** The area in use after moving the dock to [dockEdge], keeping the kind of area and the screen. */
-    fun withDock(dockEdge: Int): Int? = index(kindOf(current), dockEdge)
+    fun withDock(dockEdge: Int): Int? {
+        val currentSlot = slots[current]
+        return areas.indices.firstOrNull {
+            slots[it] == currentSlot && areas[it].dockEdge == dockEdge
+        }
+    }
 
     fun use(index: Int) {
         current = index.coerceIn(0, areas.lastIndex)
@@ -103,12 +108,16 @@ class CarPlayViewAreas private constructor(
         /** Further than this (as an aspect ratio) from DiPlay's window, a split-screen area does not fit it. */
         private const val MAX_ASPECT_MISMATCH = 1.25
 
-        /** CarPlay's share of the screen beside the side panel, in sixths: two thirds, half, one third. */
-        val SIDE_PANEL_SIXTHS = listOf(4, 3, 2)
-        const val DEFAULT_SIDE_PANEL_SIXTHS = 4
+        /** A common denominator preserves the original thirds and sixths as well as 2.5% steps. */
+        const val SHARE_UNITS = 120
+        val SIDE_PANEL_SHARES = listOf(80, 60, 40)
+        // Preserve the existing area order, then add 12.5%, 20%, 22.5%, 27.5%, 30% and 40% panel widths.
+        val MUSIC_PANEL_SHARES = SIDE_PANEL_SHARES + listOf(90, 100, 105, 96, 93, 87, 84, 72)
+        const val DEFAULT_SIDE_PANEL_SHARE = 80
 
         /** The declared share nearest to CarPlay's [fraction] of the screen (0..1). */
-        fun nearestSidePanelSixths(fraction: Double): Int = SIDE_PANEL_SIXTHS.minByOrNull { abs(it / 6.0 - fraction) }!!
+        fun nearestSidePanelShare(fraction: Double, music: Boolean): Int =
+            (if (music) MUSIC_PANEL_SHARES else SIDE_PANEL_SHARES).minByOrNull { abs(it.toDouble() / SHARE_UNITS - fraction) }!!
 
         /** One screen the size of the stream (no turning); see the general [build]. */
         fun build(
@@ -118,10 +127,11 @@ class CarPlayViewAreas private constructor(
             splitWindow: Pair<Float, Float>?,
             sidePanel: Boolean = false,
             rightHandDrive: Boolean = false,
+            narrowMusicPanel: Boolean = false,
         ): CarPlayViewAreas? =
             build(width, height, listOf(Screen(width, height, portrait = height > width)), dock,
                 splitWindow = { splitWindow }, startPortrait = height > width, sidePanel = sidePanel,
-                rightHandDrive = rightHandDrive)
+                rightHandDrive = rightHandDrive, narrowMusicPanel = narrowMusicPanel)
 
         /**
          * The areas for a [canvasWidth] x [canvasHeight] stream holding [screens] (each at its top-left
@@ -139,6 +149,7 @@ class CarPlayViewAreas private constructor(
             startPortrait: Boolean,
             sidePanel: Boolean = false,
             rightHandDrive: Boolean = false,
+            narrowMusicPanel: Boolean = false,
         ): CarPlayViewAreas? {
             val splits = screens.associateWith { splitWindow(it.portrait) }
             if (screens.size == 1 && dock.edge == null && splits.values.all { it == null } && !sidePanel &&
@@ -161,15 +172,15 @@ class CarPlayViewAreas private constructor(
                     slots += Slot(Kind.SPLIT_SCREEN, screen.portrait)
                 }
             }
-            if (sidePanel) for (screen in screens) for (sixths in SIDE_PANEL_SIXTHS) {
-                // CarPlay keeps two thirds, half or one third: the driver's side of a landscape screen (the panel
-                // on the passenger's side) or the top of a portrait one (the panel at the bottom).
-                val width = if (screen.portrait) screen.width else (screen.width * sixths / 6) and 1.inv()
-                val height = if (screen.portrait) (screen.height * sixths / 6) and 1.inv() else screen.height
+            if (sidePanel) for (screen in screens) for (share in
+                if (narrowMusicPanel) MUSIC_PANEL_SHARES else SIDE_PANEL_SHARES) {
+                // CarPlay stays on the driver's side (or top in portrait); the panel fills the remainder.
+                val width = if (screen.portrait) screen.width else (screen.width * share / SHARE_UNITS) and 1.inv()
+                val height = if (screen.portrait) (screen.height * share / SHARE_UNITS) and 1.inv() else screen.height
                 val originX = if (rightHandDrive) screen.width - width else 0
                 for (edge in edges) {
                     areas += AirPlayViewArea(width, height, originX = originX, dockEdge = edge)
-                    slots += Slot(Kind.SIDE_PANEL, screen.portrait, sixths)
+                    slots += Slot(Kind.SIDE_PANEL, screen.portrait, share)
                 }
             }
             val initial = areas.indices.firstOrNull {

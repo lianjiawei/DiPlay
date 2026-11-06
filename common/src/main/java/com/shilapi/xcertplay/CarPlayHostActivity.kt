@@ -2389,8 +2389,8 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     /**
      * Drags the panel edge that faces CarPlay: the panel follows the finger, and on release CarPlay moves to the
-     * declared share nearest to where the edge was let go (two thirds, half or one third of the screen), or to
-     * the whole screen, closing the panel, when it was let go nearer the far side.
+     * declared share nearest to where the edge was let go, or to the whole screen, closing the panel, when it
+     * was let go nearer the far side.
      */
     private fun onSidePanelTouch(panel: View, event: MotionEvent): Boolean {
         val screen = sidePanelScreen ?: return false
@@ -2423,7 +2423,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 val whole = sidePanelEdgeAt(screen, 1f)
                 val edge = (drag[1] + raw - drag[0]).coerceIn(minOf(quarter, whole), maxOf(quarter, whole))
                 startSidePanelBlur()
-                panel.alpha = if (sidePanelCarPlayShare(screen, edge) > SIDE_PANEL_CLOSE_SHARE) 0.5f else 1f
+                panel.alpha = if (sidePanelCarPlayShare(screen, edge) > sidePanelCloseShare()) 0.5f else 1f
                 when (sidePanelEdge) {
                     Gravity.TOP -> { params.topMargin = Math.round(edge); params.height = Math.round(screen.bottom - edge) }
                     Gravity.END -> { params.leftMargin = Math.round(screen.left); params.width = Math.round(edge - screen.left) }
@@ -2437,19 +2437,20 @@ open class CarPlayHostActivity : ComponentActivity() {
                 sidePanelDrag = null
                 panel.alpha = 1f
                 val carPlay = sidePanelCarPlayShare(screen, drag[1] + raw - drag[0])
-                if (event.actionMasked == MotionEvent.ACTION_UP && carPlay > SIDE_PANEL_CLOSE_SHARE) {
+                if (event.actionMasked == MotionEvent.ACTION_UP && carPlay > sidePanelCloseShare()) {
                     appendLog("Side panel closed by dragging its edge")
                     endSidePanelBlur()
                     showSidePanel(false)
                     if (sidePanelShown) videoView?.let { updateVideoLayout(it.width, it.height) }
                     return true
                 }
-                val sixths = CarPlayViewAreas.nearestSidePanelSixths(carPlay.toDouble())
-                if (event.actionMasked == MotionEvent.ACTION_UP && sixths != SidePanelSettings.sixths(this)) {
-                    SidePanelSettings.setSixths(this, sixths)
-                    appendLog("Side panel resized: CarPlay $sixths/6 of the screen")
+                val music = sessionDisplay?.musicWindowEnabled == true
+                val share = CarPlayViewAreas.nearestSidePanelShare(carPlay.toDouble(), music)
+                if (event.actionMasked == MotionEvent.ACTION_UP && share != SidePanelSettings.share(this, music)) {
+                    appendLog("Side panel resized: CarPlay $share/${CarPlayViewAreas.SHARE_UNITS} of the screen")
                     endSidePanelBlur()
-                    showSidePanel(true)
+                    if (showSidePanel(true, share)) SidePanelSettings.setShare(this, share)
+                    else videoView?.let { updateVideoLayout(it.width, it.height) }
                 } else {
                     endSidePanelBlur()
                     videoView?.let { updateVideoLayout(it.width, it.height) }
@@ -2459,6 +2460,9 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         return false
     }
+
+    private fun sidePanelCloseShare(): Float =
+        if (sessionDisplay?.musicWindowEnabled == true) MUSIC_PANEL_CLOSE_SHARE else SIDE_PANEL_CLOSE_SHARE
 
     private fun showSidePanelGripHint() {
         if (sidePanelGripAlpha < 255) animateSidePanelGrip(255, 200L)
@@ -2688,7 +2692,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 val quarter = sidePanelEdgeAt(screen, 0.25f)
                 val whole = sidePanelEdgeAt(screen, 1f)
                 val edge = position.coerceIn(minOf(quarter, whole), maxOf(quarter, whole))
-                panel.alpha = if (sidePanelCarPlayShare(screen, edge) > SIDE_PANEL_CLOSE_SHARE) 0.5f else 1f
+                panel.alpha = if (sidePanelCarPlayShare(screen, edge) > sidePanelCloseShare()) 0.5f else 1f
                 panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply {
                     gravity = Gravity.TOP or Gravity.LEFT
                     when (sidePanelEdge) {
@@ -2728,10 +2732,11 @@ open class CarPlayHostActivity : ComponentActivity() {
                 tab.alpha = 1f
                 val screen = sidePanelScreen
                 val carPlay = if (screen != null) sidePanelCarPlayShare(screen, position) else null
-                if (event.actionMasked == MotionEvent.ACTION_UP && carPlay != null && carPlay <= SIDE_PANEL_CLOSE_SHARE) {
-                    SidePanelSettings.setSixths(this, CarPlayViewAreas.nearestSidePanelSixths(carPlay.toDouble()))
-                    appendLog("Side panel opened from its tab: CarPlay ${SidePanelSettings.sixths(this)}/6 of the screen")
-                    showSidePanel(true)
+                if (event.actionMasked == MotionEvent.ACTION_UP && carPlay != null && carPlay <= sidePanelCloseShare()) {
+                    val music = sessionDisplay?.musicWindowEnabled == true
+                    val share = CarPlayViewAreas.nearestSidePanelShare(carPlay.toDouble(), music)
+                    appendLog("Side panel opened from its tab: CarPlay $share/${CarPlayViewAreas.SHARE_UNITS} of the screen")
+                    if (showSidePanel(true, share)) SidePanelSettings.setShare(this, share)
                 }
                 endSidePanelBlur()
                 if (!sidePanelShown) panel.visibility = View.GONE
@@ -2835,16 +2840,18 @@ open class CarPlayHostActivity : ComponentActivity() {
         mainHandler.post(sidePanelBlurEnd)
     }
 
-    private fun showSidePanel(show: Boolean) {
+    private fun showSidePanel(show: Boolean, requestedShare: Int? = null): Boolean {
         sidePanelActionRevision++
-        val areas = sessionDisplay?.viewAreas ?: return
-        val view = videoView ?: return
+        val areas = sessionDisplay?.viewAreas ?: return false
+        val view = videoView ?: return false
         val split = isMultiWindowActive()
         val portrait = if (split) screenPortrait() else view.height > view.width
-        val target = if (show) areas.sidePanel(portrait, SidePanelSettings.sixths(this)) else areas.indexFor(view.width, view.height, split, portrait)
+        val target = if (show) areas.sidePanel(portrait,
+            requestedShare ?: SidePanelSettings.share(this, sessionDisplay?.musicWindowEnabled == true))
+            else areas.indexFor(view.width, view.height, split, portrait)
         val sent = target != null && controller?.showViewArea(target) == true
         appendLog("Side panel ${if (show) "shown" else "hidden"}: view area $target sent=$sent")
-        if (!sent || target == null) return
+        if (!sent || target == null) return false
         areas.use(target)
         sidePanelShown = show
         sidePanel?.visibility = if (show) View.VISIBLE else View.GONE
@@ -2854,6 +2861,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (show && sessionDisplay?.musicWindowEnabled != true) sidePanelTick.run()
         if (show) showSidePanelGripHint()
         updateVideoLayout(view.width, view.height)
+        return true
     }
 
     private fun autoShowMusicWindow(generation: Int, session: AirPlaySession) {
@@ -2900,7 +2908,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         val areas = sessionDisplay?.viewAreas ?: return null
         val view = videoView ?: return null
         val portrait = if (isMultiWindowActive()) screenPortrait() else view.height > view.width
-        val index = areas.sidePanel(portrait, SidePanelSettings.sixths(this)) ?: return null
+        val index = areas.sidePanel(portrait, SidePanelSettings.share(this, sessionDisplay?.musicWindowEnabled == true)) ?: return null
         return when {
             portrait -> Gravity.BOTTOM
             areas.areas[index].originX > 0 -> Gravity.LEFT
@@ -5118,7 +5126,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             CarPlayViewAreas.build(display.widthPixels, display.heightPixels, listOf(
                 CarPlayViewAreas.Screen(display.widthPixels, display.heightPixels, portrait = display.heightPixels > display.widthPixels),
             ), dock, splitWindow, startPortrait = display.heightPixels > display.widthPixels,
-                sidePanel = needsSidePanel, rightHandDrive = rightHandDrive)
+                sidePanel = needsSidePanel, rightHandDrive = rightHandDrive, narrowMusicPanel = pendingMusicWindowEnabled)
         } else {
             val (landscape, portrait) = CarPlayRotation.turningAreas(square, size.width, size.height,
                 screen.widthPixels, screen.heightPixels)
@@ -5126,7 +5134,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 CarPlayViewAreas.Screen(landscape.first, landscape.second, portrait = false),
                 CarPlayViewAreas.Screen(portrait.first, portrait.second, portrait = true),
             ), dock, splitWindow, startPortrait = size.height > size.width, sidePanel = needsSidePanel,
-                rightHandDrive = rightHandDrive)
+                rightHandDrive = rightHandDrive, narrowMusicPanel = pendingMusicWindowEnabled)
         }
         pendingViewAreas = viewAreas
         val declared = if (viewAreas == null) canvas else canvas.copy(viewAreas = viewAreas.areas, initialViewArea = viewAreas.current)
@@ -7295,6 +7303,8 @@ open class CarPlayHostActivity : ComponentActivity() {
         const val MUSIC_WINDOW_AUTO_SHOW_MILLIS = 800L
         /** CarPlay's share past which letting go of the panel edge closes the panel: halfway from two thirds to all. */
         const val SIDE_PANEL_CLOSE_SHARE = 5f / 6f
+        /** Music's narrowest panel is one eighth; close when the edge is closer to full screen. */
+        const val MUSIC_PANEL_CLOSE_SHARE = 15f / 16f
         /** How long the last picture may stand in for the video after returning, and the wait to copy it. */
         const val PICTURE_HOLD_MAX_MILLIS = 30_000L
         const val PICTURE_COPY_WAIT_MILLIS = 150L

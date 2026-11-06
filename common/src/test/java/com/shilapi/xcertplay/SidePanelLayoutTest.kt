@@ -3,6 +3,7 @@ package com.shilapi.xcertplay
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.ApplicationInfo
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -41,6 +42,7 @@ class SidePanelLayoutTest {
 
     @Before fun setup() {
         activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        activity.getSharedPreferences("diplay_side_panel", 0).edit().clear().commit()
         activity.applicationInfo.targetSdkVersion = 29
         root = FrameLayout(activity)
         panel = LinearLayout(activity).also { root.addView(it) }
@@ -52,6 +54,7 @@ class SidePanelLayoutTest {
 
     @After fun cleanup() {
         MusicWindowSettings.setEnabled(activity, false)
+        activity.getSharedPreferences("diplay_side_panel", 0).edit().clear().commit()
         (get("mainHandler") as Handler).removeCallbacksAndMessages(null)
         (get("teardownExecutor") as ExecutorService).shutdownNow()
         (get("airPlayCommandExecutor") as ExecutorService).shutdownNow()
@@ -163,6 +166,130 @@ class SidePanelLayoutTest {
         assertEquals(true, get("sidePanelShown"))
         assertEquals(View.VISIBLE, panel.visibility)
         assertTrue((get("mainHandler") as Handler).hasCallbacks(get("sidePanelTick") as Runnable))
+    }
+
+    @Test fun draggingMusicPanelSnapsToFineWidthsAndStillClosesAtTheEdge() {
+        val areas = CarPlayViewAreas.build(1920, 1080, CarPlayDock.AUTOMATIC, null,
+            sidePanel = true, narrowMusicPanel = true)!!
+        areas.use(areas.sidePanel()!!)
+        val controller = mock(CarPlayController::class.java)
+        `when`(controller.showViewArea(anyInt())).thenReturn(true)
+        video.layout(0, 0, 1920, 1080)
+        set("sessionDisplay", CarPlaySessionDisplay(1920, 1080, Surface.ROTATION_0,
+            true, true, 1920, 1080, areas, musicWindowEnabled = true))
+        set("controller", controller)
+        place(1920, 1080)
+        root.measure(exact(1920), exact(1080))
+        root.layout(0, 0, 1920, 1080)
+
+        for ((delta, share, width) in listOf(
+            Triple(64f, 84, 576), Triple(48f, 87, 528), Triple(48f, 90, 480),
+            Triple(48f, 93, 432), Triple(48f, 96, 384), Triple(64f, 100, 320), Triple(80f, 105, 240),
+        )) {
+            dragPanel(delta, MotionEvent.ACTION_UP)
+            assertEquals(share, SidePanelSettings.share(activity, music = true))
+            assertEquals(width, areas.panelRect(areas.current)!!.width)
+            verify(controller).showViewArea(areas.sidePanel(share = share)!!)
+        }
+        dragPanel(119f, MotionEvent.ACTION_UP)
+        assertEquals(true, get("sidePanelShown"))
+        assertEquals(240, areas.panelRect(areas.current)!!.width)
+        dragPanel(121f, MotionEvent.ACTION_UP)
+        assertEquals(false, get("sidePanelShown"))
+        assertEquals(CarPlayViewAreas.Kind.FULL_SCREEN, areas.kindOf(areas.current))
+        assertEquals(105, SidePanelSettings.share(activity, music = true))
+
+        // Pull out from the right edge and release at the new 1/6-width position.
+        val tab = View(activity)
+        root.addView(tab, FrameLayout.LayoutParams(64, 160))
+        tab.layout(1856, 460, 1920, 620)
+        set("sidePanelTab", tab)
+        val touch = activity.javaClass.getDeclaredMethod("onSidePanelTabTouch", View::class.java, MotionEvent::class.java)
+            .apply { isAccessible = true }
+        val down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 64f, 80f, 0)
+        val move = MotionEvent.obtain(0, 1, MotionEvent.ACTION_MOVE, -256f, 80f, 0)
+        val up = MotionEvent.obtain(0, 2, MotionEvent.ACTION_UP, -256f, 80f, 0)
+        try {
+            assertEquals(true, touch.invoke(activity, tab, down))
+            assertEquals(true, touch.invoke(activity, tab, move))
+            assertEquals(true, touch.invoke(activity, tab, up))
+        } finally { down.recycle(); move.recycle(); up.recycle() }
+        assertEquals(true, get("sidePanelShown"))
+        assertEquals(320, areas.panelRect(areas.current)!!.width)
+        assertEquals(100, SidePanelSettings.share(activity, music = true))
+    }
+
+    @Test fun cancelledOrRejectedResizeDoesNotSaveTheNarrowWidth() {
+        val areas = CarPlayViewAreas.build(1920, 1080, CarPlayDock.AUTOMATIC, null,
+            sidePanel = true, narrowMusicPanel = true)!!
+        areas.use(areas.sidePanel()!!)
+        val controller = mock(CarPlayController::class.java)
+        video.layout(0, 0, 1920, 1080)
+        set("sessionDisplay", CarPlaySessionDisplay(1920, 1080, Surface.ROTATION_0,
+            true, true, 1920, 1080, areas, musicWindowEnabled = true))
+        set("controller", controller)
+        place(1920, 1080)
+        root.measure(exact(1920), exact(1080))
+        root.layout(0, 0, 1920, 1080)
+
+        dragPanel(160f, MotionEvent.ACTION_CANCEL)
+        assertEquals(80, SidePanelSettings.share(activity, music = true))
+        assertEquals(640, areas.panelRect(areas.current)!!.width)
+        verify(controller, never()).showViewArea(anyInt())
+        dragPanel(160f, MotionEvent.ACTION_UP)
+        assertEquals(80, SidePanelSettings.share(activity, music = true))
+        assertEquals(640, areas.panelRect(areas.current)!!.width)
+        verify(controller).showViewArea(areas.sidePanel(share = 90)!!)
+    }
+
+    @Test fun narrowMusicSizesDragOnTheLeftAndOnTheBottom() {
+        for (portrait in listOf(false, true)) {
+            val width = if (portrait) 1080 else 1920
+            val height = if (portrait) 1920 else 1080
+            val areas = CarPlayViewAreas.build(width, height, CarPlayDock.AUTOMATIC, null,
+                sidePanel = true, rightHandDrive = true, narrowMusicPanel = true)!!
+            areas.use(areas.sidePanel()!!)
+            val controller = mock(CarPlayController::class.java)
+            `when`(controller.showViewArea(anyInt())).thenReturn(true)
+            video.layout(0, 0, width, height)
+            SidePanelSettings.setShare(activity, 80)
+            set("sessionDisplay", CarPlaySessionDisplay(width, height, Surface.ROTATION_0,
+                true, true, width, height, areas, musicWindowEnabled = true))
+            set("controller", controller)
+            place(width, height)
+            root.measure(exact(width), exact(height))
+            root.layout(0, 0, width, height)
+
+            if (portrait) dragPanel(160f, MotionEvent.ACTION_UP, vertical = true)
+            else dragPanel(-160f, MotionEvent.ACTION_UP, startX = panel.width - 1f)
+            assertEquals(90, SidePanelSettings.share(activity, music = true))
+            val panelRect = areas.panelRect(areas.current)!!
+            if (portrait) {
+                assertEquals(480, panelRect.height)
+                assertEquals(1440, panelRect.originY)
+            } else {
+                assertEquals(480, panelRect.width)
+                assertEquals(0, panelRect.originX)
+            }
+        }
+    }
+
+    private fun dragPanel(delta: Float, endAction: Int, startX: Float = 1f, vertical: Boolean = false) {
+        val method = activity.javaClass.getDeclaredMethod("onSidePanelTouch", View::class.java, MotionEvent::class.java)
+            .apply { isAccessible = true }
+        val startY = if (vertical) 1f else 100f
+        val x = if (vertical) startX else startX + delta
+        val y = if (vertical) startY + delta else startY
+        val down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, startX, startY, 0)
+        val move = MotionEvent.obtain(0, 1, MotionEvent.ACTION_MOVE, x, y, 0)
+        val end = MotionEvent.obtain(0, 2, endAction, x, y, 0)
+        try {
+            assertEquals(true, method.invoke(activity, panel, down))
+            assertEquals(true, method.invoke(activity, panel, move))
+            assertEquals(true, method.invoke(activity, panel, end))
+        } finally {
+            down.recycle(); move.recycle(); end.recycle()
+        }
     }
 
     private fun place(width: Int, height: Int) {

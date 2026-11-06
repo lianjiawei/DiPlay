@@ -50,6 +50,11 @@ class CarPlayHostResolutionTest {
             assertEquals("panel=$panel music=$music", panel || music, areas?.sidePanel() != null)
             assertEquals("panel=$panel music=$music", music, get("pendingMusicWindowEnabled"))
             assertEquals(panel, SidePanelSettings.enabled(activity))
+            if (areas != null) {
+                val default = areas.sidePanel()!!
+                val narrow = areas.sidePanel(share = 100)!!
+                assertEquals("narrow areas are only declared for music", music, narrow != default)
+            }
         }
     }
 

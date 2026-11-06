@@ -19,15 +19,29 @@ object SidePanelSettings {
     fun setEnabled(context: Context, enabled: Boolean) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ENABLED, enabled).apply()
 
-    /** CarPlay's share of the screen beside the panel, in sixths ([CarPlayViewAreas.SIDE_PANEL_SIXTHS]). */
-    fun sixths(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_SIXTHS, CarPlayViewAreas.DEFAULT_SIDE_PANEL_SIXTHS)
-            .takeIf { it in CarPlayViewAreas.SIDE_PANEL_SIXTHS } ?: CarPlayViewAreas.DEFAULT_SIDE_PANEL_SIXTHS
+    /** Preserve the previous sixths/twelfths preferences when adding finer music-window sizes. */
+    fun share(context: Context, music: Boolean): Int {
+        val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val legacy = preferences.getInt(KEY_SIXTHS, 4).takeIf { it in listOf(4, 3, 2) } ?: 4
+        val oldShare = preferences.getInt(KEY_TWELFTHS, legacy * 2)
+            .takeIf { it in listOf(8, 6, 4, 9, 10) }?.times(10) ?: legacy * 20
+        val saved = preferences.getInt(KEY_SHARE, oldShare)
+        val allowed = if (music) CarPlayViewAreas.MUSIC_PANEL_SHARES else CarPlayViewAreas.SIDE_PANEL_SHARES
+        return saved.takeIf { it in allowed } ?: oldShare.takeIf { it in allowed } ?: legacy * 20
+    }
 
-    fun setSixths(context: Context, sixths: Int) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_SIXTHS, sixths).apply()
+    fun setShare(context: Context, share: Int) {
+        if (share !in CarPlayViewAreas.MUSIC_PANEL_SHARES) return
+        val edit = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_SHARE, share)
+        // Keep older builds and the non-music panel on their last compatible width.
+        if (share in listOf(80, 60, 40, 90, 100)) edit.putInt(KEY_TWELFTHS, share / 10)
+        if (share in CarPlayViewAreas.SIDE_PANEL_SHARES) edit.putInt(KEY_SIXTHS, share / 20)
+        edit.apply()
+    }
 
     private const val KEY_SIXTHS = "carplay_sixths"
+    private const val KEY_TWELFTHS = "carplay_twelfths"
+    private const val KEY_SHARE = "carplay_120ths"
 }
 
 /** What a touch that starts on the side panel's pull tab turns out to be. */

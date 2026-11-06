@@ -4,6 +4,9 @@ import com.shilapi.xcertplay.CarPlayViewAreas.Kind
 import com.shilapi.xcertplay.airplay.AirPlayInfoPlist.DOCK_EDGE_BOTTOM
 import com.shilapi.xcertplay.airplay.AirPlayInfoPlist.DOCK_EDGE_DRIVER_SIDE
 import com.shilapi.xcertplay.airplay.AirPlayViewArea
+import com.shilapi.xcertplay.airplay.AirPlayConfig
+import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
+import com.shilapi.xcertplay.airplay.AirPlayInfoPlist
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -134,18 +137,78 @@ class CarPlayViewAreasTest {
     @Test
     fun theSidePanelLeavesCarPlayTwoThirdsHalfOrOneThird() {
         val areas = CarPlayViewAreas.build(2560, 1440, CarPlayDock.AUTOMATIC, splitWindow = null, sidePanel = true)!!
-        assertEquals(listOf(1706, 1280, 852), CarPlayViewAreas.SIDE_PANEL_SIXTHS.map { areas.areas[areas.sidePanel(sixths = it)!!].width })
+        assertEquals(listOf(1706, 1280, 852), CarPlayViewAreas.SIDE_PANEL_SHARES.map { areas.areas[areas.sidePanel(share = it)!!].width })
         // The panel covers the rest of the screen in each.
-        assertEquals(AirPlayViewArea(1708, 1440, 852, 0), areas.panelRect(areas.sidePanel(sixths = 2)!!))
+        assertEquals(AirPlayViewArea(1708, 1440, 852, 0), areas.panelRect(areas.sidePanel(share = 40)!!))
         // Two thirds without a choice.
-        assertEquals(areas.sidePanel(sixths = 4), areas.sidePanel())
+        assertEquals(areas.sidePanel(share = 80), areas.sidePanel())
     }
 
     @Test
     fun releasingThePanelEdgeSnapsCarPlayToTheNearestShare() {
-        assertEquals(4, CarPlayViewAreas.nearestSidePanelSixths(0.8))
-        assertEquals(3, CarPlayViewAreas.nearestSidePanelSixths(0.55))
-        assertEquals(2, CarPlayViewAreas.nearestSidePanelSixths(0.2))
+        assertEquals(80, CarPlayViewAreas.nearestSidePanelShare(0.8, music = false))
+        assertEquals(60, CarPlayViewAreas.nearestSidePanelShare(0.55, music = false))
+        assertEquals(40, CarPlayViewAreas.nearestSidePanelShare(0.2, music = false))
+        assertEquals(90, CarPlayViewAreas.nearestSidePanelShare(0.75, music = true))
+        assertEquals(100, CarPlayViewAreas.nearestSidePanelShare(0.84, music = true))
+        assertEquals(105, CarPlayViewAreas.nearestSidePanelShare(0.875, music = true))
+        assertEquals(96, CarPlayViewAreas.nearestSidePanelShare(0.8, music = true))
+        assertEquals(93, CarPlayViewAreas.nearestSidePanelShare(0.775, music = true))
+        assertEquals(87, CarPlayViewAreas.nearestSidePanelShare(0.725, music = true))
+        assertEquals(84, CarPlayViewAreas.nearestSidePanelShare(0.7, music = true))
+        assertEquals(72, CarPlayViewAreas.nearestSidePanelShare(0.6, music = true))
+        // Both sides of the midpoint between the 20% and 22.5% widths.
+        assertEquals(96, CarPlayViewAreas.nearestSidePanelShare(0.788, music = true))
+        assertEquals(93, CarPlayViewAreas.nearestSidePanelShare(0.787, music = true))
+    }
+
+    @Test fun musicPanelAddsFinerWidthsAndKeepsTheDockOnTheSameSize() {
+        for (rightHandDrive in listOf(false, true)) {
+            val areas = CarPlayViewAreas.build(1920, 1080, CarPlayDock.DRIVER_SIDE, splitWindow = null,
+                sidePanel = true, rightHandDrive = rightHandDrive, narrowMusicPanel = true)!!
+            for ((share, width) in listOf(105 to 240, 100 to 320, 96 to 384, 93 to 432, 90 to 480,
+                87 to 528, 84 to 576, 80 to 640, 72 to 768, 60 to 960, 40 to 1280)) {
+                val selected = areas.sidePanel(share = share)!!
+                val panel = areas.panelRect(selected)!!
+                assertEquals(width, panel.width)
+                assertEquals(if (rightHandDrive) 0 else 1920 - width, panel.originX)
+                assertEquals(1080, panel.height)
+                areas.use(selected)
+                val moved = areas.withDock(DOCK_EDGE_BOTTOM)!!
+                assertEquals(panel, areas.panelRect(moved))
+                assertEquals(DOCK_EDGE_BOTTOM, areas.areas[moved].dockEdge)
+            }
+        }
+    }
+
+    @Test fun narrowMusicPanelAlsoWorksOnAPortraitScreen() {
+        val areas = CarPlayViewAreas.build(1080, 1920, CarPlayDock.AUTOMATIC, splitWindow = null,
+            sidePanel = true, narrowMusicPanel = true)!!
+        assertEquals(AirPlayViewArea(1080, 480, 0, 1440), areas.panelRect(areas.sidePanel(share = 90)!!))
+        assertEquals(AirPlayViewArea(1080, 320, 0, 1600), areas.panelRect(areas.sidePanel(share = 100)!!))
+        assertEquals(AirPlayViewArea(1080, 384, 0, 1536), areas.panelRect(areas.sidePanel(share = 96)!!))
+        assertEquals(AirPlayViewArea(1080, 240, 0, 1680), areas.panelRect(areas.sidePanel(share = 105)!!))
+    }
+
+    @Test fun narrowMusicAreasAreAdvertisedAndSelectedInTheCarPlayCommands() {
+        val areas = CarPlayViewAreas.build(1920, 1080, CarPlayDock.AUTOMATIC, splitWindow = null,
+            sidePanel = true, narrowMusicPanel = true)!!
+        val info = AirPlayInfoPlist.build(AirPlayConfig(deviceName = "test", deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02", sourceVersion = "366.0", main = AirPlayDisplayConfig(
+                widthPixels = 1920, heightPixels = 1080, viewAreas = areas.areas, initialViewArea = areas.current)))
+        val display = (info["displays"] as List<*>).first() as Map<*, *>
+        val declared = (display["viewAreas"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf(1920, 1280, 960, 640, 1440, 1600, 1680, 1536, 1488, 1392, 1344, 1152),
+            declared.map { it["widthPixels"] })
+        for ((share, expectedWidth) in listOf(90 to 1440, 100 to 1600, 105 to 1680, 96 to 1536,
+            93 to 1488, 87 to 1392, 84 to 1344, 72 to 1152)) {
+            val index = areas.sidePanel(share = share)!!
+            val command = AirPlayInfoPlist.viewAreaCommand(index, areas.areas.size)
+            val params = command["params"] as Map<*, *>
+            assertEquals(expectedWidth, declared[index]["widthPixels"])
+            assertEquals(index, params["viewAreaIndex"])
+            assertEquals((declared.indices - index).toList(), params["adjacentViewAreas"])
+        }
     }
 
     @Test
