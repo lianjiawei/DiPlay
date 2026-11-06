@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Shader
 import android.os.SystemClock
@@ -45,21 +46,41 @@ class MusicWindowScreenshotsTest {
     fun lincolnTwoLineLyric() = capture("lincoln-two-line-lyric", 640, 1080,
         title = "等风吹过长街\n再一起回家", expectedLines = 2)
 
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h1080dp-land-xhdpi")
+    fun lincolnQuarterWidth() = capture("lincoln-quarter-width", 480, 1080)
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h1080dp-land-xhdpi")
+    fun lincolnNarrowTwoLineLyric() = capture("lincoln-narrow-two-line-lyric", 320, 1080,
+        title = "等风吹过长街\n再一起回家", scaleStep = 5, expectedLines = 2)
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h1080dp-land-xhdpi")
+    fun lincolnFineWidth() = capture("lincoln-fine-width", 384, 1080)
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h1080dp-land-xhdpi")
+    fun lincolnNarrowestTwoLineLyric() = capture("lincoln-narrowest-two-line-lyric", 240, 1080,
+        title = "等风吹过\n再一起回家", scaleStep = 5, expectedLines = 2)
+
+    @Test @Config(qualifiers = "zh-rCN-w600dp-h1200dp-port-xhdpi")
+    fun portraitNarrowestTwoLineLyric() = capture("portrait-narrowest-two-line-lyric", 1080, 240,
+        title = "等风吹过\n再一起回家", scaleStep = 5, expectedLines = 2)
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h1080dp-land-xhdpi")
+    fun lincolnGlassOnBrightCover() = capture("lincoln-glass-bright-cover", 480, 1080, brightCover = true)
+
+    @Test @Config(qualifiers = "zh-rCN-w1920dp-h1080dp-land-xhdpi")
+    fun lincolnGlassWithoutCover() = capture("lincoln-glass-no-cover", 320, 1080, hasCover = false)
+
     @Test @Config(qualifiers = "zh-rCN-w320dp-h600dp-port-xhdpi")
     fun compactTwoLineLyricWithLargestText() = capture("compact-two-line-lyric-large", 320, 480,
         title = "等风吹过长街\n再一起回家", scaleStep = 5, expectedLines = 2)
 
     private fun capture(name: String, width: Int, height: Int, title: String = "夜空中最亮的星",
-        scaleStep: Int = 2, expectedLines: Int? = null) {
+        scaleStep: Int = 2, expectedLines: Int? = null, brightCover: Boolean = false, hasCover: Boolean = true) {
         RuntimeEnvironment.setFontScale(1.3f)
         MusicWindowSettings.setTextScaleStep(RuntimeEnvironment.getApplication(), scaleStep)
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val window = CarPlayMusicWindow(controller.get())
-        val cover = Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888)
-        Canvas(cover).drawRect(0f, 0f, 240f, 240f, Paint().apply {
-            shader = LinearGradient(0f, 0f, 240f, 240f, Color.rgb(30, 92, 148),
-                Color.rgb(160, 66, 90), Shader.TileMode.CLAMP)
-        })
+        val cover = albumCover(brightCover)
         val song = CarPlayNowPlaying(title = title, artist = "逃跑计划", album = "世界",
             durationMillis = 240_000, elapsedMillis = 45_000, playing = true)
         try {
@@ -67,7 +88,7 @@ class MusicWindowScreenshotsTest {
             CarPlayMediaKeys::class.java.getDeclaredField("nowPlaying").apply { isAccessible = true }.set(CarPlayMediaKeys, song)
             CarPlayMediaKeys::class.java.getDeclaredField("elapsedUpdatedAt").apply { isAccessible = true }
                 .set(CarPlayMediaKeys, SystemClock.elapsedRealtime())
-            ClusterMusicState.publish(song, cover)
+            ClusterMusicState.publish(song, cover.takeIf { hasCover })
             ShadowLooper.idleMainLooper()
             window.refreshPlayState()
             repeat(3) {
@@ -76,10 +97,13 @@ class MusicWindowScreenshotsTest {
                 window.layout(0, 0, width, height)
                 ShadowLooper.idleMainLooper()
             }
-            repeat(100) {
-                if (window.backdropView != null) return@repeat
-                Thread.sleep(5)
-                ShadowLooper.idleMainLooper()
+            if (hasCover) {
+                repeat(100) {
+                    if (window.backdropView != null) return@repeat
+                    Thread.sleep(5)
+                    ShadowLooper.idleMainLooper()
+                }
+                assertTrue("album backdrop should be ready", window.backdropView != null)
             }
             assertTrue("cover should fit", window.coverView.width in 1..width && window.coverView.height <= height)
             assertTrue("transport controls should fit", window.transportView.bottom <= height)
@@ -120,5 +144,37 @@ class MusicWindowScreenshotsTest {
             RuntimeEnvironment.setFontScale(1f)
             MusicWindowSettings.setTextScaleStep(RuntimeEnvironment.getApplication(), 2)
         }
+    }
+
+    /** A drawn mountain cover exercises the glass with light and dark album colours without external assets. */
+    private fun albumCover(bright: Boolean): Bitmap {
+        val cover = Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(cover)
+        // Robolectric's software Canvas does not apply the ImageView's hardware outline clip.
+        // Give the synthetic cover the same 6% rounded corners the real view uses.
+        canvas.save()
+        canvas.clipPath(Path().apply { addRoundRect(0f, 0f, 240f, 240f, 14.4f, 14.4f, Path.Direction.CW) })
+        val sky = if (bright) Color.WHITE else Color.rgb(198, 231, 230)
+        val horizon = if (bright) Color.rgb(236, 244, 241) else Color.rgb(91, 160, 172)
+        canvas.drawRect(0f, 0f, 240f, 240f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(0f, 0f, 0f, 240f, sky, horizon, Shader.TileMode.CLAMP)
+        })
+        fun mountain(color: Int, points: List<Pair<Float, Float>>) {
+            val path = Path().apply {
+                moveTo(0f, 240f)
+                points.forEach { (x, y) -> lineTo(x, y) }
+                lineTo(240f, 240f)
+                close()
+            }
+            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color })
+        }
+        mountain(if (bright) Color.rgb(222, 234, 232) else Color.rgb(112, 170, 176),
+            listOf(0f to 177f, 72f to 97f, 125f to 145f, 173f to 81f, 240f to 164f))
+        mountain(if (bright) Color.rgb(201, 216, 215) else Color.rgb(49, 109, 119),
+            listOf(0f to 194f, 47f to 149f, 97f to 179f, 155f to 115f, 240f to 190f))
+        mountain(if (bright) Color.rgb(181, 201, 199) else Color.rgb(22, 61, 70),
+            listOf(0f to 218f, 55f to 188f, 105f to 211f, 176f to 171f, 240f to 212f))
+        canvas.restore()
+        return cover
     }
 }

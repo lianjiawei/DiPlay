@@ -12,6 +12,7 @@ import android.transition.Transition
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.core.graphics.ColorUtils
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
 import com.shilapi.xcertplay.host.R
 import java.util.concurrent.ExecutorService
@@ -330,7 +331,7 @@ class MusicWindowLayoutTest {
     }
 
     @Test fun twoLineLyricsReflowWithoutOverlappingAndReturnToTheShortLineLayout() {
-        for ((width, height) in listOf(640 to 1080, 320 to 480, 1080 to 480)) {
+        for ((width, height) in listOf(640 to 1080, 480 to 1080, 320 to 1080, 320 to 480, 1080 to 480, 1080 to 240)) {
             for (step in listOf(2, 5)) {
                 MusicWindowSettings.setTextScaleStep(RuntimeEnvironment.getApplication(), step)
                 val window = window(width, height)
@@ -367,6 +368,31 @@ class MusicWindowLayoutTest {
                 publish("星光")
                 assertEquals("$label cover did not return after the lyric changed", coverBefore, bounds(window.coverView))
                 assertEquals("$label controls did not return after the lyric changed", keysBefore, bounds(window.transportView))
+            }
+        }
+    }
+
+    @Test fun tallNarrowWindowsUseTheAvailableHeightWithoutClipping() {
+        RuntimeEnvironment.setQualifiers("+xhdpi")
+        for (width in listOf(240, 320, 384, 480, 640)) {
+            for (step in 1..5) {
+                MusicWindowSettings.setTextScaleStep(RuntimeEnvironment.getApplication(), step)
+                val window = window(width, 1080)
+                fun bounds(view: View) = Rect(0, 0, view.width, view.height).also {
+                    window.offsetDescendantRectToMyCoords(view, it)
+                }
+                val cover = bounds(window.coverView)
+                val text = bounds(window.titleTextView)
+                val progress = bounds(window.progressView)
+                val keys = bounds(window.transportView)
+                val label = "width=$width step=$step"
+                assertTrue("$label cover should use the upper part", cover.top < 1080 * 0.30)
+                assertTrue("$label controls should use the lower part", keys.bottom > 1080 * 0.70)
+                assertTrue("$label cover/title overlap", cover.bottom <= text.top)
+                assertTrue("$label text/progress overlap", text.bottom <= progress.top)
+                assertTrue("$label progress/controls overlap", progress.bottom <= keys.top)
+                assertTrue("$label controls cut off", keys.bottom <= 1080)
+                assertKeysWhole(window, label, 1080)
             }
         }
     }
@@ -471,6 +497,35 @@ class MusicWindowLayoutTest {
         assertTrue("backdrop is ${backdrop!!.width} wide", backdrop.width in 120..320)
         assertTrue("backdrop is ${backdrop.width}x${backdrop.height}", backdrop.height in 40..400)
         assertTrue("bitmap was recycled", !backdrop.isRecycled)
+    }
+
+    @Test fun brightArtworkKeepsTheSongAndPerformerReadableInTheGlass() {
+        RuntimeEnvironment.setQualifiers("+xhdpi")
+        for ((width, height) in listOf(240 to 1080, 320 to 1080, 384 to 1080, 480 to 1080, 640 to 1080, 1080 to 480, 1080 to 240)) {
+            for (step in listOf(2, 5)) {
+                MusicWindowSettings.setTextScaleStep(RuntimeEnvironment.getApplication(), step)
+                val cover = Bitmap.createBitmap(120, 120, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
+                val window = window(width, height, cover = cover)
+                assertNotNull(awaitBackdrop(window))
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                try {
+                    window.draw(Canvas(bitmap))
+                    for ((label, view, minimum) in listOf(
+                        Triple("title", window.titleTextView, 4.5),
+                        Triple("performer", window.metaTextView, 3.0),
+                    )) {
+                        val bounds = Rect(0, 0, view.width, view.height).also {
+                            window.offsetDescendantRectToMyCoords(view, it)
+                        }
+                        // Outside the cover and text glyphs, on the same row; the white input is uniform.
+                        val sampleX = if (window.contentOrientation == LinearLayout.HORIZONTAL) width - 8 else 8
+                        val background = bitmap.getPixel(sampleX, bounds.centerY())
+                        val contrast = ColorUtils.calculateContrast(view.currentTextColor, background)
+                        assertTrue("${width}x$height step=$step $label contrast=$contrast", contrast >= minimum)
+                    }
+                } finally { bitmap.recycle() }
+            }
+        }
     }
 
     @Test fun lateBackdropWorkCannotRestoreAnOldCoverOrDetachedWindow() {
@@ -697,7 +752,7 @@ class MusicWindowLayoutTest {
 
     @Test fun spacedControlsStayInsideNarrowAndWideStripsAtEveryTextSize() {
         RuntimeEnvironment.setQualifiers("+xhdpi")
-        for ((width, height) in listOf(320 to 480, 640 to 1080, 1080 to 480)) {
+        for ((width, height) in listOf(240 to 1080, 320 to 480, 320 to 1080, 384 to 1080, 480 to 1080, 640 to 1080, 1080 to 480, 1080 to 240)) {
             for (step in 1..5) {
                 MusicWindowSettings.setTextScaleStep(RuntimeEnvironment.getApplication(), step)
                 val window = window(width, height)

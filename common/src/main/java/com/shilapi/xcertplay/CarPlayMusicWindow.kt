@@ -56,8 +56,8 @@ import kotlin.math.roundToInt
  *    parts really measure. The cover then takes the rest. The keys used to be given a row from a weight
  *    and a size from the block's height, so the play key came out taller than its row and the card cut its
  *    bottom off; a row is now never shorter than the key inside it.
- *  - a strip too small for this shrinks the type until it fits, rather than clipping anything: the card
- *    gets smaller and stays centred, in both directions.
+ *  - a strip too small for this shrinks the type until it fits, rather than clipping anything. A tall
+ *    strip distributes some of its spare height between the cover, progress line and controls.
  *  - the text size is bound to the block: pressing the size button makes the fonts grow, and the block
  *    grows with them because it is the sum of those fonts. Every size is in pixels: the strip is a few
  *    hundred pixels wide on the head unit, and a pixel value read as sp was multiplied by the car's font
@@ -70,6 +70,10 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
     private val card = LinearLayout(context)
     private val artworkFrame = FrameLayout(context)
     private val artwork = ImageView(context)
+    private val artworkRim = GradientDrawable().apply {
+        setColor(Color.TRANSPARENT)
+        setStroke(dp(1).coerceAtLeast(1), ART_RIM)
+    }
     private val titleView = TextView(context)
     /** The performer and the album on one line: two lines of small type said the same thing twice. */
     private val metaView = TextView(context)
@@ -131,6 +135,17 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         style = Paint.Style.FILL
         isDither = true
     }
+    private val glassLight = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        isDither = true
+    }
+    private val glassRim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = GLASS_RIM
+        strokeWidth = dp(1f)
+    }
+    private var glassWidth = 0
+    private var glassHeight = 0
     /**
      * What shows in the four corners the card's arc cuts away: the black of the screen's border. Left to
      * the page behind, those slivers took the host's light background and read as white notches bitten out
@@ -172,12 +187,16 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         artwork.scaleType = ImageView.ScaleType.CENTER_CROP
         artwork.setImageResource(R.drawable.art_now_playing_placeholder)
         artwork.clipToOutline = true
-        artwork.outlineProvider = object : ViewOutlineProvider() {
+        val coverOutline = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
                 val radius = minOf(view.width, view.height) * ART_CORNER_FRACTION
                 outline.setRoundRect(0, 0, view.width, view.height, radius)
             }
         }
+        artwork.outlineProvider = coverOutline
+        artworkFrame.outlineProvider = coverOutline
+        artworkFrame.elevation = dp(ART_ELEVATION_DP)
+        artworkFrame.foreground = artworkRim
         // The frame is the cover's square, so the image simply fills it: no second layout pass to wait for.
         artworkFrame.addView(artwork, FrameLayout.LayoutParams(0, 0, Gravity.CENTER))
         card.addView(artworkFrame, LinearLayout.LayoutParams(0, 0))
@@ -360,8 +379,7 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         val minCover = (minOf(innerWidth, innerHeight) * MIN_COVER_SHARE).toInt().coerceAtLeast(dp(20))
 
         card.orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        // Both axes: a card smaller than the strip (a small text size, or a strip that forced a shrink)
-        // must sit in its middle.
+        // Keep the overall composition balanced around the strip's center.
         card.gravity = Gravity.CENTER
 
         var scale = textScale
@@ -386,13 +404,24 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         }
         val sideInset = (plan.blockWidth * TEXT_SIDE_INSET).toInt().coerceAtLeast(dp(2))
 
+        // A narrow panel can be much taller than its square cover. Spend part of the free height
+        // between the cover, progress and controls while keeping the top and bottom balanced. Tight
+        // and horizontal panels keep their existing fit; no extra space is taken from the content.
+        val spare = if (wide) 0 else (innerHeight - cover - gap - plan.blockHeight).coerceAtLeast(0)
+        val spread = minOf((spare * VERTICAL_SPARE_SHARE).roundToInt(),
+            (innerHeight * VERTICAL_SPREAD_LIMIT).roundToInt())
+        val coverSpacing = (spread * COVER_SPACING_SHARE).roundToInt()
+        val progressSpacing = (spread * PROGRESS_SPACING_SHARE).roundToInt()
+        val keySpacing = spread - coverSpacing - progressSpacing
+
         artworkFrame.layoutParams = LinearLayout.LayoutParams(cover, cover).apply {
             marginEnd = if (wide) gap else 0
         }
         artwork.layoutParams = FrameLayout.LayoutParams(cover, cover, Gravity.CENTER)
-        infoColumn.layoutParams = LinearLayout.LayoutParams(plan.blockWidth, plan.blockHeight).apply {
+        artworkRim.cornerRadius = cover * ART_CORNER_FRACTION
+        infoColumn.layoutParams = LinearLayout.LayoutParams(plan.blockWidth, plan.blockHeight + progressSpacing + keySpacing).apply {
             gravity = Gravity.CENTER
-            topMargin = if (wide) 0 else gap
+            topMargin = if (wide) 0 else gap + coverSpacing
         }
         infoColumn.setPadding(sideInset, 0, sideInset, 0)
 
@@ -403,11 +432,11 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
             topMargin = if (plan.metaHeight > 0) plan.lineGap else 0
         }
         progressLine.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, plan.progressHeight).apply {
-            topMargin = plan.progressGap
+            topMargin = plan.progressGap + progressSpacing
         }
         // The keys row is exactly as tall as the largest key: a row shorter than its key clipped the key.
         controls.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, plan.keyRow).apply {
-            topMargin = plan.keysGap
+            topMargin = plan.keysGap + keySpacing
         }
 
         // Separate the buttons visibly while keeping all three inside even a narrow side strip.
@@ -546,7 +575,7 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         invalidate()
     }
 
-    /** Draws the frosted album, then the dark scrim that keeps white text readable over any cover. */
+    /** Draws the blurred album behind a shaded, gently lit glass surface. */
     override fun dispatchDraw(canvas: Canvas) {
         val right = width.toFloat()
         val bottom = height.toFloat()
@@ -577,10 +606,28 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
             }
             canvas.drawRoundRect(0f, 0f, right, bottom, radius, radius, backdropPaint)
             canvas.drawRoundRect(0f, 0f, right, bottom, radius, radius, scrimFor(bottom.toInt()))
+            canvas.drawRoundRect(0f, 0f, right, bottom, radius, radius, glassLightFor(right.toInt(), bottom.toInt()))
+            val inset = glassRim.strokeWidth / 2f
+            if (right > inset * 2f && bottom > inset * 2f) {
+                val rimRadius = (radius - inset).coerceAtLeast(0f)
+                canvas.drawRoundRect(inset, inset, right - inset, bottom - inset, rimRadius, rimRadius, glassRim)
+            }
             drawGrip(canvas, right.toInt(), bottom.toInt())
             canvas.restore()
         }
         super.dispatchDraw(canvas)
+    }
+
+    /** The soft reflection is calculated for the panel size, not on each frame. */
+    private fun glassLightFor(width: Int, height: Int): Paint {
+        if (width != glassWidth || height != glassHeight) {
+            glassWidth = width
+            glassHeight = height
+            glassLight.shader = LinearGradient(0f, 0f, width.toFloat(), height.toFloat(),
+                intArrayOf(GLASS_LIGHT_TOP, GLASS_LIGHT_MIDDLE, GLASS_LIGHT_BOTTOM),
+                floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+        }
+        return glassLight
     }
 
     /**
@@ -797,7 +844,11 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         ColorStateList.valueOf(palette.ripple),
         GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(fill)
+            if (fill == Color.WHITE) setColor(fill) else {
+                orientation = GradientDrawable.Orientation.TOP_BOTTOM
+                colors = intArrayOf(KEY_LIGHT_TOP, KEY_LIGHT_BOTTOM)
+                setStroke(dp(1).coerceAtLeast(1), KEY_RIM)
+            }
         },
         null,
     )
@@ -853,8 +904,14 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
         private const val REFLOW_MILLIS = 180L
         private const val OPTIMISTIC_MILLIS = 1_500L
         private const val ART_CORNER_FRACTION = 0.06f
+        private const val ART_ELEVATION_DP = 5f
+        private const val ART_RIM = 0x55FFFFFF
         private const val PADDING_FRACTION = 0.05f
         private const val GAP_FRACTION = 0.05f
+        private const val VERTICAL_SPARE_SHARE = 0.35f
+        private const val VERTICAL_SPREAD_LIMIT = 0.22f
+        private const val COVER_SPACING_SHARE = 0.35f
+        private const val PROGRESS_SPACING_SHARE = 0.25f
 
         /** The title's size as a share of the width the lines get, and the line under it against that. */
         private const val TITLE_WIDTH_SHARE = 0.062f
@@ -915,14 +972,21 @@ internal class CarPlayMusicWindow(context: Context) : FrameLayout(context) {
 
         /** The backdrop is always dark: the card is CarPlay's, whatever the settings theme is. */
         private const val SCRIM_TOP = 0x33000000
-        private const val SCRIM_MIDDLE = 0x59000000
-        private const val SCRIM_BOTTOM = 0xB3000000.toInt()
+        private const val SCRIM_MIDDLE = 0x98000000.toInt()
+        private const val SCRIM_BOTTOM = 0xCC000000.toInt()
         private const val WIDE_SCRIM = 0xA6000000.toInt()
+        private const val GLASS_LIGHT_TOP = 0x20FFFFFF
+        private const val GLASS_LIGHT_MIDDLE = 0x06FFFFFF
+        private const val GLASS_LIGHT_BOTTOM = 0x00FFFFFF
+        private const val GLASS_RIM = 0x2EFFFFFF
         private const val TEXT_PRIMARY = Color.WHITE
-        private const val TEXT_SECONDARY = 0xFFB4BFCC.toInt()
+        private const val TEXT_SECONDARY = 0xFFDCE4EC.toInt()
         private const val PROGRESS_TRACK_ALPHA = 90
         /** The skip discs: white at a fifth strength, so they read as glass over the card. */
         private const val KEY_FILL = 0x2EFFFFFF
+        private const val KEY_LIGHT_TOP = 0x4AFFFFFF
+        private const val KEY_LIGHT_BOTTOM = 0x24FFFFFF
+        private const val KEY_RIM = 0x38FFFFFF
         /** The glyph on the play key's white disc. Dark whatever the theme, or it would vanish. */
         private const val PLAY_GLYPH = 0xFF121A15.toInt()
         private const val TEXT_SHADOW = 0xB3000000.toInt()
