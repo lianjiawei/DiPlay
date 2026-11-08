@@ -19,15 +19,21 @@ MAX_TEXT_BYTES = 4 * 1024 * 1024
 RETAIN_RELEASES = 3
 SAFE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._+-]{0,159}\Z')
 VERSION_FOLDER = re.compile(r'v[0-9][A-Za-z0-9._+-]*\Z')
+API_ASSET_URL = re.compile(r'https://api\.github\.com/repos/lianjiawei/DiPlay/releases/assets/[0-9]+\Z')
 
 
 def download(url, destination, limit):
+    api_asset = API_ASSET_URL.fullmatch(url) is not None
     request = urllib.request.Request(url, headers={'User-Agent': 'DiPlay-update-mirror/1',
-                                                  'Accept': 'application/json, */*'})
+                                                  'Accept': 'application/octet-stream' if api_asset else 'application/json, */*',
+                                                  'X-GitHub-Api-Version': '2022-11-28'})
     last_error = None
     for attempt in range(3):
         try:
             with urllib.request.urlopen(request, timeout=30) as response, destination.open('wb') as output:
+                # An API JSON metadata response is not the requested binary asset.
+                if api_asset and response.headers.get_content_type() == 'application/json':
+                    raise OSError('GitHub asset API returned metadata instead of the file')
                 size = 0
                 while chunk := response.read(65536):
                     size += len(chunk)
@@ -49,6 +55,19 @@ def asset_url(asset):
             '/lianjiawei/DiPlay/releases/download/'):
         raise ValueError('Unexpected release asset origin')
     return url
+
+
+def fetch_asset(asset, destination, limit, fetch):
+    browser_url = asset_url(asset)
+    api_url = asset.get('url', '')
+    if isinstance(api_url, str) and API_ASSET_URL.fullmatch(api_url):
+        try:
+            fetch(api_url, destination, limit)
+            return
+        except (OSError, TimeoutError):
+            # Some networks can reach github.com while api.github.com is unavailable.
+            pass
+    fetch(browser_url, destination, limit)
 
 
 def sha256(path):
@@ -85,7 +104,7 @@ def sync(destination, public_base, fetch=download):
             folder = destination / 'assets' / tag
             folder.mkdir(parents=True, exist_ok=True)
             checksum_file = temporary / CHECKSUMS
-            fetch(asset_url(checksums), checksum_file, MAX_TEXT_BYTES)
+            fetch_asset(checksums, checksum_file, MAX_TEXT_BYTES, fetch)
             expected = {}
             for line in checksum_file.read_text().splitlines():
                 match = re.fullmatch(r'([0-9a-fA-F]{64})\s+\*?(.+)', line)
@@ -102,7 +121,7 @@ def sync(destination, public_base, fetch=download):
                     if shutil.disk_usage(destination).free < MAX_APK_BYTES + 128 * 1024 * 1024:
                         raise OSError('Insufficient free space for update staging')
                     staged = temporary / name
-                    fetch(asset_url(asset), staged, MAX_APK_BYTES)
+                    fetch_asset(asset, staged, MAX_APK_BYTES, fetch)
                     if sha256(staged) != digest:
                         raise ValueError(f'Checksum mismatch: {tag}/{name}')
                     os.chmod(staged, 0o644)

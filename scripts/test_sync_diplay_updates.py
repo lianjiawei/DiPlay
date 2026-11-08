@@ -1,9 +1,11 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
-from sync_diplay_updates import sync, RELEASES_URL, CHECKSUMS
+from unittest.mock import patch
+from sync_diplay_updates import sync, download, RELEASES_URL, CHECKSUMS
 
 
 class SyncUpdatesTest(unittest.TestCase):
@@ -37,6 +39,66 @@ class SyncUpdatesTest(unittest.TestCase):
         self.assertTrue(all(a['browser_download_url'].startswith(self.base + '/assets/v1.1.6/')
                             for a in catalog[0]['assets']))
         self.assertEqual(self.apk, (self.root / 'assets/v1.1.6/CarPlay-1.1.6.apk').read_bytes())
+
+    def add_api_asset_urls(self):
+        releases = json.loads(self.responses[RELEASES_URL])
+        apk_api = 'https://api.github.com/repos/lianjiawei/DiPlay/releases/assets/101'
+        sums_api = 'https://api.github.com/repos/lianjiawei/DiPlay/releases/assets/102'
+        releases[0]['assets'][0]['url'] = apk_api
+        releases[0]['assets'][1]['url'] = sums_api
+        self.responses[RELEASES_URL] = json.dumps(releases).encode()
+        self.responses[apk_api] = self.responses[self.apk_url]
+        self.responses[sums_api] = self.responses[self.sums_url]
+        return apk_api, sums_api
+
+    def test_downloads_public_assets_via_api_when_github_site_is_unreachable(self):
+        apk_api, sums_api = self.add_api_asset_urls()
+        self.assertEqual(1, sync(self.root, self.base, self.fetch))
+        self.assertIn(apk_api, self.requests)
+        self.assertIn(sums_api, self.requests)
+        self.assertNotIn(self.apk_url, self.requests)
+        self.assertNotIn(self.sums_url, self.requests)
+        self.assertEqual(self.apk, (self.root / 'assets/v1.1.6/CarPlay-1.1.6.apk').read_bytes())
+
+    def test_falls_back_to_browser_url_if_api_asset_is_unavailable(self):
+        apk_api, sums_api = self.add_api_asset_urls()
+        def offline_api(url, path, limit):
+            if url in (apk_api, sums_api):
+                self.requests.append(url)
+                raise OSError('API unavailable')
+            return self.fetch(url, path, limit)
+        self.assertEqual(1, sync(self.root, self.base, offline_api))
+        self.assertIn(self.apk_url, self.requests)
+        self.assertIn(self.sums_url, self.requests)
+
+    def test_untrusted_api_url_is_never_requested(self):
+        releases = json.loads(self.responses[RELEASES_URL])
+        releases[0]['assets'][0]['url'] = 'https://attacker.example/releases/assets/101'
+        self.responses[RELEASES_URL] = json.dumps(releases).encode()
+        self.assertEqual(1, sync(self.root, self.base, self.fetch))
+        self.assertIn(self.apk_url, self.requests)
+        self.assertTrue(all(not url.startswith('https://attacker.example/') for url in self.requests))
+
+    def test_api_checksum_mismatch_preserves_the_existing_catalog(self):
+        sync(self.root, self.base, self.fetch)
+        previous = (self.root / 'releases.json').read_bytes()
+        (self.root / 'assets/v1.1.6/CarPlay-1.1.6.apk').unlink()
+        apk_api, _ = self.add_api_asset_urls()
+        self.responses[apk_api] = b'tampered apk'
+        with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
+            sync(self.root, self.base, self.fetch)
+        self.assertEqual(previous, (self.root / 'releases.json').read_bytes())
+
+    def test_api_request_asks_for_binary_and_rejects_metadata(self):
+        api_url = 'https://api.github.com/repos/lianjiawei/DiPlay/releases/assets/102'
+        class Response(io.BytesIO):
+            headers = type('Headers', (), {'get_content_type': lambda self: 'application/json'})()
+        def metadata(request, timeout):
+            self.assertEqual('application/octet-stream', request.get_header('Accept'))
+            return Response(b'{"name":"SHA256SUMS.txt"}')
+        with patch('sync_diplay_updates.urllib.request.urlopen', metadata), patch('sync_diplay_updates.time.sleep'):
+            with self.assertRaisesRegex(OSError, 'metadata instead of the file'):
+                download(api_url, self.root / 'result', 1024)
 
     def test_bad_apk_preserves_the_previous_catalog(self):
         old = '[{"tag_name":"v1.1.3"}]'
