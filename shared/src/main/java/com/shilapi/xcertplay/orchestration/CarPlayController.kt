@@ -2422,6 +2422,17 @@ class CarPlayController(
             onStatus(CarPlayStatus.RunningControl)
             wiredSessionActive = activeSession != null
             wiredStartSentAtNanos = null
+            fun resendDecision(opened: Long?): Iap2WiredControlClient.StartAgain {
+                val sent = wiredStartSentAtNanos ?: return Iap2WiredControlClient.StartAgain.DONE
+                return WiredStartAgain.decide(
+                    nowNanos = System.nanoTime(),
+                    startSentAtNanos = sent,
+                    linkOpenedAtNanos = opened,
+                    sessionActive = closed || wiredSessionActive,
+                    connectionAttemptSinceLinkOpened =
+                        opened != null && ncm.connectionAttemptSince(endpoint.airPlayPort, opened),
+                )
+            }
             lateinit var startWatchdog: WiredStartWatchdog
             startWatchdog = WiredStartWatchdog(
                 schedule = { delay, action ->
@@ -2435,16 +2446,20 @@ class CarPlayController(
                     cancel
                 },
                 onTimeout = {
-                    if (!closed && wiredStartWatchdog === startWatchdog) {
+                    if (!closed && !wiredSessionActive && wiredStartWatchdog === startWatchdog) {
+                        val elapsed = wiredStartSentAtNanos?.let(::elapsedMillis)
                         connectionDiagnostic(
-                            "wired start: no AirPlay session " +
-                                "${WiredStartWatchdog.TIMEOUT_MILLIS / 1000} s after carplay-start-session; " +
+                            "wired start: no AirPlay session elapsedMs=$elapsed after carplay-start-session; " +
                                 "NCM ${ncm.trafficSummary(endpoint.airPlayPort)}",
                         )
                         fail(IphoneUsbException.TimedOut(
                             "The iPhone did not open CarPlay over USB in time",
                         ))
                     }
+                },
+                lateLinkAwaitingResend = {
+                    val opened = ncm.linkOpenedAtNanos
+                    opened != null && resendDecision(opened) != Iap2WiredControlClient.StartAgain.DONE
                 },
             )
             wiredStartWatchdog = startWatchdog
@@ -2477,17 +2492,7 @@ class CarPlayController(
                     }
                     debugLog("wired $message")
                 },
-                startSessionAgain = {
-                    val opened = ncm.linkOpenedAtNanos
-                    WiredStartAgain.decide(
-                        nowNanos = System.nanoTime(),
-                        startSentAtNanos = wiredStartSentAtNanos ?: System.nanoTime(),
-                        linkOpenedAtNanos = opened,
-                        sessionActive = closed || wiredSessionActive,
-                        connectionAttemptSinceLinkOpened =
-                            opened != null && ncm.connectionAttemptSince(endpoint.airPlayPort, opened),
-                    )
-                },
+                startSessionAgain = { resendDecision(ncm.linkOpenedAtNanos) },
             )
             onStatus(
                 when (result.terminal) {

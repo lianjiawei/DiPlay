@@ -11,10 +11,12 @@ internal class WiredStartWatchdog(
     private val schedule: (Long, () -> Unit) -> (() -> Unit),
     private val onTimeout: () -> Unit,
     private val timeoutMillis: Long = TIMEOUT_MILLIS,
+    private val lateLinkAwaitingResend: () -> Boolean = { false },
 ) {
     private var armed = false
     private var finished = false
     private var rearmed = false
+    private var grantedResendGrace = false
     // The limit in force; a replaced timer that runs anyway finds a newer one and does nothing.
     private var generation = 0
     private var cancelTimer: (() -> Unit)? = null
@@ -44,14 +46,19 @@ internal class WiredStartWatchdog(
         cancel()
     }
 
-    private fun arm() {
+    private fun arm(delayMillis: Long = timeoutMillis) {
         val armedGeneration = ++generation
-        cancelTimer = schedule(timeoutMillis) { expire(armedGeneration) }
+        cancelTimer = schedule(delayMillis) { expire(armedGeneration) }
     }
 
     private fun expire(armedGeneration: Int) {
         synchronized(this) {
             if (finished || armedGeneration != generation) return
+            if (!rearmed && !grantedResendGrace && lateLinkAwaitingResend()) {
+                grantedResendGrace = true
+                arm(RESEND_GRACE_MILLIS)
+                return
+            }
             finished = true
             cancelTimer = null
         }
@@ -66,5 +73,7 @@ internal class WiredStartWatchdog(
     companion object {
         /** The same limit as the wireless first connection. */
         const val TIMEOUT_MILLIS = 30_000L
+        // Allow the 2 s quiet interval plus time for the control loop's 500 ms poll and dispatch.
+        const val RESEND_GRACE_MILLIS = WiredStartAgain.QUIET_MILLIS + 1_000L
     }
 }

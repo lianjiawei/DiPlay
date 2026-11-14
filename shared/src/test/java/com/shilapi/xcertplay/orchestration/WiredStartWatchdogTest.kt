@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.orchestration
 
+import com.shilapi.xcertplay.transport.Iap2WiredControlClient.StartAgain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -10,7 +11,7 @@ class WiredStartWatchdogTest {
     private var cancelled = 0
     private var timeouts = 0
 
-    private fun watchdog() = WiredStartWatchdog(
+    private fun watchdog(lateLinkAwaitingResend: () -> Boolean = { false }) = WiredStartWatchdog(
         schedule = { delayMillis, action ->
             delay = delayMillis
             timer = action
@@ -18,6 +19,7 @@ class WiredStartWatchdogTest {
             cancel
         },
         onTimeout = { timeouts++ },
+        lateLinkAwaitingResend = lateLinkAwaitingResend,
     )
 
     @Test fun nothingIsTimedBeforeTheStartRequest() {
@@ -42,6 +44,48 @@ class WiredStartWatchdogTest {
         watch.startSessionSent()
         assertEquals(first, timer)
         assertEquals(0, cancelled)
+    }
+
+    @Test fun linkOpeningAt29SecondsGetsItsQuietIntervalAndOneResend() {
+        val second = 1_000_000_000L
+        var now = 30 * second
+        fun decision() = WiredStartAgain.decide(now, 0, 29 * second, false, false)
+        val watch = watchdog { decision() != StartAgain.DONE }
+        watch.startSessionSent()
+        val first = timer!!
+        first()
+        val grace = timer!!
+        assertEquals(WiredStartWatchdog.RESEND_GRACE_MILLIS, delay)
+        now = 31 * second
+        assertEquals(StartAgain.SEND, decision())
+        watch.startSessionSentAgain()
+        assertEquals(WiredStartWatchdog.TIMEOUT_MILLIS, delay)
+        first()
+        grace()
+        assertEquals(0, timeouts)
+        timer!!()
+        assertEquals(1, timeouts)
+    }
+
+    @Test fun aStalledResendDoesNotExtendTheGraceTwice() {
+        val watch = watchdog { true }
+        watch.startSessionSent()
+        timer!!()
+        timer!!()
+        assertEquals(1, timeouts)
+    }
+
+    @Test fun teardownOrSuccessfulConnectionDuringGraceIgnoresLateCallbacks() {
+        for (end in listOf(WiredStartWatchdog::terminate, WiredStartWatchdog::sessionActive)) {
+            val watch = watchdog { true }
+            watch.startSessionSent()
+            timer!!()
+            val grace = timer!!
+            end(watch)
+            grace()
+            watch.startSessionSentAgain()
+            assertEquals(0, timeouts)
+        }
     }
 
     @Test fun diPlaysOwnSecondRequestGetsAFullLimitOnce() {
