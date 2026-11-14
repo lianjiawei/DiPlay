@@ -43,7 +43,7 @@ import org.robolectric.shadows.ShadowMediaCodec
  * sessions are being torn down.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30])
+@Config(sdk = [30], qualifiers = "zh-rCN")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SmoothVideoHostLifecycleTest {
     private lateinit var activity: CarPlayHostActivity
@@ -86,6 +86,7 @@ class SmoothVideoHostLifecycleTest {
         CarPlayBackgroundSession.clear()
         AirPlayPersistence.saveSmoothVideo(activity, false)
         controllerConstruction.close()
+        (getField("sessionLog") as? SessionDiagnosticLog)?.close()
     }
 
     // (1) The maintainer's sequence: Smooth video turned on, the reconnect stopped at a prerequisite, so
@@ -201,6 +202,7 @@ class SmoothVideoHostLifecycleTest {
     // (3) A shutdown while a restart's teardown is still closing must not drop the restart's sink: until
     // its decoders release their codecs it may still render to the SurfaceView being destroyed.
     @Test fun aShutdownDuringARestartKeepsTheRestartsSinkDetachable() {
+        invoke("initializeSessionLog")
         val controller = mock(CarPlayController::class.java)
         `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
         val restarting = spy(AndroidMediaSink()).also(ownedSinks::add)
@@ -221,19 +223,30 @@ class SmoothVideoHostLifecycleTest {
 
         finishTeardown()
         assertTrue("Each sink leaves once its decoders have released their codecs", retiringSinks().isEmpty())
+        val lines = releaseLog()
+        assertEquals(2, lines.size)
+        assertTrue(lines.all { "generation=1 restart videoRelease" in it })
+        assertTrue(lines.any { "waitCompleted=true elapsedMs=" in it })
+        assertTrue(lines.any { "observed elapsedMs=" in it })
     }
 
     @Test @Config(sdk = [28, 30])
     fun aTimedOutRestartKeepsItsSinkUntilTheCodecIsReleased() {
-        assertTimedOutSinkRetained { restartCarPlay("Test slow codec reconnect") }
+        assertTimedOutSinkRetained("restart") { restartCarPlay("Test slow codec reconnect") }
     }
 
     @Test @Config(sdk = [28, 30])
     fun aTimedOutShutdownKeepsItsSinkUntilTheCodecIsReleased() {
-        assertTimedOutSinkRetained { shutdown("Test slow codec exit") }
+        assertTimedOutSinkRetained("shutdown") { shutdown("Test slow codec exit") }
     }
 
-    private fun assertTimedOutSinkRetained(beginTeardown: () -> Unit) {
+    private fun releaseLog(): List<String> {
+        assertTrue(AsyncDiagnosticLog.awaitIdle(2_000))
+        return (getField("sessionLog") as SessionDiagnosticLog).file.readLines().filter { " videoRelease " in it }
+    }
+
+    private fun assertTimedOutSinkRetained(operation: String, beginTeardown: () -> Unit) {
+        invoke("initializeSessionLog")
         val codec = BlockingCodec().also(blockedCodecs::add)
         ShadowMediaCodec.addDecoder(MediaFormat.MIMETYPE_VIDEO_AVC,
             ShadowMediaCodec.CodecConfig(64 * 1024, 64 * 1024, codec))
@@ -257,6 +270,11 @@ class SmoothVideoHostLifecycleTest {
         finishTeardown()
         verify(closing).awaitVideoReleased(25)
         assertTrue("A release timeout must not forget a decoder still using the surface", closing in retiringSinks())
+        val prefix = "generation=1 $operation videoRelease"
+        val wait = releaseLog().single()
+        assertTrue(wait.contains("$prefix waitCompleted=false elapsedMs="))
+        val waitedMillis = wait.substringAfterLast("elapsedMs=").toLong()
+        assertTrue(waitedMillis >= 0)
 
         // Keep the destroy callback bounded too; its false result still has to account for this sink.
         setSinkField(closing, "detachTimeoutNanos", 25_000_000L)
@@ -269,11 +287,16 @@ class SmoothVideoHostLifecycleTest {
 
         val released = CountDownLatch(1)
         closing.whenVideoReleased { released.countDown() }
+        setField("restartGeneration", 2) // The late observation still belongs to generation 1.
         codec.release()
         assertTrue("Release observers run once the blocked codec returns", released.await(5, TimeUnit.SECONDS))
         assertTrue("The codec worker can now release its output surface", closing.awaitVideoReleased(5_000))
         assertFalse("Actual release cleans the retiring set without another UI or teardown task",
             closing in retiringSinks())
+        val lines = releaseLog()
+        assertEquals(2, lines.size)
+        val actual = lines.single { "$prefix observed elapsedMs=" in it }
+        assertTrue(actual.substringAfterLast("elapsedMs=").toLong() >= waitedMillis)
     }
 
     /** A fake native codec call that ignores close's interrupt until the test lets it return. */

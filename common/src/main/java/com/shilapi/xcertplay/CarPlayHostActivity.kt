@@ -6457,7 +6457,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                     "restart teardownWaitCompleted=$completed " +
                     "elapsedMs=${((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(0)}",
             )
-            oldSink?.let(::closeRetiringSink)
+            oldSink?.let { closeRetiringSink(it, diagnosticLog, generation, "restart") }
             runOnUiThread { finishRestartWhenClosed(generation) }
         }
     }
@@ -6508,12 +6508,25 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
 
     /** Keep a timed-out sink visible to surface teardown until its codecs have actually been released. */
-    private fun closeRetiringSink(owner: AndroidMediaSink) {
+    private fun closeRetiringSink(
+        owner: AndroidMediaSink,
+        diagnosticLog: SessionDiagnosticLog?,
+        generation: Int,
+        operation: String,
+    ) {
+        val started = System.nanoTime()
+        val prefix = "${CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX} generation=$generation $operation videoRelease"
         owner.close()
         val owners = retiringSinks
-        owner.whenVideoReleased { owners.remove(owner) }
+        owner.whenVideoReleased {
+            owners.remove(owner)
+            val elapsedMs = (System.nanoTime() - started) / 1_000_000L
+            AsyncDiagnosticLog.append(diagnosticLog, "$prefix observed elapsedMs=$elapsedMs")
+        }
         // Preserve bounded teardown sequencing without blocking the UI or forgetting a live worker.
-        owner.awaitVideoReleased(sinkReleaseWaitMillis)
+        val completed = owner.awaitVideoReleased(sinkReleaseWaitMillis)
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000L
+        AsyncDiagnosticLog.append(diagnosticLog, "$prefix waitCompleted=$completed elapsedMs=$elapsedMs")
     }
 
     private fun openSettingsMenu() {
@@ -6691,7 +6704,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 "${CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX} generation=$generation " +
                     "shutdown teardownWaitCompleted=$clean " +
                     "elapsedMs=${((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(0)}")
-            oldSink?.let(::closeRetiringSink)
+            oldSink?.let { closeRetiringSink(it, diagnosticLog, generation, "shutdown") }
             if (!unifiedHome || terminateProcess) airPlayCommandExecutor.shutdown()
             if (terminateProcess) {
                 applicationContext.stopService(Intent(applicationContext, CarPlayVpnService::class.java))
