@@ -43,7 +43,8 @@ class NcmUsbBridge internal constructor(
     private var loggedWriteTimeout = false
     @Volatile private var pendingStartupBlock: ByteArray? = null
     private var firstMissNanos: Long? = null
-    private var lastWriteNanos = 0L
+    @Volatile private var lastWriteNanos = 0L
+    private var firstReadNanos: Long? = null // receive thread, under readLock
     private var notReadyFrames = 0
     private val traffic = NcmTrafficCounter()
 
@@ -163,6 +164,23 @@ class NcmUsbBridge internal constructor(
 
     fun connectionAttemptSince(port: Int, sinceNanos: Long): Boolean = traffic.connectionAttemptSince(port, sinceNanos)
 
+    private fun startupReadWaitMillis(remainingMillis: Long): Long {
+        if (linkOpenedAtNanos != null) return remainingMillis
+        val now = nanoTime()
+        val firstRead = firstReadNanos ?: now.also { firstReadNanos = it }
+        if (pendingStartupBlock == null) {
+            // OUT may fail after requestWait starts. Bound the idle read during startup only.
+            return if (now - firstRead < STARTUP_RETRY_WINDOW_NANOS) {
+                minOf(remainingMillis, STARTUP_RETRY_INTERVAL_MILLIS)
+            } else remainingMillis
+        }
+        // An early wake (or newly failed OUT) should wait only the rest of the existing interval.
+        val ageMillis = (now - lastWriteNanos).coerceAtLeast(0) / NANOS_PER_MILLISECOND
+        val untilRetry = STARTUP_RETRY_INTERVAL_MILLIS - ageMillis
+        // If a due retry lost the write lock, give the active writer a full interval.
+        return minOf(remainingMillis, if (untilRetry > 0) untilRetry else STARTUP_RETRY_INTERVAL_MILLIS)
+    }
+
     /**
      * Returns the next complete Ethernet frame, or null when [timeoutMillis] elapses without one.
      * USB reads may split or coalesce NTB blocks; this method reassembles whole blocks internally.
@@ -180,8 +198,7 @@ class NcmUsbBridge internal constructor(
                 val remainingNanos = deadline - System.nanoTime()
                 if (remainingNanos <= 0) return null
                 val waitMillis = (remainingNanos + NANOS_PER_MILLISECOND - 1) / NANOS_PER_MILLISECOND
-                val readWait = if (pendingStartupBlock != null) minOf(waitMillis, STARTUP_RETRY_INTERVAL_MILLIS) else waitMillis
-                val chunkLength = readChunk(readWait) ?: continue
+                val chunkLength = readChunk(startupReadWaitMillis(waitMillis)) ?: continue
                 appendBuffered(readBuffer, chunkLength)
             }
         }

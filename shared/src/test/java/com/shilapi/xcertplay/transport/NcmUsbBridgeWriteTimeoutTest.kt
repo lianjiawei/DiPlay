@@ -94,6 +94,35 @@ class NcmUsbBridgeWriteTimeoutTest {
         assertEquals(2, NcmWriteReplay.blocks.size)
     }
 
+    @Test fun firstWriteFailsWhileUsbReadIsAlreadyWaiting() {
+        NcmWriteReplay.results.add(-1)
+        NcmWriteReplay.readTimeoutsRemaining = 2
+        withBridge { ncm ->
+            // Interleave OUT at 40 ms inside the first pending IN wait, with no incoming USB packet.
+            NcmWriteReplay.onReadWait = {
+                NcmWriteReplay.onReadWait = {}
+                NcmWriteReplay.now = 40_000_000
+                ncm.send(frame, 2_000)
+            }
+            ncm.recv(1_000)
+            assertEquals(listOf(100L, 40L), NcmWriteReplay.readWaits.take(2))
+            assertEquals(140_000_000L, ncm.linkOpenedAtNanos)
+            assertTrue("normal reads resume after the retry succeeds", NcmWriteReplay.readWaits.last() > 100)
+        }
+        assertEquals(2, NcmWriteReplay.blocks.size)
+    }
+
+    @Test fun silentLinkStopsShortIdleReadsAndStillHonorsShortCallerWaits() {
+        withBridge { ncm ->
+            ncm.recv(25)
+            assertTrue(NcmWriteReplay.readWaits.single() in 1L..25L)
+            NcmWriteReplay.now = 30_000_000_000
+            ncm.recv(1_000)
+            assertTrue(NcmWriteReplay.readWaits.last() > 100)
+            assertTrue(NcmWriteReplay.blocks.isEmpty())
+        }
+    }
+
     @Test fun theRetryWindowExpiresEvenWhenNewOutboundFramesArrive() {
         NcmWriteReplay.results.addAll(listOf(-1, -1))
         withBridge { ncm ->
@@ -191,12 +220,13 @@ object NcmWriteReplay {
     var readTimeoutsRemaining = 0
     var now = 0L
     var onWrite: () -> Unit = {}
+    var onReadWait: () -> Unit = {}
     lateinit var request: UsbRequest
     lateinit var buffer: ByteBuffer
     var readCancelled = CountDownLatch(1)
     fun reset() {
         results.clear(); timeouts.clear(); blocks.clear(); readWaits.clear()
-        readTimeoutsRemaining = 0; now = 0L; onWrite = {}
+        readTimeoutsRemaining = 0; now = 0L; onWrite = {}; onReadWait = {}
         readCancelled = CountDownLatch(1)
     }
 }
@@ -211,9 +241,11 @@ class NcmWriteConnectionShadow {
     }
     @Implementation fun requestWait(timeoutMillis: Long): UsbRequest {
         NcmWriteReplay.readWaits += timeoutMillis
+        val started = NcmWriteReplay.now
+        NcmWriteReplay.onReadWait()
         if (NcmWriteReplay.readTimeoutsRemaining > 0) {
             NcmWriteReplay.readTimeoutsRemaining--
-            NcmWriteReplay.now += timeoutMillis * 1_000_000
+            NcmWriteReplay.now = started + timeoutMillis * 1_000_000
             throw TimeoutException()
         }
         NcmWriteReplay.buffer.put(Ntb16Codec.build(byteArrayOf(1), 1))
