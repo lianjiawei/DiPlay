@@ -12,6 +12,8 @@ import java.nio.ByteBuffer
 import java.util.ArrayDeque
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * A blocking NCM data pipe that moves Ethernet frames as NTB16 blocks over bulk endpoints.
@@ -28,17 +30,20 @@ class NcmUsbBridge internal constructor(
     private val claimedInterfaces: List<UsbInterface>,
     descriptorHostMac: ByteArray?,
     private val onDiagnostic: (String) -> Unit = {},
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : Closeable {
     private val descriptorMac = descriptorHostMac?.copyOf()
     val hostMac: ByteArray? get() = descriptorMac?.copyOf()
     private val stateLock = Any()
     private val readLock = Any()
-    private val writeLock = Any()
+    private val writeLock = ReentrantLock()
     private var closed = false
     private var failure: IphoneUsbException? = null
     private var sequence = 0
     private var loggedWriteTimeout = false
-    private var bulkOutAccepted = false
+    @Volatile private var pendingStartupBlock: ByteArray? = null
+    private var firstMissNanos: Long? = null
+    private var lastWriteNanos = 0L
     private var notReadyFrames = 0
     private val traffic = NcmTrafficCounter()
 
@@ -75,7 +80,7 @@ class NcmUsbBridge internal constructor(
     }
 
     /** Wraps one Ethernet frame in one NTB16 block and writes it to bulk OUT. */
-    fun send(frame: ByteArray, timeoutMillis: Int) = synchronized(writeLock) {
+    fun send(frame: ByteArray, timeoutMillis: Int) = writeLock.withLock {
         checkOpen()
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         val sequence = synchronized(stateLock) {
@@ -86,39 +91,72 @@ class NcmUsbBridge internal constructor(
         // bulkTransfer() pins `block` in a JNI critical section until it returns (see the read
         // path above). While the phone still NAKs this pipe, every frame waited out the full
         // timeout, and each USBMUX write of the iAP2 handshake finished only when one expired:
-        // ~2 s per step on Android 8.1–14 (#634, #335, #301). Until the phone takes its first
-        // frame, a frame that cannot go out at once is dropped, as it was after the full timeout.
-        val transferred = connection.bulkTransfer(
-            outEndpoint,
-            block,
-            block.size,
-            if (bulkOutAccepted) timeoutMillis else minOf(timeoutMillis, NOT_READY_WRITE_TIMEOUT_MILLIS),
-        )
+        // ~2 s per step on Android 8.1–14 (#634, #335, #301).
+        val startup = linkOpenedAtNanos == null
+        val timeout = if (startup) minOf(timeoutMillis, NOT_READY_WRITE_TIMEOUT_MILLIS) else timeoutMillis
+        if (!writeBlock(block, timeout, retry = false) && startup) {
+            val now = nanoTime()
+            if (firstMissNanos == null) firstMissNanos = now
+            lastWriteNanos = now
+            notReadyFrames++
+            pendingStartupBlock = block.takeIf { insideRetryWindow(now) }
+        }
+    }
+
+    private fun insideRetryWindow(now: Long): Boolean =
+        firstMissNanos?.let { now - it < STARTUP_RETRY_WINDOW_NANOS } == true
+
+    // The existing receive pump stays active even when the TUN has nothing new to send.
+    // Never hold up an incoming frame behind a busy OUT transfer.
+    private fun retryPendingStartupBlock() {
+        if (pendingStartupBlock == null || !writeLock.tryLock()) return
+        try {
+            val block = pendingStartupBlock ?: return
+            checkOpen()
+            val now = nanoTime()
+            if (!insideRetryWindow(now)) {
+                pendingStartupBlock = null
+                return
+            }
+            if (now - lastWriteNanos < STARTUP_RETRY_INTERVAL_MILLIS * NANOS_PER_MILLISECOND) return
+            lastWriteNanos = now
+            writeBlock(block, NOT_READY_WRITE_TIMEOUT_MILLIS, retry = true)
+        } finally {
+            writeLock.unlock()
+        }
+    }
+
+    /** Called under writeLock for both a fresh NTB and a replay of its original sequence. */
+    private fun writeBlock(block: ByteArray, timeout: Int, retry: Boolean): Boolean {
+        val transferred = connection.bulkTransfer(outEndpoint, block, block.size, timeout)
         // Before StartCarPlaySession the phone keeps the NCM data path NAKed. Android reports the
         // resulting timeout as -1; it is not a detach and later packets must be allowed to retry.
         if (transferred <= 0) {
-            if (!bulkOutAccepted) notReadyFrames++
             if (!loggedWriteTimeout) {
                 loggedWriteTimeout = true
                 Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out not ready; retaining bridge for retry")
             }
-            return@synchronized
-        }
-        if (!bulkOutAccepted) {
-            bulkOutAccepted = true
-            linkOpenedAtNanos = System.nanoTime()
-            runCatching { onDiagnostic("NCM bulk-out ready after $notReadyFrames dropped frames") }
+            return false
         }
         if (transferred != block.size) {
-            throw IphoneUsbException.DeviceUnavailable(
-                "NCM write transferred $transferred of ${block.size} bytes",
-            )
+            pendingStartupBlock = null
+            throw failSession("NCM write transferred $transferred of ${block.size} bytes")
+        }
+        if (linkOpenedAtNanos == null) {
+            synchronized(stateLock) {
+                checkOpenLocked()
+                pendingStartupBlock = null
+                linkOpenedAtNanos = nanoTime()
+            }
+            val source = if (retry) "; startup retry" else ""
+            runCatching { onDiagnostic("NCM bulk-out ready after $notReadyFrames dropped frames$source") }
         }
         traffic.sent()
         if (loggedWriteTimeout) {
             loggedWriteTimeout = false
             Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out became ready")
         }
+        return true
     }
 
     fun trafficSummary(airPlayPort: Int?): String = traffic.summary(airPlayPort)
@@ -133,17 +171,17 @@ class NcmUsbBridge internal constructor(
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         synchronized(readLock) {
             checkOpen()
-            if (frames.isNotEmpty()) return pollFrame()
-
             val deadline = System.nanoTime() + timeoutMillis * NANOS_PER_MILLISECOND
             while (true) {
+                retryPendingStartupBlock()
+                if (frames.isNotEmpty()) return pollFrame()
                 drainFrames()
                 if (frames.isNotEmpty()) return pollFrame()
                 val remainingNanos = deadline - System.nanoTime()
                 if (remainingNanos <= 0) return null
-                val chunkLength =
-                    readChunk((remainingNanos + NANOS_PER_MILLISECOND - 1) / NANOS_PER_MILLISECOND)
-                        ?: continue
+                val waitMillis = (remainingNanos + NANOS_PER_MILLISECOND - 1) / NANOS_PER_MILLISECOND
+                val readWait = if (pendingStartupBlock != null) minOf(waitMillis, STARTUP_RETRY_INTERVAL_MILLIS) else waitMillis
+                val chunkLength = readChunk(readWait) ?: continue
                 appendBuffered(readBuffer, chunkLength)
             }
         }
@@ -158,6 +196,9 @@ class NcmUsbBridge internal constructor(
         }
         // Wakes a reader blocked in requestWait(); it then observes the closed state.
         runCatching { requestToClose?.cancel() }
+        // Only pre-ready writes can own a replay. Drain their short transfer before USB release.
+        // A normal connected write may need connection.close() itself to interrupt it.
+        if (linkOpenedAtNanos == null) writeLock.withLock { pendingStartupBlock = null }
         statusThread?.let { thread ->
             thread.interrupt()
             try {
@@ -418,6 +459,8 @@ class NcmUsbBridge internal constructor(
         private const val STATUS_POLL_TIMEOUT_MILLIS = 20
         private const val STATUS_POLL_INTERVAL_MILLIS = 500L
         internal const val NOT_READY_WRITE_TIMEOUT_MILLIS = 20
+        private const val STARTUP_RETRY_INTERVAL_MILLIS = 100L
+        private const val STARTUP_RETRY_WINDOW_NANOS = 30_000_000_000L
         private const val MAX_QUEUED_FRAMES = 256
         private const val MAX_QUEUED_BYTES = 1 shl 20
         private const val NANOS_PER_MILLISECOND = 1_000_000L
